@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "Business": {
+      "title": "Business",
+      "description": "Information about the small business or nonprofit.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the business." },
+        "type": { "type": "string", "enum": ["small_business", "nonprofit"], "description": "Type of entity." },
+        "ein": { "type": "string", "description": "Employer Identification Number." },
+        "industry": { "type": "string", "description": "Industry or sector." },
+        "ownerId": { "type": "string", "description": "UID of the user who owns this profile." },
+        "certified": { "type": "boolean", "description": "Whether the business is SBS certified." },
+        "address": { "type": "string", "description": "Business address." },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "ownerId"]
+    },
+    "Engagement": {
+      "title": "Engagement",
+      "description": "Tracking the DSSG engagement lifecycle for a business.",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "description": "Reference to the business." },
+        "ownerId": { "type": "string", "description": "Reference to the user." },
+        "stage": {
+          "type": "string",
+          "enum": ["initial_meeting", "budgeting", "engagement_tracking", "hackathon", "membership_close"],
+          "description": "Current stage in the lifecycle."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "in_progress", "completed"],
+          "description": "Status of the current stage."
+        },
+        "notes": { "type": "string", "description": "Notes for this engagement." },
+        "budget_amount": { "type": "number", "description": "Planned budget if in budgeting stage." },
+        "hackathon_project": { "type": "string", "description": "Project title if in hackathon stage." },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["businessId", "ownerId", "stage", "status"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile information.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["client", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/businesses/{businessId}": {
+      "schema": "Business",
+      "description": "Root collection for business profiles."
+    },
+    "/engagements/{engagementId}": {
+      "schema": "Engagement",
+      "description": "Root collection for tracking engagements."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles by UID."
+    }
+  }
+}

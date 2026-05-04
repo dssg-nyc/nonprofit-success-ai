@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(ownerId) {
+      return isSignedIn() && request.auth.uid == ownerId;
+    }
+
+    // Entity Validations
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role']) &&
+             data.keys().size() <= 4 &&
+             data.email is string && data.email.size() <= 256 &&
+             data.role in ['client', 'admin'] &&
+             (data.get('displayName', '') is string && data.get('displayName', '').size() <= 128);
+    }
+
+    function isValidBusiness(data) {
+      return data.keys().hasAll(['name', 'type', 'ownerId']) &&
+             data.name is string && data.name.size() <= 256 &&
+             data.type in ['small_business', 'nonprofit'] &&
+             data.ownerId == request.auth.uid &&
+             (data.get('ein', '') is string && data.get('ein', '').size() <= 64) &&
+             (data.get('industry', '') is string && data.get('industry', '').size() <= 128) &&
+             (data.get('certified', false) is bool);
+    }
+
+    function isValidEngagement(data) {
+      return data.keys().hasAll(['businessId', 'ownerId', 'stage', 'status']) &&
+             isValidId(data.businessId) &&
+             data.ownerId == request.auth.uid &&
+             data.stage in ['initial_meeting', 'budgeting', 'engagement_tracking', 'hackathon', 'membership_close'] &&
+             data.status in ['pending', 'in_progress', 'completed'];
+    }
+
+    // User Rules
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().role == 'client';
+      allow update: if isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().role == existing().role && // Immutable role
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt']);
+    }
+
+    // Business Rules
+    match /businesses/{businessId} {
+      allow get: if isOwner(existing().ownerId);
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(businessId) && isValidBusiness(incoming());
+      allow update: if isOwner(existing().ownerId) && isValidBusiness(incoming()) &&
+                    incoming().ownerId == existing().ownerId &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'type', 'ein', 'industry', 'certified', 'address', 'updatedAt']);
+      allow delete: if isOwner(existing().ownerId);
+    }
+
+    // Engagement Rules
+    match /engagements/{engagementId} {
+      allow get: if isOwner(existing().ownerId);
+      allow list: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(engagementId) && isValidEngagement(incoming()) &&
+                    exists(/databases/$(database)/documents/businesses/$(incoming().businessId)); // Atomic Guarantee
+      allow update: if isOwner(existing().ownerId) && isValidEngagement(incoming()) &&
+                    incoming().ownerId == existing().ownerId &&
+                    incoming().businessId == existing().businessId &&
+                    // Terminal State Locking: can't change from completed back to pending/in_progress easily if we want to enforce workflow
+                    (existing().status != 'completed' || incoming().status == 'completed') &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasAny(['stage', 'status', 'notes', 'budget_amount', 'hackathon_project', 'updatedAt']);
+      allow delete: if isOwner(existing().ownerId);
+    }
+  }
+}

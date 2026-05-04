@@ -1,0 +1,175 @@
+import React, { useState } from 'react';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signInWithPopup, 
+  GoogleAuthProvider 
+} from 'firebase/auth';
+import { auth, db } from '../../lib/firebase';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { motion } from 'motion/react';
+import { Mail, Lock, LogIn, UserPlus, Globe, Eye } from 'lucide-react';
+
+interface LoginProps {
+  onDemoMode: () => void;
+}
+
+export default function Login({ onDemoMode }: LoginProps) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      if (isRegistering) {
+        const { user } = await createUserWithEmailAndPassword(auth, email, password);
+        await setDoc(doc(db, 'users', user.uid), {
+          email: user.email,
+          role: 'client',
+          createdAt: serverTimestamp(),
+        });
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (err: any) {
+      if (err.code === 'auth/operation-not-allowed') {
+        setError('Email/Password sign-in is disabled. Please use Google Login or Demo Mode.');
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-[calc(100vh-64px)] p-4 bg-slate-50">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200"
+      >
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-2xl mb-4 shadow-lg shadow-blue-100 italic font-black text-2xl">
+            DSSG
+          </div>
+          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+            {isRegistering ? 'Join DSSG' : 'Client Access'}
+          </h2>
+          <p className="text-slate-500 mt-2 text-sm font-medium">
+            NYC's premier customer success portal
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <button 
+            onClick={handleGoogleLogin}
+            className="w-full py-3 px-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 shadow-sm"
+          >
+            <Globe className="text-blue-600" size={18} />
+            Continue with Google
+          </button>
+          
+          <button 
+            onClick={onDemoMode}
+            className="w-full py-3 px-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-3 shadow-lg shadow-slate-200"
+          >
+            <Eye className="text-blue-400" size={18} />
+            Enter Demo Mode
+          </button>
+
+          <div className="relative py-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-100"></div>
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-slate-300">Or use email</span>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Email Address</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input 
+                  type="email" 
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all outline-none"
+                  placeholder="name@business.com"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input 
+                  type="password" 
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all outline-none"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-red-600 text-[11px] font-bold bg-red-50 p-4 rounded-xl border border-red-100 leading-relaxed"
+              >
+                {error}
+              </motion.div>
+            )}
+
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                isRegistering ? 'Create Account' : 'Sign In'
+              )}
+            </button>
+          </form>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+          <button 
+            onClick={() => setIsRegistering(!isRegistering)}
+            className="text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors"
+          >
+            {isRegistering ? 'Already have an account? Login' : "Request New Account Access"}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
