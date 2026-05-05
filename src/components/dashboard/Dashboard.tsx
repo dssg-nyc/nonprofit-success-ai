@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'f
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Business } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Building2, ChevronRight, Info, CheckCircle2, Circle, X } from 'lucide-react';
+import { Plus, Building2, ChevronRight, Info, CheckCircle2, Circle, X, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
@@ -85,19 +85,48 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-10">
-        <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Accounts Overview</h1>
-          <p className="text-slate-500 font-medium">Manage your portfolio and engagement lifecycles</p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      {/* Hero Section Strategy */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 mb-16 animate-fade-in-up">
+        <div className="max-w-2xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-dssg-blue rounded-full text-[10px] font-bold uppercase tracking-widest mb-4">
+            <Layers size={12} />
+            Portfolio Management
+          </div>
+          <h1 className="text-5xl font-display font-bold text-dssg-blue tracking-tight leading-[1.1] mb-6 mb-2">
+            Client <span className="italic">Accounts</span> Overview
+          </h1>
+          <p className="text-slate-500 font-medium text-lg leading-relaxed">
+            Manage your partner businesses and track their progress through the DSSG engagement lifecycle. High-impact data solutions for NYC's social sector.
+          </p>
         </div>
         <button 
           onClick={() => setShowAddModal(true)}
-          className="bg-dssg-blue text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-blue-200 hover:shadow-xl transition-all"
+          className="btn-primary flex items-center gap-2 whitespace-nowrap"
         >
           <Plus size={20} />
-          New Business
+          Register New Account
         </button>
+      </div>
+
+      {/* Stats Summary Pattern */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-16 px-4">
+        <div className="flex flex-col border-l-2 border-slate-100 pl-6">
+          <span className="text-3xl font-display font-bold text-dssg-blue leading-none mb-2">{businesses.length}</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Partnerships</span>
+        </div>
+        <div className="flex flex-col border-l-2 border-slate-100 pl-6">
+          <span className="text-3xl font-display font-bold text-dssg-orange leading-none mb-2">{businesses.filter(b => b.certified).length}</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Certified Entities</span>
+        </div>
+        <div className="flex flex-col border-l-2 border-slate-100 pl-6">
+          <span className="text-3xl font-display font-bold text-dssg-blue leading-none mb-2">{businesses.filter(b => b.type === 'nonprofit').length}</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Active Nonprofits</span>
+        </div>
+        <div className="flex flex-col border-l-2 border-slate-100 pl-6">
+          <span className="text-3xl font-display font-bold text-emerald-600 leading-none mb-2">92%</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Success Rate</span>
+        </div>
       </div>
 
       {loading ? (
@@ -120,45 +149,47 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {businesses.map((business) => (
             <motion.div 
               layoutId={business.id}
               key={business.id}
               onClick={() => navigate(`/business/${business.id}`)}
-              className="bento-card bento-card-hover p-6 group cursor-pointer relative overflow-hidden"
+              className={`bento-card bento-card-hover p-8 group cursor-pointer relative overflow-hidden ${
+                business.certified ? 'accent-stripe-orange' : 'accent-stripe-blue'
+              }`}
             >
-              <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                <Building2 size={120} />
+              <div className="absolute -right-6 -bottom-6 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity duration-500 scale-150 rotate-12">
+                <Building2 size={160} />
               </div>
               
-              <div className="flex justify-between items-start mb-6">
-                <div className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                  business.type === 'nonprofit' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'
+              <div className="flex justify-between items-start mb-8">
+                <div className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-[0.15em] ${
+                  business.type === 'nonprofit' ? 'bg-purple-50 text-purple-600 border border-purple-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
                 }`}>
                   {business.type.replace('_', ' ')}
                 </div>
                 {business.certified && (
-                  <div className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded">
+                  <div className="flex items-center gap-1.5 text-dssg-orange text-[10px] font-bold uppercase tracking-wider">
                     <CheckCircle2 size={14} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">SBS Certified</span>
+                    SBS Certified
                   </div>
                 )}
               </div>
 
-              <div className="mb-8">
-                <h3 className="text-xl font-bold text-slate-900 group-hover:text-dssg-blue transition-colors">
+              <div className="mb-10">
+                <h3 className="text-2xl font-display font-bold text-dssg-blue group-hover:text-dssg-blue-light transition-colors leading-tight">
                   {business.name}
                 </h3>
-                <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest mt-1">{business.industry || 'General'}</p>
+                <p className="text-slate-400 text-[11px] font-bold uppercase tracking-widest mt-2">{business.industry || 'General Industry'}</p>
               </div>
 
-              <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-50">
+              <div className="flex items-center justify-between mt-auto pt-6 border-t border-slate-50">
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Account ID</span>
-                  <span className="text-xs font-mono font-medium text-slate-600">{business.id.slice(0, 8)}</span>
+                  <span className="text-[9px] text-slate-300 font-bold uppercase tracking-[0.2em]">Partner ID</span>
+                  <span className="text-xs font-mono font-medium text-slate-500">{business.id.slice(0, 8)}</span>
                 </div>
-                <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-dssg-blue group-hover:text-white transition-all">
+                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center group-hover:bg-dssg-blue group-hover:text-white transition-all duration-300">
                   <ChevronRight size={18} />
                 </div>
               </div>
@@ -227,12 +258,12 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
                     </div>
                   </div>
 
-                  <div className="pt-4">
+                  <div className="pt-6">
                     <button 
                       type="submit"
-                      className="w-full py-4 bg-dssg-blue text-white rounded-xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all font-display italic"
+                      className="w-full py-4 bg-dssg-orange text-white rounded-xl font-bold shadow-lg shadow-orange-900/10 hover:bg-dssg-orange-light hover:-translate-y-0.5 active:translate-y-0 transition-all font-display"
                     >
-                      Confirm Registration
+                      Process Registration
                     </button>
                   </div>
                 </form>

@@ -197,87 +197,101 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
   const currentEngagement = getCurrentEngagement();
 
   return (
-    <div className="bg-slate-50 min-h-screen">
-      {/* Header */}
+    <div className="bg-bg-base min-h-screen">
+      {/* Header Strategy */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
           <button 
             onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-2 text-slate-500 hover:text-dssg-blue transition-colors font-bold text-sm uppercase tracking-wider"
+            className="flex items-center gap-2 text-slate-400 hover:text-dssg-blue transition-all font-bold text-[10px] uppercase tracking-[0.2em]"
           >
-            <ChevronLeft size={16} />
-            Back to Overview
+            <ChevronLeft size={14} />
+            Portfolio Index
           </button>
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Active Project Portal</span>
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col items-end">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Status</span>
+              <span className="text-xs font-bold text-emerald-600 uppercase">Live Collaboration</span>
+            </div>
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-200" />
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Bento Grid Layout */}
-        <div className="grid grid-cols-12 grid-rows-6 gap-6 h-auto lg:h-[900px]">
+      <div className="max-w-7xl mx-auto px-4 py-12 animate-fade-in-up">
+        {/* Bento Grid Strategy */}
+        <div className="grid grid-cols-12 grid-rows-6 gap-8 h-auto lg:h-[900px]">
           
-          {/* Profile Card (Bento: Small Square/Rectangle) */}
-          <div className="col-span-12 lg:col-span-4 row-span-2 bento-card bg-slate-900 text-white p-8 relative overflow-hidden">
+          {/* Profile Card — Brand Authority Variant */}
+          <div className="col-span-12 lg:col-span-4 row-span-2 bento-card bg-dssg-blue text-white p-10 relative overflow-hidden flex flex-col justify-between">
             <div className="relative z-10">
-              <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-6">Business Profile</h2>
-              <p className="text-sm font-light text-slate-300">Certified {business.type === 'nonprofit' ? 'Nonprofit' : 'Small Business'}</p>
-              <h1 className="text-3xl font-bold mt-1 mb-8">{business.name}</h1>
-              
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between border-b border-slate-800 pb-2">
-                  <span className="text-slate-500">Industry</span>
-                  <span className="font-medium">{business.industry || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-800 pb-2">
-                  <span className="text-slate-500">Joined</span>
-                  <span className="font-medium">{new Date(business.createdAt?.seconds * 1000).toLocaleDateString()}</span>
-                </div>
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-white/10 rounded-lg text-[10px] font-bold uppercase tracking-widest text-blue-100 mb-8">
+                <Building2 size={12} />
+                Client Profile
+              </div>
+              <h1 className="text-4xl font-display font-bold text-white leading-tight mb-2 italic">
+                {business.name}
+              </h1>
+              <p className="text-sm font-medium text-blue-200 opacity-80 uppercase tracking-widest">
+                {business.type.replace('_', ' ')} Partner
+              </p>
+            </div>
+
+            <div className="relative z-10 grid grid-cols-2 gap-6 pt-8 border-t border-white/10">
+              <div>
+                <p className="text-[9px] font-bold text-blue-300 uppercase tracking-widest mb-1">Industry focus</p>
+                <p className="text-sm font-bold">{business.industry || 'General'}</p>
+              </div>
+              <div>
+                <p className="text-[9px] font-bold text-blue-300 uppercase tracking-widest mb-1">NYC Partnership</p>
+                <p className="text-sm font-bold">Est. {new Date(business.createdAt?.seconds * 1000).getFullYear()}</p>
               </div>
             </div>
-            <div className="absolute -right-6 -bottom-6 opacity-10">
-              <Building2 size={160} />
+
+            <div className="absolute -right-12 -bottom-12 opacity-10 rotate-12 scale-110">
+              <Building2 size={240} />
             </div>
           </div>
 
-          {/* Workflow Status (Bento: Large Horizontal) */}
-          <div className="col-span-12 lg:col-span-8 row-span-2 bento-card p-8 flex flex-col justify-between">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Onboarding Roadmap</h2>
-              <span className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+          {/* Workflow Status — Roadmap Strategy */}
+          <div className="col-span-12 lg:col-span-8 row-span-2 bento-card p-10 flex flex-col justify-between accent-stripe-blue">
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-1">Onboarding Roadmap</h2>
+                <p className="text-xl font-display font-medium text-slate-800">Engagement Lifecycle Progress</p>
+              </div>
+              <span className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-sm ${
                 currentEngagement?.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
-                currentEngagement?.status === 'in_progress' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                currentEngagement?.status === 'in_progress' ? 'bg-dssg-orange-light/10 text-dssg-orange border border-dssg-orange/20' :
                 'bg-slate-50 text-slate-400 border border-slate-100'
               }`}>
-                Current: {STAGES.find(s => s.id === activeStage)?.label}
+                Current Stage: {STAGES.find(s => s.id === activeStage)?.label}
               </span>
             </div>
 
-            <div className="flex items-center justify-between px-4">
+            <div className="flex items-center justify-between px-6 relative">
               {STAGES.map((s, idx) => {
                 const stageData = engagements.find(e => e.stage === s.id);
                 const isCompleted = stageData?.status === 'completed';
                 const isActive = activeStage === s.id;
                 
                 return (
-                  <div key={s.id} className="flex flex-col items-center gap-3 relative z-10 group cursor-pointer" onClick={() => setActiveStage(s.id)}>
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
-                      isCompleted ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' :
-                      isActive ? 'bg-white border-4 border-blue-50 ring-2 ring-blue-600 text-blue-600' :
-                      'bg-slate-50 text-slate-300'
+                  <div key={s.id} className="flex flex-col items-center gap-4 relative z-10 group cursor-pointer" onClick={() => setActiveStage(s.id)}>
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 border ${
+                      isCompleted ? 'bg-dssg-blue text-white shadow-xl shadow-blue-900/20 border-dssg-blue' :
+                      isActive ? 'bg-white border-2 border-dssg-blue ring-4 ring-blue-50 text-dssg-blue' :
+                      'bg-slate-50 text-slate-300 border-slate-100'
                     }`}>
-                      {isCompleted ? <CheckCircle size={24} /> : <span className="font-bold text-sm">0{idx + 1}</span>}
+                      {isCompleted ? <CheckCircle size={28} /> : <span className="font-display font-bold text-lg leading-none">0{idx + 1}</span>}
                     </div>
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isActive ? 'text-blue-600' : 'text-slate-400'}`}>
+                    <span className={`text-[9px] font-bold uppercase tracking-[0.3em] ${isActive ? 'text-dssg-blue' : 'text-slate-400 opacity-60'}`}>
                       {s.id.split('_')[0]}
                     </span>
                   </div>
                 );
               })}
-              {/* Connector Line Base */}
-              <div className="absolute left-[30%] right-[10%] top-[45%] h-0.5 bg-slate-100 -z-0 hidden lg:block" />
+              {/* Connector Line Base Pattern */}
+              <div className="absolute left-[8%] right-[8%] top-[35%] h-[2px] bg-slate-100 -z-0 hidden lg:block" />
             </div>
           </div>
 
@@ -300,42 +314,54 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
             </button>
           </div>
 
-          {/* Budget/Project Detail (Bento: Square/Contextual) */}
-          <div className={`col-span-12 lg:col-span-5 row-span-2 bento-card p-8 flex flex-col justify-between ${activeStage === 'hackathon' ? 'bg-indigo-600 text-white border-indigo-500' : ''}`}>
-            <div className="flex justify-between items-center">
-              <h2 className={`text-[10px] font-bold uppercase tracking-[0.2em] ${activeStage === 'hackathon' ? 'text-indigo-200' : 'text-slate-400'}`}>
-                {activeStage === 'hackathon' ? 'Hackathon Spotlight' : activeStage === 'budgeting' ? 'Budget Summary' : 'Current Stage Focus'}
-              </h2>
-              {activeStage === 'budgeting' && <span className="text-[10px] font-mono text-slate-400">FY2026</span>}
+          {/* Budget/Project Detail — Stat Block Pattern */}
+          <div className={`col-span-12 lg:col-span-5 row-span-2 bento-card p-10 flex flex-col justify-between ${
+            activeStage === 'hackathon' ? 'bg-slate-900 text-white border-slate-800' : ''
+          }`}>
+            <div className="flex justify-between items-start">
+              <div>
+                <h2 className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-1 ${
+                  activeStage === 'hackathon' ? 'text-blue-300' : 'text-slate-400'
+                }`}>
+                  {activeStage === 'hackathon' ? 'Spotlight Project' : activeStage === 'budgeting' ? 'Grant Allocation' : 'Strategic Focus'}
+                </h2>
+                <p className="font-display font-medium italic opacity-70">
+                  {activeStage === 'budgeting' ? 'Financial Roadmap' : 'Milestone Detail'}
+                </p>
+              </div>
+              {activeStage === 'budgeting' && <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded">FY2026 ACTIVE</div>}
             </div>
 
-            <div className="mt-4">
+            <div className="mt-8">
               {activeStage === 'budgeting' ? (
-                <div className="flex items-end gap-6">
-                  <div>
-                    <p className="text-4xl font-bold font-mono tracking-tighter">${currentEngagement?.budget_amount?.toLocaleString() || '0.00'}</p>
-                    <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-wider">DSSG Allocation Grant</p>
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-5xl font-display font-bold text-dssg-blue tracking-tighter">
+                      ${currentEngagement?.budget_amount?.toLocaleString() || '0.00'}
+                    </span>
+                    <span className="text-sm font-bold text-slate-300 uppercase tracking-widest">USD</span>
                   </div>
-                  <div className="flex-grow h-12 flex items-end gap-1 pb-1">
-                    <div className="flex-1 bg-blue-100 h-1/2 rounded-t" />
-                    <div className="flex-1 bg-blue-200 h-3/4 rounded-t" />
-                    <div className="flex-1 bg-blue-600 h-full rounded-t" />
-                    <div className="flex-1 bg-slate-100 h-1/3 rounded-t" />
+                  <div className="flex items-center gap-3">
+                    <div className="flex-grow h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-dssg-orange w-[75%] rounded-full shadow-sm shadow-orange-200" />
+                    </div>
+                    <span className="text-[11px] font-bold text-slate-400">75% ALLOCATED</span>
                   </div>
                 </div>
               ) : activeStage === 'hackathon' ? (
                 <div>
-                  <p className="text-2xl font-bold tracking-tight mb-2">{currentEngagement?.hackathon_project || 'Define Project'}</p>
-                  <p className="text-sm text-indigo-100 font-medium">Prepare your datasets for the sprint. You are focusing on "Local Commerce Integration".</p>
+                  <p className="text-3xl font-display font-bold text-white mb-3 leading-tight">{currentEngagement?.hackathon_project || 'Define Solution Architecture'}</p>
+                  <p className="text-sm text-blue-100/70 font-medium leading-relaxed">Co-developing diagnostic models for local supply chain efficiency.</p>
                 </div>
               ) : (
-                <div className="flex items-center gap-4 py-4">
-                  <div className="p-4 bg-blue-50 rounded-2xl text-blue-600">
-                    <History size={32} />
-                  </div>
-                  <p className="text-sm font-medium text-slate-600">
-                    {currentEngagement?.notes?.slice(0, 80) || 'No active notes for this stage. Select an action below to update.'}
+                <div className="flex flex-col gap-3">
+                  <p className="text-lg font-medium text-slate-700 leading-snug italic">
+                    "{currentEngagement?.notes?.slice(0, 80) || 'Engagement documentation protocol active. Input milestones below.'}"
                   </p>
+                  <div className="flex items-center gap-2 opacity-50">
+                    <History size={14} className="text-dssg-blue" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Historical Context Logged</span>
+                  </div>
                 </div>
               )}
             </div>

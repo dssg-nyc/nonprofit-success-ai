@@ -69,11 +69,11 @@ export default function Login({ onDemoMode }: LoginProps) {
         className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200"
       >
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-2xl mb-4 shadow-lg shadow-blue-100 italic font-black text-2xl">
-            DSSG
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-white border border-slate-100 rounded-2xl mb-4 shadow-xl shadow-slate-200/50 p-2">
+            <img src="/logo.png" alt="DSSG NYC" className="w-full h-full object-contain" />
           </div>
-          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-            {isRegistering ? 'Join DSSG' : 'Client Access'}
+          <h2 className="text-3xl font-display font-bold text-dssg-blue tracking-tight">
+            {isRegistering ? 'Join the Mission' : 'Client Access'}
           </h2>
           <p className="text-slate-500 mt-2 text-sm font-medium">
             NYC's premier customer success portal
@@ -85,15 +85,15 @@ export default function Login({ onDemoMode }: LoginProps) {
             onClick={handleGoogleLogin}
             className="w-full py-3 px-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 shadow-sm"
           >
-            <Globe className="text-blue-600" size={18} />
+            <Globe className="text-dssg-blue" size={18} />
             Continue with Google
           </button>
           
           <button 
             onClick={onDemoMode}
-            className="w-full py-3 px-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-3 shadow-lg shadow-slate-200"
+            className="w-full py-3 px-4 bg-dssg-blue text-white rounded-xl font-bold hover:bg-dssg-blue-light transition-all flex items-center justify-center gap-3 shadow-lg shadow-blue-900/10"
           >
-            <Eye className="text-blue-400" size={18} />
+            <Eye className="text-blue-300" size={18} />
             Enter Demo Mode
           </button>
 
@@ -102,7 +102,7 @@ export default function Login({ onDemoMode }: LoginProps) {
               <div className="w-full border-t border-slate-100"></div>
             </div>
             <div className="relative flex justify-center">
-              <span className="bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-slate-300">Or use email</span>
+              <span className="bg-white px-4 text-[10px] font-bold uppercase tracking-widest text-slate-300">Account Credentials</span>
             </div>
           </div>
 
@@ -116,7 +116,7 @@ export default function Login({ onDemoMode }: LoginProps) {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all outline-none"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dssg-blue focus:border-transparent transition-all outline-none"
                   placeholder="name@business.com"
                 />
               </div>
@@ -131,7 +131,7 @@ export default function Login({ onDemoMode }: LoginProps) {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all outline-none"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dssg-blue focus:border-transparent transition-all outline-none"
                   placeholder="••••••••"
                 />
               </div>
@@ -150,7 +150,7 @@ export default function Login({ onDemoMode }: LoginProps) {
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-4 bg-dssg-orange text-white rounded-xl font-bold shadow-lg shadow-orange-900/10 hover:bg-dssg-orange-light active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

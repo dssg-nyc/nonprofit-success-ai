@@ -1,33 +1,67 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Inter", sans-serif;
+  --font-display: "Playfair Display", Georgia, serif;
   --font-serif: "Playfair Display", serif;
   --font-mono: "JetBrains Mono", monospace;
   
-  --color-dssg-blue: #2563eb;
+  --color-dssg-blue: #002D72;
+  --color-dssg-blue-light: #0056B3;
+  --color-dssg-orange: #F47E2D;
+  --color-dssg-orange-light: #FF6B35;
   --color-dssg-dark: #0f172a;
   --color-bg-base: #f8fafc;
   --color-border-mute: #e2e8f0;
 
-  --shadow-bento: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-bento: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-bento-hover: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+  --animate-fade-in-up: fade-in-up 0.6s ease-out;
+
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 @layer base {
   body {
-    @apply bg-bg-base text-slate-900 antialiased font-sans;
+    @apply bg-bg-base text-slate-800 antialiased font-sans font-normal;
+  }
+  h1, h2, h3, .font-display {
+    @apply font-display tracking-tight text-dssg-blue;
   }
 }
 
-.bento-card {
-  @apply bg-white rounded-2xl border border-slate-200 shadow-bento transition-all duration-300;
-}
+@layer components {
+  .bento-card {
+    @apply bg-white rounded-[1.25rem] border border-slate-200 shadow-sm transition-all duration-300;
+  }
 
-.bento-card-hover {
-  @apply hover:shadow-bento-hover hover:-translate-y-1 hover:border-blue-400;
+  .bento-card-hover {
+    @apply hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 hover:border-slate-300;
+  }
+
+  .btn-primary {
+    @apply bg-dssg-blue text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-blue-900/10 hover:bg-dssg-blue-light hover:-translate-y-0.5 active:translate-y-0 transition-all;
+  }
+
+  .accent-stripe-blue {
+    @apply relative before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-dssg-blue before:rounded-t-[1.25rem];
+  }
+
+  .accent-stripe-orange {
+    @apply relative before:absolute before:top-0 before:left-0 before:right-0 before:h-1 before:bg-dssg-orange before:rounded-t-[1.25rem];
+  }
 }
 
 .timeline-line {
