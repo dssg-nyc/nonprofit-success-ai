@@ -25,7 +25,7 @@
         "ownerId": { "type": "string", "description": "Reference to the user." },
         "stage": {
           "type": "string",
-          "enum": ["initial_meeting", "budgeting", "engagement_tracking", "hackathon", "membership_close"],
+          "enum": ["initial_meeting", "budget_check", "data_ethics_committee", "scoping", "hackathon_ready", "membership"],
           "description": "Current stage in the lifecycle."
         },
         "status": {

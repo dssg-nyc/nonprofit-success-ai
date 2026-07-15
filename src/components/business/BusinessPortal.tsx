@@ -4,13 +4,14 @@ import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, setDoc, s
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Business, Engagement, EngagementStage, EngagementStatus } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  History, 
-  DollarSign, 
-  PlayCircle, 
-  Code2, 
-  CheckCircle, 
-  ChevronLeft, 
+import {
+  History,
+  DollarSign,
+  ShieldCheck,
+  Target,
+  Code2,
+  CheckCircle,
+  ChevronLeft,
   RefreshCcw,
   Calendar,
   Save,
@@ -19,12 +20,13 @@ import {
   Building2
 } from 'lucide-react';
 
-const STAGES: { id: EngagementStage; label: string; icon: any; color: string }[] = [
-  { id: 'initial_meeting', label: 'Initial Meeting', icon: History, color: 'text-blue-600 bg-blue-100' },
-  { id: 'budgeting', label: 'Budgeting', icon: DollarSign, color: 'text-emerald-600 bg-emerald-100' },
-  { id: 'engagement_tracking', label: 'Engagement Tracking', icon: PlayCircle, color: 'text-amber-600 bg-amber-100' },
-  { id: 'hackathon', label: 'DSSG Hackathon', icon: Code2, color: 'text-indigo-600 bg-indigo-100' },
-  { id: 'membership_close', label: 'Membership Close', icon: CheckCircle, color: 'text-purple-600 bg-purple-100' },
+const STAGES: { id: EngagementStage; label: string; short: string; icon: any; color: string }[] = [
+  { id: 'initial_meeting', label: 'Initial Meeting', short: 'Meeting', icon: History, color: 'text-blue-600 bg-blue-100' },
+  { id: 'budget_check', label: 'Budget Check', short: 'Budget', icon: DollarSign, color: 'text-emerald-600 bg-emerald-100' },
+  { id: 'data_ethics_committee', label: 'Data Ethics Committee', short: 'Ethics', icon: ShieldCheck, color: 'text-amber-600 bg-amber-100' },
+  { id: 'scoping', label: 'Scoping', short: 'Scoping', icon: Target, color: 'text-indigo-600 bg-indigo-100' },
+  { id: 'hackathon_ready', label: 'Hackathon Ready', short: 'Hackathon', icon: Code2, color: 'text-rose-600 bg-rose-100' },
+  { id: 'membership', label: 'Membership', short: 'Membership', icon: CheckCircle, color: 'text-purple-600 bg-purple-100' },
 ];
 
 export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
@@ -83,13 +85,13 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
           id: 'demo-eng-2',
           businessId: id,
           ownerId: 'demo-user-123',
-          stage: 'budgeting',
+          stage: 'budget_check',
           status: 'in_progress',
           budget_amount: 12500,
           updatedAt: { seconds: Date.now() / 1000 }
         }
       ]);
-      setActiveStage('budgeting');
+      setActiveStage('budget_check');
       setLoading(false);
       return;
     }
@@ -285,7 +287,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                       {isCompleted ? <CheckCircle size={28} /> : <span className="font-display font-bold text-lg leading-none">0{idx + 1}</span>}
                     </div>
                     <span className={`text-[9px] font-bold uppercase tracking-[0.3em] ${isActive ? 'text-dssg-blue' : 'text-slate-400 opacity-60'}`}>
-                      {s.id.split('_')[0]}
+                      {s.short}
                     </span>
                   </div>
                 );
@@ -316,24 +318,24 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
 
           {/* Budget/Project Detail — Stat Block Pattern */}
           <div className={`col-span-12 lg:col-span-5 row-span-2 bento-card p-10 flex flex-col justify-between ${
-            activeStage === 'hackathon' ? 'bg-slate-900 text-white border-slate-800' : ''
+            activeStage === 'hackathon_ready' ? 'bg-slate-900 text-white border-slate-800' : ''
           }`}>
             <div className="flex justify-between items-start">
               <div>
                 <h2 className={`text-[10px] font-bold uppercase tracking-[0.2em] mb-1 ${
-                  activeStage === 'hackathon' ? 'text-blue-300' : 'text-slate-400'
+                  activeStage === 'hackathon_ready' ? 'text-blue-300' : 'text-slate-400'
                 }`}>
-                  {activeStage === 'hackathon' ? 'Spotlight Project' : activeStage === 'budgeting' ? 'Grant Allocation' : 'Strategic Focus'}
+                  {activeStage === 'hackathon_ready' ? 'Spotlight Project' : activeStage === 'budget_check' ? 'Grant Allocation' : 'Strategic Focus'}
                 </h2>
                 <p className="font-display font-medium italic opacity-70">
-                  {activeStage === 'budgeting' ? 'Financial Roadmap' : 'Milestone Detail'}
+                  {activeStage === 'budget_check' ? 'Financial Roadmap' : 'Milestone Detail'}
                 </p>
               </div>
-              {activeStage === 'budgeting' && <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded">FY2026 ACTIVE</div>}
+              {activeStage === 'budget_check' && <div className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded">FY2026 ACTIVE</div>}
             </div>
 
             <div className="mt-8">
-              {activeStage === 'budgeting' ? (
+              {activeStage === 'budget_check' ? (
                 <div className="flex flex-col gap-4">
                   <div className="flex items-baseline gap-2">
                     <span className="text-5xl font-display font-bold text-dssg-blue tracking-tighter">
@@ -348,7 +350,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                     <span className="text-[11px] font-bold text-slate-400">75% ALLOCATED</span>
                   </div>
                 </div>
-              ) : activeStage === 'hackathon' ? (
+              ) : activeStage === 'hackathon_ready' ? (
                 <div>
                   <p className="text-3xl font-display font-bold text-white mb-3 leading-tight">{currentEngagement?.hackathon_project || 'Define Solution Architecture'}</p>
                   <p className="text-sm text-blue-100/70 font-medium leading-relaxed">Co-developing diagnostic models for local supply chain efficiency.</p>

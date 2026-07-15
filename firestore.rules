@@ -54,7 +54,7 @@ service cloud.firestore {
       return data.keys().hasAll(['businessId', 'ownerId', 'stage', 'status']) &&
              isValidId(data.businessId) &&
              data.ownerId == request.auth.uid &&
-             data.stage in ['initial_meeting', 'budgeting', 'engagement_tracking', 'hackathon', 'membership_close'] &&
+             data.stage in ['initial_meeting', 'budget_check', 'data_ethics_committee', 'scoping', 'hackathon_ready', 'membership'] &&
              data.status in ['pending', 'in_progress', 'completed'];
     }
 

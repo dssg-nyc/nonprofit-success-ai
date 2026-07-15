@@ -12,7 +12,7 @@ export interface Business {
   createdAt: any;
 }
 
-export type EngagementStage = 'initial_meeting' | 'budgeting' | 'engagement_tracking' | 'hackathon' | 'membership_close';
+export type EngagementStage = 'initial_meeting' | 'budget_check' | 'data_ethics_committee' | 'scoping' | 'hackathon_ready' | 'membership';
 export type EngagementStatus = 'pending' | 'in_progress' | 'completed';
 
 export interface Engagement {

@@ -2,7 +2,7 @@
 
 A customer success portal for NYC small businesses and nonprofits to track their engagement lifecycle with **DSSG NYC** (Data Science for Social Good), from initial meeting through membership close.
 
-Client organizations register their business/nonprofit profile, then move it through a five-stage engagement roadmap while DSSG staff and the client collaborate on notes, budget, and hackathon deliverables in real time.
+Client organizations register their business/nonprofit profile, then move it through a six-stage engagement roadmap while DSSG staff and the client collaborate on notes, budget, and hackathon deliverables in real time.
 
 ## Tech Stack
 
@@ -33,7 +33,7 @@ Client organizations register their business/nonprofit profile, then move it thr
 
 - **`auth/Login.tsx`** — email/password sign-in and registration, Google OAuth popup sign-in, and a "Demo Mode" entry point. New registrations write a `users/{uid}` profile document with `role: 'client'`.
 - **`dashboard/Dashboard.tsx`** — lists the signed-in user's registered businesses/nonprofits (live Firestore `onSnapshot` query filtered by `ownerId`), shows portfolio stats, and lets the user register a new business via a modal form.
-- **`business/BusinessPortal.tsx`** — the per-business workspace. Renders a bento-grid layout showing the business profile, a 5-stage engagement roadmap (`initial_meeting → budgeting → engagement_tracking → hackathon → membership_close`), a live activity feed of engagement records, and stage-management controls (status toggle + notes) that upsert an `engagements/{businessId}_{stage}` document per stage.
+- **`business/BusinessPortal.tsx`** — the per-business workspace. Renders a bento-grid layout showing the business profile, a 6-stage engagement roadmap (`initial_meeting → budget_check → data_ethics_committee → scoping → hackathon_ready → membership`), a live activity feed of engagement records, and stage-management controls (status toggle + notes) that upsert an `engagements/{businessId}_{stage}` document per stage.
 
 ### Data Access (`src/lib/firebase.ts`)
 
@@ -42,7 +42,7 @@ Initializes the Firebase app from [firebase-applet-config.json](firebase-applet-
 ### Domain Model (`src/types.ts`)
 
 - **`Business`** — `{ id, name, type: 'small_business' | 'nonprofit', ein?, industry?, ownerId, certified, address?, createdAt }`
-- **`Engagement`** — `{ id, businessId, ownerId, stage, status, notes?, budget_amount?, hackathon_project?, updatedAt }`, where `stage` is one of the five roadmap stages and `status` is `pending | in_progress | completed`
+- **`Engagement`** — `{ id, businessId, ownerId, stage, status, notes?, budget_amount?, hackathon_project?, updatedAt }`, where `stage` is one of the six roadmap stages and `status` is `pending | in_progress | completed`
 - **`UserProfile`** — `{ id, email, displayName?, role: 'client' | 'admin', createdAt }`
 
 The same shapes are mirrored as JSON Schema for the Firebase applet in [firebase-blueprint.json](firebase-blueprint.json).
