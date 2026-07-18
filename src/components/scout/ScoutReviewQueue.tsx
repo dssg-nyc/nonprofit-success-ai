@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { ScoutIntake, ScoutBucket, SCOUT_BUCKETS } from '../../types';
 import { routeScoutIntake, getOnboardingKitName } from '../../lib/scoutRouting';
+import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ClipboardList, CheckCircle2, Pencil, CornerUpRight, Flag, X, Mail, Building2,
+  DraftingCompass, CalendarRange,
 } from 'lucide-react';
 
 interface ScoutReviewQueueProps {
@@ -108,6 +111,7 @@ function ScorePip({ label, score }: { label: string; score: number }) {
 }
 
 export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
+  const navigate = useNavigate();
   const [intakes, setIntakes] = useState<ScoutIntake[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'pending' | 'reviewed'>('pending');
@@ -115,10 +119,14 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
   const [modalBucket, setModalBucket] = useState<ScoutBucket | ''>('');
   const [modalNotes, setModalNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [assessedIds, setAssessedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (isDemo) {
-      setIntakes(DEMO_INTAKES);
+      // Restore any decisions made earlier this demo session (module store
+      // survives navigation; component state doesn't).
+      setIntakes(DEMO_INTAKES.map(i => demoReviewedIntakes.get(i.id) ?? i));
+      setAssessedIds(new Set(demoAssessments.keys()));
       setLoading(false);
       return;
     }
@@ -131,7 +139,13 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
       handleFirestoreError(err, OperationType.LIST, 'scoutIntakes');
     });
 
-    return unsubscribe;
+    const unsubAssessments = onSnapshot(collection(db, 'architectAssessments'), (snapshot) => {
+      setAssessedIds(new Set(snapshot.docs.map(d => d.id)));
+    }, (err) => {
+      try { handleFirestoreError(err, OperationType.LIST, 'architectAssessments'); } catch { /* logged */ }
+    });
+
+    return () => { unsubscribe(); unsubAssessments(); };
   }, [isDemo]);
 
   const visible = intakes
@@ -150,7 +164,9 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
     };
 
     if (isDemo) {
-      setIntakes(prev => prev.map(i => i.id === intake.id ? { ...i, ...patch, reviewedAt: { seconds: Date.now() / 1000 } } : i));
+      const updated: ScoutIntake = { ...intake, ...patch, reviewedAt: { seconds: Date.now() / 1000 } };
+      demoReviewedIntakes.set(intake.id, updated);
+      setIntakes(prev => prev.map(i => i.id === intake.id ? updated : i));
       return;
     }
 
@@ -294,12 +310,29 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
                   </button>
                 </div>
               ) : (
-                <div className="mt-auto pt-2 border-t border-slate-50 flex items-center justify-between">
-                  <div>
-                    <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.2em]">{intake.reviewAction} → {intake.finalBucket}</p>
-                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">{intake.onboardingKit}</p>
+                <div className="mt-auto pt-2 border-t border-slate-50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.2em]">{intake.reviewAction} → {intake.finalBucket}</p>
+                      <p className="text-[10px] text-slate-400 font-medium mt-0.5">{intake.onboardingKit}</p>
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-medium">{intake.reviewedByEmail}</p>
                   </div>
-                  <p className="text-[10px] text-slate-400 font-medium">{intake.reviewedByEmail}</p>
+                  {assessedIds.has(intake.id) ? (
+                    <button
+                      onClick={() => navigate(`/architect/plan/${intake.id}`)}
+                      className="w-full py-2.5 bg-dssg-blue text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-dssg-blue-light transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <CalendarRange size={14} /> View 90-Day Plan
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => navigate(`/architect/assess/${intake.id}`)}
+                      className="w-full py-2.5 bg-slate-100 text-dssg-blue rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <DraftingCompass size={14} /> Architect Assessment →
+                    </button>
+                  )}
                 </div>
               )}
             </div>
