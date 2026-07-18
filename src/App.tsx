@@ -1,16 +1,21 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { auth } from './lib/firebase';
-import { LogOut, User as UserIcon, LayoutDashboard, Building2, Layers } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
+import { LogOut, User as UserIcon, LayoutDashboard, Building2, Layers, Compass, ClipboardList } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Components
 import Login from './components/auth/Login';
 import Dashboard from './components/dashboard/Dashboard';
 import BusinessPortal from './components/business/BusinessPortal';
+import ScoutIntakeForm from './components/scout/ScoutIntakeForm';
+import ScoutReviewQueue from './components/scout/ScoutReviewQueue';
+import ArchitectAssessment from './components/architect/ArchitectAssessment';
+import ArchitectPlan from './components/architect/ArchitectPlan';
 
-function Navbar({ user, onLogout }: { user: any, onLogout: () => void }) {
+function Navbar({ user, isAdmin, onLogout }: { user: any, isAdmin: boolean, onLogout: () => void }) {
   return (
     <nav className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
@@ -53,6 +58,16 @@ function Navbar({ user, onLogout }: { user: any, onLogout: () => void }) {
               <LayoutDashboard size={14} />
               Overview
             </Link>
+            {isAdmin && (
+              <Link to="/scout/review" className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2">
+                <ClipboardList size={14} />
+                Review Queue
+              </Link>
+            )}
+            <Link to="/apply" className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2">
+              <Compass size={14} />
+              Apply
+            </Link>
             <div className="h-6 w-px bg-slate-200" />
             <div className="flex items-center gap-4">
               <div className="hidden md:flex flex-col items-end">
@@ -72,12 +87,18 @@ function Navbar({ user, onLogout }: { user: any, onLogout: () => void }) {
             </div>
           </div>
         ) : (
-          <Link 
-            to="/login" 
-            className="btn-primary flex items-center gap-2"
-          >
-            Client Access
-          </Link>
+          <div className="flex items-center gap-6">
+            <Link to="/apply" className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2">
+              <Compass size={14} />
+              Apply
+            </Link>
+            <Link
+              to="/login"
+              className="btn-primary flex items-center gap-2"
+            >
+              Client Access
+            </Link>
+          </div>
         )}
       </div>
     </nav>
@@ -87,11 +108,29 @@ function Navbar({ user, onLogout }: { user: any, onLogout: () => void }) {
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [isDemo, setIsDemo] = useState(false);
+  const [role, setRole] = useState<'client' | 'admin' | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (!isDemo) setUser(u);
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      if (isDemo) return;
+      setUser(u);
+      if (u) {
+        try {
+          const profile = await getDoc(doc(db, 'users', u.uid));
+          setRole(profile.exists() ? profile.data().role : null);
+        } catch (err) {
+          setRole(null);
+          try {
+            handleFirestoreError(err, OperationType.GET, `users/${u.uid}`);
+          } catch {
+            // handleFirestoreError logs then rethrows by design; swallowed here
+            // so a profile-fetch failure doesn't strand the app on the loading spinner.
+          }
+        }
+      } else {
+        setRole(null);
+      }
       setLoading(false);
     });
     return unsubscribe;
@@ -104,16 +143,22 @@ export default function App() {
       email: 'demo@nyc-dssg.org',
       displayName: 'Demo Account'
     });
+    // Demo Mode intentionally grants admin so the Scout Review Queue is
+    // demoable without a real Firebase project + manual role promotion.
+    setRole('admin');
   };
 
   const handleLogout = () => {
     if (isDemo) {
       setIsDemo(false);
       setUser(null);
+      setRole(null);
     } else {
       signOut(auth);
     }
   };
+
+  const isAdmin = role === 'admin';
 
   if (loading) {
     return (
@@ -135,17 +180,30 @@ export default function App() {
             Demo Mode Active • Live database writes are disabled
           </div>
         )}
-        <Navbar user={user} onLogout={handleLogout} />
+        <Navbar user={user} isAdmin={isAdmin} onLogout={handleLogout} />
         <main className="flex-grow">
           <Routes>
             <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login onDemoMode={handleDemoMode} />} />
-            <Route 
-              path="/dashboard" 
-              element={user ? <Dashboard isDemo={isDemo} /> : <Navigate to="/login" />} 
+            <Route
+              path="/dashboard"
+              element={user ? <Dashboard isDemo={isDemo} /> : <Navigate to="/login" />}
             />
-            <Route 
-              path="/business/:id" 
-              element={user ? <BusinessPortal isDemo={isDemo} /> : <Navigate to="/login" />} 
+            <Route
+              path="/business/:id"
+              element={user ? <BusinessPortal isDemo={isDemo} /> : <Navigate to="/login" />}
+            />
+            <Route path="/apply" element={<ScoutIntakeForm isDemo={isDemo} />} />
+            <Route
+              path="/scout/review"
+              element={user && isAdmin ? <ScoutReviewQueue isDemo={isDemo} /> : <Navigate to={user ? "/dashboard" : "/login"} />}
+            />
+            <Route
+              path="/architect/assess/:intakeId"
+              element={user && isAdmin ? <ArchitectAssessment isDemo={isDemo} /> : <Navigate to={user ? "/dashboard" : "/login"} />}
+            />
+            <Route
+              path="/architect/plan/:intakeId"
+              element={user && isAdmin ? <ArchitectPlan isDemo={isDemo} /> : <Navigate to={user ? "/dashboard" : "/login"} />}
             />
             <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
           </Routes>

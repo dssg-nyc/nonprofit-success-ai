@@ -31,6 +31,11 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == ownerId;
     }
 
+    function isAdmin() {
+      return isSignedIn() &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // Entity Validations
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'role']) &&
@@ -54,8 +59,37 @@ service cloud.firestore {
       return data.keys().hasAll(['businessId', 'ownerId', 'stage', 'status']) &&
              isValidId(data.businessId) &&
              data.ownerId == request.auth.uid &&
-             data.stage in ['initial_meeting', 'budgeting', 'engagement_tracking', 'hackathon', 'membership_close'] &&
+             data.stage in ['initial_meeting', 'budget_check', 'data_ethics_committee', 'scoping', 'hackathon_ready', 'membership'] &&
              data.status in ['pending', 'in_progress', 'completed'];
+    }
+
+    function isValidScoutIntake(data) {
+      return data.keys().hasAll([
+               'org_name', 'contact_name_role', 'contact_email', 'mission', 'scale',
+               'primary_need', 'problem_description', 'current_systems', 'timeline', 'referral_source',
+               'bucket', 'confidence', 'rationale', 'poc_score', 'clarity_score', 'foothold_score',
+               'composite_signal', 'flags', 'hitlTier', 'reviewStatus'
+             ]) &&
+             data.keys().size() <= 30 &&
+             data.org_name is string && data.org_name.size() <= 256 &&
+             data.contact_name_role is string && data.contact_name_role.size() <= 256 &&
+             data.contact_email is string && data.contact_email.size() <= 256 &&
+             data.mission is string && data.mission.size() <= 1000 &&
+             data.scale is string && data.scale.size() <= 500 &&
+             data.primary_need in ['analyze_data', 'build_tool', 'ml_predictive', 'organize_data', 'strategy_guidance', 'something_else'] &&
+             (data.get('primary_need_other', '') is string && data.get('primary_need_other', '').size() <= 500) &&
+             data.problem_description is string && data.problem_description.size() <= 2000 &&
+             data.current_systems is string && data.current_systems.size() <= 500 &&
+             data.timeline is string && data.timeline.size() <= 500 &&
+             data.referral_source is string && data.referral_source.size() <= 256 &&
+             (data.bucket == null || data.bucket in ['Data Infrastructure', 'Analytics & Insight', 'ML / Predictive', 'Tooling & Automation', 'Advisory / Strategy']) &&
+             (data.confidence == null || data.confidence in ['High', 'Medium', 'Low']) &&
+             data.rationale is string && data.rationale.size() <= 1000 &&
+             data.poc_score in [1, 2, 3] && data.clarity_score in [1, 2, 3] && data.foothold_score in [1, 2, 3] &&
+             data.composite_signal in ['Ready', 'Conditional', 'Not Ready'] &&
+             data.flags is list && data.flags.size() <= 10 &&
+             data.hitlTier in ['L2', 'L3'] &&
+             data.reviewStatus == 'pending';
     }
 
     // User Rules
@@ -91,6 +125,83 @@ service cloud.firestore {
                     (existing().status != 'completed' || incoming().status == 'completed') &&
                     request.resource.data.diff(resource.data).affectedKeys().hasAny(['stage', 'status', 'notes', 'budget_amount', 'hackathon_project', 'updatedAt']);
       allow delete: if isOwner(existing().ownerId);
+    }
+
+    function isValidArchitectAssessment(data) {
+      return data.keys().hasAll([
+               'scoutIntakeId', 'org_name', 'scoutBucket', 'scoutReadiness',
+               'q1_org_context', 'q2_org_size', 'q3_poc',
+               'q4_collection_scope', 'q5_data_locations', 'q6_system_integration', 'q7_integration_familiarity', 'q8_quality_confidence',
+               'q9_current_decisions', 'q10_wished_decisions', 'q11_decision_empowerment',
+               'q12_reporting_to', 'q13_reporting_automation',
+               'q14_tools', 'q15_staff_confidence', 'q16_budget_speed',
+               'q17a_wish_list', 'q17b_biggest_worry', 'q18_past_blockers',
+               'di_score', 'gov_score', 'tooling_score', 'dc_score', 'tc_score',
+               'points', 'compositeLevel', 'overrideApplied', 'flaggedDimensions', 'remediationOnly',
+               'charter', 'ninetyDayPlan', 'createdBy', 'createdByEmail'
+             ]) &&
+             data.keys().size() <= 45 &&
+             data.scoutIntakeId is string && isValidId(data.scoutIntakeId) &&
+             data.org_name is string && data.org_name.size() <= 256 &&
+             data.scoutBucket in ['Data Infrastructure', 'Analytics & Insight', 'ML / Predictive', 'Tooling & Automation', 'Advisory / Strategy'] &&
+             data.scoutReadiness in ['Ready', 'Conditional', 'Not Ready'] &&
+             data.q1_org_context is string && data.q1_org_context.size() <= 2000 &&
+             data.q2_org_size is string && data.q2_org_size.size() <= 500 &&
+             data.q3_poc is string && data.q3_poc.size() <= 256 &&
+             data.q4_collection_scope in ['systematic', 'partial', 'not_systematic'] &&
+             data.q5_data_locations is string && data.q5_data_locations.size() <= 1000 &&
+             data.q6_system_integration in ['own_island', 'some_share', 'most_share_auto'] &&
+             data.q7_integration_familiarity in ['not_familiar', 'somewhat_familiar', 'very_familiar'] &&
+             data.q8_quality_confidence in ['not_confident', 'mixed', 'very_confident'] &&
+             data.q9_current_decisions is string && data.q9_current_decisions.size() <= 2000 &&
+             data.q10_wished_decisions is string && data.q10_wished_decisions.size() <= 2000 &&
+             data.q11_decision_empowerment in ['not_from_data', 'leadership_managers', 'anyone_with_access'] &&
+             data.q12_reporting_to is string && data.q12_reporting_to.size() <= 1000 &&
+             data.q13_reporting_automation in ['none_manual', 'semi_automated', 'mostly_automated'] &&
+             data.q14_tools is list && data.q14_tools.size() <= 8 &&
+             data.q15_staff_confidence in ['low_comfort', 'some_adhoc', 'dedicated_staff'] &&
+             data.q16_budget_speed in ['case_by_case', 'requires_approval', 'fast'] &&
+             data.q17a_wish_list is string && data.q17a_wish_list.size() <= 2000 &&
+             data.q17b_biggest_worry is string && data.q17b_biggest_worry.size() <= 2000 &&
+             data.q18_past_blockers is string && data.q18_past_blockers.size() <= 2000 &&
+             data.di_score in [1, 2, 3] && data.gov_score in [1, 2, 3] && data.tooling_score in [1, 2, 3] &&
+             data.dc_score in [1, 2, 3] && data.tc_score in [1, 2, 3] &&
+             data.points is int && data.points >= 7 && data.points <= 21 &&
+             data.compositeLevel in ['Foundational', 'Developing', 'Established'] &&
+             data.overrideApplied is bool &&
+             data.flaggedDimensions is list && data.flaggedDimensions.size() <= 2 &&
+             data.remediationOnly is bool &&
+             // charter/ninetyDayPlan are admin-authored nested maps; deep map
+             // validation in rules is impractical — shape-checked only.
+             data.charter is map && data.ninetyDayPlan is map &&
+             data.createdBy is string && data.createdByEmail is string && data.createdByEmail.size() <= 256;
+    }
+
+    // Scout Intake Rules — public, unauthenticated create (prospective orgs have no account yet);
+    // everything else (applicant PII, review actions) is staff-only.
+    match /scoutIntakes/{intakeId} {
+      allow get, list: if isAdmin();
+      allow create: if isValidId(intakeId) && isValidScoutIntake(incoming());
+      allow update: if isAdmin() &&
+                    request.resource.data.diff(resource.data).affectedKeys()
+                      .hasOnly(['reviewStatus', 'reviewAction', 'finalBucket', 'reviewedBy', 'reviewedByEmail', 'reviewedAt', 'reviewNotes', 'onboardingKit']) &&
+                    request.resource.data.reviewStatus == 'reviewed' &&
+                    request.resource.data.reviewAction in ['approved', 'edited', 'redirected'] &&
+                    request.resource.data.finalBucket in ['Data Infrastructure', 'Analytics & Insight', 'ML / Predictive', 'Tooling & Automation', 'Advisory / Strategy'] &&
+                    request.resource.data.reviewedBy == request.auth.uid;
+      // no delete rule — default-deny preserves the audit trail
+    }
+
+    // Architect Assessment Rules — staff-conducted, everything admin-only.
+    // Doc ID must equal the source scoutIntakes doc ID (1:1 relationship).
+    match /architectAssessments/{assessmentId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin() && isValidId(assessmentId) &&
+                    exists(/databases/$(database)/documents/scoutIntakes/$(assessmentId)) &&
+                    isValidArchitectAssessment(incoming()) &&
+                    incoming().createdBy == request.auth.uid;
+      allow update: if isAdmin() && isValidArchitectAssessment(incoming()); // re-conduct allowed
+      // no delete — default-deny preserves the audit trail
     }
   }
 }

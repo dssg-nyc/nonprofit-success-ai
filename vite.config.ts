@@ -19,6 +19,11 @@ export default defineConfig(({mode}) => {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
+      watch: {
+        // OneDrive intermittently locks this file (cloud sync/placeholder), which
+        // crashes chokidar's Windows fs watcher with an uncaught EBUSY error.
+        ignored: ['**/files.zip'],
+      },
     },
   };
 });
