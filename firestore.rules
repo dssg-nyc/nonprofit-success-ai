@@ -31,6 +31,11 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == ownerId;
     }
 
+    function isAdmin() {
+      return isSignedIn() &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // Entity Validations
     function isValidUser(data) {
       return data.keys().hasAll(['email', 'role']) &&
@@ -56,6 +61,35 @@ service cloud.firestore {
              data.ownerId == request.auth.uid &&
              data.stage in ['initial_meeting', 'budget_check', 'data_ethics_committee', 'scoping', 'hackathon_ready', 'membership'] &&
              data.status in ['pending', 'in_progress', 'completed'];
+    }
+
+    function isValidScoutIntake(data) {
+      return data.keys().hasAll([
+               'org_name', 'contact_name_role', 'contact_email', 'mission', 'scale',
+               'primary_need', 'problem_description', 'current_systems', 'timeline', 'referral_source',
+               'bucket', 'confidence', 'rationale', 'poc_score', 'clarity_score', 'foothold_score',
+               'composite_signal', 'flags', 'hitlTier', 'reviewStatus'
+             ]) &&
+             data.keys().size() <= 30 &&
+             data.org_name is string && data.org_name.size() <= 256 &&
+             data.contact_name_role is string && data.contact_name_role.size() <= 256 &&
+             data.contact_email is string && data.contact_email.size() <= 256 &&
+             data.mission is string && data.mission.size() <= 1000 &&
+             data.scale is string && data.scale.size() <= 500 &&
+             data.primary_need in ['analyze_data', 'build_tool', 'ml_predictive', 'organize_data', 'strategy_guidance', 'something_else'] &&
+             (data.get('primary_need_other', '') is string && data.get('primary_need_other', '').size() <= 500) &&
+             data.problem_description is string && data.problem_description.size() <= 2000 &&
+             data.current_systems is string && data.current_systems.size() <= 500 &&
+             data.timeline is string && data.timeline.size() <= 500 &&
+             data.referral_source is string && data.referral_source.size() <= 256 &&
+             (data.bucket == null || data.bucket in ['Data Infrastructure', 'Analytics & Insight', 'ML / Predictive', 'Tooling & Automation', 'Advisory / Strategy']) &&
+             (data.confidence == null || data.confidence in ['High', 'Medium', 'Low']) &&
+             data.rationale is string && data.rationale.size() <= 1000 &&
+             data.poc_score in [1, 2, 3] && data.clarity_score in [1, 2, 3] && data.foothold_score in [1, 2, 3] &&
+             data.composite_signal in ['Ready', 'Conditional', 'Not Ready'] &&
+             data.flags is list && data.flags.size() <= 10 &&
+             data.hitlTier in ['L2', 'L3'] &&
+             data.reviewStatus == 'pending';
     }
 
     // User Rules
@@ -91,6 +125,21 @@ service cloud.firestore {
                     (existing().status != 'completed' || incoming().status == 'completed') &&
                     request.resource.data.diff(resource.data).affectedKeys().hasAny(['stage', 'status', 'notes', 'budget_amount', 'hackathon_project', 'updatedAt']);
       allow delete: if isOwner(existing().ownerId);
+    }
+
+    // Scout Intake Rules — public, unauthenticated create (prospective orgs have no account yet);
+    // everything else (applicant PII, review actions) is staff-only.
+    match /scoutIntakes/{intakeId} {
+      allow get, list: if isAdmin();
+      allow create: if isValidId(intakeId) && isValidScoutIntake(incoming());
+      allow update: if isAdmin() &&
+                    request.resource.data.diff(resource.data).affectedKeys()
+                      .hasOnly(['reviewStatus', 'reviewAction', 'finalBucket', 'reviewedBy', 'reviewedByEmail', 'reviewedAt', 'reviewNotes', 'onboardingKit']) &&
+                    request.resource.data.reviewStatus == 'reviewed' &&
+                    request.resource.data.reviewAction in ['approved', 'edited', 'redirected'] &&
+                    request.resource.data.finalBucket in ['Data Infrastructure', 'Analytics & Insight', 'ML / Predictive', 'Tooling & Automation', 'Advisory / Strategy'] &&
+                    request.resource.data.reviewedBy == request.auth.uid;
+      // no delete rule — default-deny preserves the audit trail
     }
   }
 }
