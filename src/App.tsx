@@ -14,6 +14,7 @@ import ScoutIntakeForm from './components/scout/ScoutIntakeForm';
 import ScoutReviewQueue from './components/scout/ScoutReviewQueue';
 import ArchitectAssessment from './components/architect/ArchitectAssessment';
 import ArchitectPlan from './components/architect/ArchitectPlan';
+import OnboardingFlow from './components/onboarding/OnboardingFlow';
 
 function Navbar({ user, isAdmin, onLogout }: { user: any, isAdmin: boolean, onLogout: () => void }) {
   return (
@@ -193,6 +194,7 @@ export default function App() {
               element={user ? <BusinessPortal isDemo={isDemo} /> : <Navigate to="/login" />}
             />
             <Route path="/apply" element={<ScoutIntakeForm isDemo={isDemo} />} />
+            <Route path="/onboard" element={<OnboardingFlow isDemo={isDemo} />} />
             <Route
               path="/scout/review"
               element={user && isAdmin ? <ScoutReviewQueue isDemo={isDemo} /> : <Navigate to={user ? "/dashboard" : "/login"} />}

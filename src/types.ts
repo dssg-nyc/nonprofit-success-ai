@@ -206,6 +206,101 @@ export interface NinetyDayPlan {
   phase2Note?: string;
 }
 
+// --- Onboarding & CRM ---
+
+export type OrgType = 'nonprofit' | 'small_business' | 'other';
+export type ProgramInterest = 'grant' | 'hackathon' | 'ongoing' | 'consulting';
+export type FundingRange = '0_50k' | '50_150k' | '150_500k' | '500k_plus' | 'unsure';
+export type OnboardingStep = 'lookup' | 'profile' | 'organization' | 'program' | 'intake' | 'success';
+
+// Nonprofit lookup from public databases
+export interface NonprofitLookupResult {
+  orgName: string;
+  ein?: string;
+  orgType: OrgType;
+  website?: string;
+  industry?: string;
+  mission?: string;
+  yearFounded?: number;
+  source: 'propublica' | 'goodstack' | 'manual';
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface NonprofitSearchQuery {
+  url?: string; // homepage URL to extract domain
+  name?: string; // organization name
+  ein?: string; // tax ID
+}
+
+export interface ClientProfile {
+  id?: string;
+  firebaseUid: string;
+  email: string;
+  status: 'active' | 'archived' | 'rejected';
+
+  // Basic Profile
+  contactName: string;
+  contactRole: string;
+  contactPhone: string;
+
+  // Organization
+  orgName: string;
+  orgType: OrgType;
+  orgEin?: string;
+  orgIndustry?: string;
+  orgWebsite?: string;
+
+  // Program Interest
+  programInterest: ProgramInterest;
+  fundingRange?: FundingRange;
+  projectTimeline: string;
+
+  // Scout Integration
+  scoutIntakeId?: string;
+  scoutBucket?: ScoutBucket;
+  scoutStatus: 'pending' | 'reviewed' | 'approved' | 'rejected';
+
+  // Metadata
+  source: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  onboardedAt?: Date;
+}
+
+export interface IntakeResponse {
+  id?: string;
+  clientId: string;
+  version: number;
+
+  // Scout fields
+  problemDescription: string;
+  currentSystems: string;
+  primaryNeed: PrimaryNeed;
+  primaryNeedOther?: string;
+  referralSource: string;
+  mission: string;
+  scale: string;
+
+  // Metadata
+  submittedAt: Date;
+  reviewedAt?: Date;
+  reviewedBy?: string;
+}
+
+export interface OnboardingState {
+  authCompleted: boolean;
+  profileCompleted: boolean;
+  intakeCompleted: boolean;
+  currentStep: OnboardingStep;
+  clientData: Partial<ClientProfile>;
+  intakeData: Partial<IntakeResponse>;
+  errors: Record<string, string>;
+  loading: boolean;
+}
+
+// --- Architect (Current-State Assessment & maturity model) ---
+
 export interface ArchitectAssessment {
   id: string;
   // handoff (denormalized from the scout intake at create time)
