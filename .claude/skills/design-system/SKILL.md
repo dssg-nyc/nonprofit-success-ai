@@ -12,7 +12,7 @@ Produce or update the design of record for: `$ARGUMENTS`
 **The third design stage — Architect only.** Takes the design doc (from
 `/design-initiative`) and the PRD (from `/design-product`) and produces two artifacts:
 
-1. **The design of record** — `docs/<project>-platform.html`, a tabbed HTML broadsheet
+1. **The design of record** — `docs/<project>-system-design.html`, a tabbed HTML broadsheet
 2. **Deep component specs** — `.claude/specs/platform/{agents,services,infra}/<component>.md`
 
 There is no reference file to copy from — the spec below is the standard. A complete
@@ -20,7 +20,7 @@ plate runs figure → caption → facts table → delta links, and every plate c
 diagram. The component contract further down is normative, not illustrative.
 
 A prior output of this skill failed by having zero diagrams, no delta anchors, and no
-hash router. If an existing `docs/<project>-platform.html` is present, treat it as output
+hash router. If an existing `docs/<project>-system-design.html` is present, treat it as output
 to be judged against the rules below — never as a pattern to copy.
 
 ## Pipeline position
@@ -51,6 +51,22 @@ Every stage is interactive. Ask the user when:
    traces and decision rationale. These are input, not output to overwrite — merge
    forward, don't flatten.
 
+### Spec coverage is a requirement, not a courtesy
+
+**Every mechanism, rubric, threshold, taxonomy, and failure contract in `.claude/specs/`
+must appear in the design record or be explicitly listed as out of scope.** The specs are
+not background reading — they are the content. Before publishing, walk the spec tree
+against the plates: a spec section with no plate is either a missing plate or a spec that
+should be deleted.
+
+Watch the stack refs and infra specs in particular. They are read last, or not at all, and
+they hold exactly the cross-cutting content the plates most often lack — a four-rung
+failure ladder sitting in `stack/vercel-functions.md` while the design record says nothing
+about failure is the failure mode this rule exists to prevent. Same for idempotency rules
+buried in a data-model spec, and retry/backoff policy in a gateway spec.
+
+Report the walk: list any spec section you did not surface, and why.
+
 ## Output 1 — The design of record (HTML)
 
 ### Structure — tabbed HTML, hash-routed
@@ -60,7 +76,7 @@ Every stage is interactive. Ask the user when:
 | Overview | Why this system exists, audience cards, shared-capability inventory, TOC |
 | Architecture | **C1** system context · **C2** containers · **C2.1** lifecycle & gates · **D1** data model |
 | Components | **C3** one plate per named decision surface: mechanism diagram + facts table |
-| Platform | The shared layer every component imports and its boundary rule |
+| Platform | The shared layer every component imports, its boundary rule, and the **semantics plate** |
 | Delta | The build queue, the decision register, and the PRD coverage table |
 
 **Every tab is built from plates.** A plate is `.plate-head` (number + title + zoom tag)
@@ -87,6 +103,53 @@ entity from each stage to the next, what gate blocks it, and who or what opens t
 This is consistently the single most useful figure in the document — it is the one a
 reader screenshots — and it is the one most often missing, because no individual
 component owns it. Draw it even when every stage is BUILT.
+
+### The semantics plate is required
+
+The hardest review findings are never about components — they are about **execution
+semantics**, the rules that hold *between* components. A design organized
+component-by-component omits them structurally, because no single component owns them.
+This plate is where they live. Every row is either specified or **explicitly deferred**;
+deferral is a valid answer, silence is not.
+
+| Concern | Must state |
+|---|---|
+| **Lifecycle state machine** | Who may transition, from → to, guards, required approval, event written, side effects. Cross-reference the C2.1 plate |
+| **Idempotency** | For every consequential command (approve, sign, send, publish, transition): the key that makes a repeat a no-op. A double-clicked Approve must not produce two state transitions |
+| **Concurrency** | Whether stale writes are rejected, and how — or that it is deliberately deferred, naming the mechanism if it lands |
+| **Failure taxonomy** | A row per failure: invalid output, schema violation, timeout, rate limit, provider down, auth failure, **database unavailable**, **approval unavailable**, **duplicate request**, **concurrent write**. The last four are the ones endpoint-level ladders miss |
+| **Async boundary** | If the stack has a realtime/pubsub channel, state whether it is UI synchronization or a domain event bus. Say which, in one sentence |
+| **Structured vs. blob** | Which data is a flexible artifact (JSON blob) and which is queryable domain state (relational). A query the product needs is the test |
+
+**The async boundary row prevents a specific, common failure.** Where a realtime channel
+exists and its role is unstated, someone eventually builds `db update → realtime event →
+frontend notices → frontend calls API → API mutates` — and the business workflow now
+depends on a browser tab being open. The correct direction is `command → transaction →
+state + event → realtime merely informs clients`. One sentence in the design record
+forecloses it.
+
+### The provenance contract — required for any system with AI-generated content
+
+If a model generates content a human reads or approves, the design record must state
+provenance as a **data-model rule, not a UI feature**. A provenance badge with no column
+behind it cannot answer "where did this sentence come from?" six months later.
+
+Distinguish four sources, and carry the distinction in the schema:
+
+1. **Verified fact** — sourced directly from system or user data
+2. **Deterministic inference** — computed by stated rules
+3. **AI interpretation** — generated by a named agent
+4. **Human decision** — approved, edited, or rejected by a person
+
+Name the columns (`source_type`, `generated_by`, `model`, `model_version`,
+`prompt_version`, `run_id`, `approved_by`, `approved_at`) and make the run ledger
+traversable end to end:
+
+```
+agent_run → proposal → human edit → approval → state transition → external effect
+```
+
+That chain is the audit trail. Where it breaks, the system cannot explain itself.
 
 ### Design system
 
@@ -353,6 +416,21 @@ skipped — one component, four modifiers, defined once.
 
 ### The Delta tab — the document's sync point
 
+**The delta numbers come from `.claude/specs/delta.md`. Never mint your own.**
+
+That registry owns every `D{n}` and `C{n}`; the Delta tab *renders* it. Read it, render its
+rows in dependency order, and carry each row's state and "needs first" through unchanged.
+If a plate needs a delta row that does not exist, add the row to the registry first — then
+cite it.
+
+This rule exists because the alternative already happened: the design record and the
+component specs each minted `D1`–`D18` independently and agreed on **none** of them, so no
+number in the repo was safe to cite from an issue. Regenerating with fresh numbering
+silently rebinds every citation in every issue, milestone, and plan doc.
+
+If no registry file exists, create it before the Delta tab, seeded from the plates.
+
+
 This tab is the seam to `/design-roadmap`, which files GitHub issues against it. If a
 delta row cannot be linked to, the next stage has nothing mechanical to cite and falls
 back to re-deriving the build queue by hand. **Addressability is the requirement**, not a
@@ -453,7 +531,7 @@ Write `.claude/specs/platform/{agents,services,infra}/<component>.md`:
 
 ```markdown
 # <Component Name>
-**Plate:** C3.<n> in docs/<project>-platform.html
+**Plate:** C3.<n> in docs/<project>-system-design.html
 **Status:** <BUILT | BUILT NOT WIRED | SPECIFIED | GAP>
 **Status note:** <one line: what exists, what doesn't, where code lives>
 **PRD sections:** §<n>, §<n>
@@ -549,7 +627,7 @@ landed, and whether it was carried, changed, or dropped — with rationale.>
    to the user.
 3. **Draw the design record:** C1 → C2 → D1 → C3 plates → platform → Delta.
 4. **Write deep specs** for each plate + platform module, reading the code for each.
-5. **Publish** HTML to `docs/<project>-platform.html` and specs to `.claude/specs/`.
+5. **Publish** HTML to `docs/<project>-system-design.html` and specs to `.claude/specs/`.
 6. **Verify** against the publication checklist below before finishing.
 
 ## Publication checklist — run this, don't assume it
@@ -558,7 +636,7 @@ Each of these is grep-checkable, and each has silently failed in a real run. Che
 against the file you just wrote, not against your intent:
 
 ```bash
-F=docs/<project>-platform.html
+F=docs/<project>-system-design.html
 grep -c '<svg viewBox'  $F   # ≥ one per plate — 0 means the document has no diagrams
 grep -c '<figcaption'   $F   # must equal the <svg viewBox> count
 grep -c 'id="d'         $F   # ≥ one per delta row
@@ -578,6 +656,15 @@ Then verify by reading, not counting:
 - Every figcaption states a claim, not a description of the picture.
 - Every PRD `§` appears in the coverage table, including the uncovered ones.
 - The footer names its sources and the re-verify rule.
+- **The semantics plate has a row for every concern**, each specified or explicitly
+  deferred — lifecycle, idempotency, concurrency, failure taxonomy, async boundary,
+  structured-vs-blob. A missing row reads as "handled" when it means "never considered".
+- **Every spec section is surfaced or listed as out of scope.** Walk `.claude/specs/`
+  against the plates — stack refs and infra specs included.
+- **Provenance is a data-model rule**, not a UI note, wherever a model generates content a
+  human reads.
+- **Every delta number in the document exists in `.claude/specs/delta.md`** with the same
+  meaning. No number was invented, reused, or renumbered.
 
 **If the diagram count is zero, the document is not publishable.** Go back to step 3 —
 that is the deliverable, and no amount of correct tables substitutes for it.

@@ -140,13 +140,14 @@ Repo-local (`.claude/specs/`):
 
 | Path | What it covers |
 |------|----------------|
-| `design-system.md` | Scope, direction decision, container model — the root doc |
+| `delta.md` | **The delta registry** — owns every `D{n}`/`C{n}`. Specs and the design record cite it; neither mints |
+| `design-system.md` | Scope, direction decision, container model, execution semantics (§8) — the root doc |
 | `environments.md` | Deployment config (local / staging / prod) |
 | `design-scope.md` | Initiative framing — what we're building and why |
 | `design-requirements.md` | PRD — deliverables, requirements, acceptance criteria |
 | `design-interface.md` | Visual language, typography, palette, component patterns |
 | `stack/` | How to write code: `react-vite.md`, `vercel-ai-sdk.md`, `vercel-functions.md` |
-| `crm/` | Data model, security, access model, Supabase conventions, integrations |
+| `crm/` | Data model (incl. provenance §7), security + trust boundaries, access model, `lifecycle.md` (the state machine), Supabase conventions |
 | `platform/agents/` | One spec per agent: `scout.md`, `architect.md`, `chronicle.md` |
 | `platform/services/` | `health-service.md`, `communications-service.md`, `contract-consent.md` |
 | `platform/infra/` | `eval-harness.md`, `model-gateway.md`, `observability.md` |
