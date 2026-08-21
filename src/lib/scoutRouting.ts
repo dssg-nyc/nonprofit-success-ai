@@ -88,10 +88,15 @@ function scoreFoothold(currentSystems: string): 1 | 2 | 3 {
 }
 
 function compositeSignal(poc: number, clarity: number, foothold: number): ScoutCompositeSignal {
-  if (poc === 1 || clarity === 1 || foothold === 1) return 'Conditional';
+  // POC is the decisive dimension: no reachable point of contact means nobody can
+  // unblock the work, so the engagement is 'Not Ready' however well-formed the rest of
+  // the intake is. The exception is an intake that scores the floor everywhere — that
+  // pattern is a thinly-filled form from a small org, not evidence the org itself is
+  // unready, so it stays 'Conditional' for a human to read.
   const sum = poc + clarity + foothold;
+  if (poc === 1 && sum > 3) return 'Not Ready';
+  if (poc === 1 || clarity === 1 || foothold === 1) return 'Conditional';
   if (sum >= 7) return 'Ready';
-  if (sum <= 4) return 'Not Ready';
   return 'Conditional';
 }
 

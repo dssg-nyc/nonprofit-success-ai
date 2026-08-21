@@ -1,7 +1,7 @@
 import {createClient} from '@supabase/supabase-js';
 
-// Supabase client. Ported from the project-mgmt-ai prototype, adapted to this repo's
-// fail-fast env convention: a missing variable fails at import with a named error.
+// Supabase client, following this repo's fail-fast env convention: a missing variable
+// fails at import with a named error.
 //
 // The anon key is a public identifier, not a secret: it grants only what RLS allows
 // (supabase/migrations/0001_init.sql). The service-role key bypasses RLS entirely and must

@@ -2,7 +2,7 @@
 
 The DSSG Success Portal is built by a volunteer cohort. This page is the short version of
 how work moves from an idea to `main`. Read [README.md](README.md) for what the product is
-and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it is put together.
+and [.claude/specs/design-system.md](.claude/specs/design-system.md) for how it is put together.
 
 ## Local setup
 

@@ -1,9 +1,8 @@
 name: CI
 
-# Bespoke workflow — no reusable TypeScript workflow exists in ai-project-template yet
-# (only python-ci.yml does). This mirrors python-ci.yml's job shape (lint/typecheck/test/build)
-# so extracting a shared typescript-ci.yml later is mechanical.
-# Tracked in the AIT issue: "extract reusable typescript-ci.yml".
+# Bespoke workflow — no reusable TypeScript workflow to inherit from yet. Job shape is
+# lint/typecheck/test/build, kept conventional so extracting a shared typescript-ci.yml
+# later is mechanical.
 #
 # No eval gate yet: the harness (src/evals/, targets.yaml) has not been ported to this
 # repo. Add the heuristics-only gate job back alongside the harness, not before it.

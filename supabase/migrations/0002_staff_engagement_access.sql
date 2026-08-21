@@ -24,8 +24,8 @@
 -- write are separate decisions and this migration takes only the first.
 --
 -- Note this makes engagement data cross-org readable by any user with role = 'admin'.
--- That is a privacy posture, not only a technical change (approved by Ramsey
--- 2026-08-07 for the current single-team staff model).
+-- That is a privacy posture, not only a technical change; it is scoped to the current
+-- single-team staff model.
 create policy engagements_select_admin on engagements
   for select to authenticated
   using (is_admin());
