@@ -2,16 +2,16 @@ import React, { useState, useEffect } from 'react';
 import {
   supabase, liveQuery, toColumns, handleSupabaseError, OperationType,
 } from '../../lib/supabase';
-import { Business } from '../../types';
+import { Business, BusinessType } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Building2, ChevronRight, Info, CheckCircle2, Circle, X, Layers } from 'lucide-react';
+import { Plus, Building2, ChevronRight, Info, CheckCircle2, X, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newBusiness, setNewBusiness] = useState({ name: '', type: 'small_business' as any, industry: '', address: '' });
+  const [newBusiness, setNewBusiness] = useState({ name: '', type: 'small_business' as BusinessType, industry: '', address: '' });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -257,7 +257,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
                       <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Entity Type</label>
                       <select
                         value={newBusiness.type}
-                        onChange={e => setNewBusiness({...newBusiness, type: e.target.value as any})}
+                        onChange={e => setNewBusiness({...newBusiness, type: e.target.value as BusinessType})}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-dssg-blue capitalize"
                       >
                         <option value="small_business">Small Business</option>

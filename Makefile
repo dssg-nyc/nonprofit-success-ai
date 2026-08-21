@@ -1,5 +1,5 @@
-# `lint` and `test` are the two targets Makefile.common's `ship` chain requires.
-# Everything else here is the local gate + the Supabase stack.
+# This Makefile is self-contained -- there is no shared include. `gate` and `ship` are
+# the two entry points; everything else is the dev loop + the Supabase stack.
 
 install: hooks  ## Install node dependencies and the git hooks
 	npm install
@@ -32,9 +32,19 @@ build:  ## Production build
 
 gate: type-check lint test build
 
-# Override Makefile.common's ship: use lint-check (no autofix) and add the
-# typecheck/build gates this repo's CLAUDE.md requires before a commit batch.
-ship: lint-check type-check test build check-review pull push quick-pr  ## strict gates -> review check -> pull -> push -> PR
+lint-check:  ## eslint, no autofix (the gate `ship` uses)
+	npm run lint
+
+# `ship` is a strict gate only -- it does not pull, push, or open a PR. It was written
+# against a `Makefile.common` include that this repo does not have and that exists
+# nowhere in the workspace, so `lint-check`, `check-review`, `pull`, `push` and
+# `quick-pr` were all undefined and `make ship` died on the first missing prerequisite
+# before running a single check. The git steps are deliberately not reinstated here:
+# CLAUDE.md's gate is that Claude never pushes, so pushing stays a manual step.
+#
+# Differs from `gate` only in lint-check vs lint: no --fix, so the diff reviewed is the
+# diff committed -- same reasoning as the pre-commit eslint hook.
+ship: lint-check type-check test build  ## strict gates (no autofix); push manually after
 
 # --- Supabase local stack -----------------------------------------------------
 # There is no Dockerfile in this repo and there should not be: the Supabase CLI

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { motion } from 'motion/react';
-import { Mail, Lock, LogIn, UserPlus, Globe, Eye } from 'lucide-react';
+import { Mail, Lock, Globe, Eye } from 'lucide-react';
 
 interface LoginProps {
   onDemoMode: () => void;
@@ -28,8 +28,8 @@ export default function Login({ onDemoMode }: LoginProps) {
         : await supabase.auth.signInWithPassword({ email, password });
 
       if (authError) throw authError;
-    } catch (err: any) {
-      setError(err?.message ?? 'Sign-in failed.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Sign-in failed.');
     } finally {
       setLoading(false);
     }
@@ -48,10 +48,11 @@ export default function Login({ onDemoMode }: LoginProps) {
       });
       if (oauthError) throw oauthError;
       // On success the browser navigates away, so `loading` is never cleared here.
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(
-        err?.message ??
-          'Google sign-in failed. It must be enabled in the Supabase project (Authentication -> Providers).',
+        err instanceof Error
+          ? err.message
+          : 'Google sign-in failed. It must be enabled in the Supabase project (Authentication -> Providers).',
       );
       setLoading(false);
     }

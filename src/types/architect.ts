@@ -1,111 +1,5 @@
-export type BusinessType = 'small_business' | 'nonprofit';
-
-export interface Business {
-  id: string;
-  name: string;
-  type: BusinessType;
-  ein?: string;
-  industry?: string;
-  ownerId: string;
-  certified: boolean;
-  address?: string;
-  createdAt: any;
-}
-
-export type EngagementStage = 'initial_meeting' | 'budget_check' | 'data_ethics_committee' | 'scoping' | 'hackathon_ready' | 'membership';
-export type EngagementStatus = 'pending' | 'in_progress' | 'completed';
-
-export interface Engagement {
-  id: string;
-  businessId: string;
-  ownerId: string;
-  stage: EngagementStage;
-  status: EngagementStatus;
-  notes?: string;
-  budget_amount?: number;
-  hackathon_project?: string;
-  updatedAt: any;
-}
-
-export interface UserProfile {
-  id: string;
-  email: string;
-  displayName?: string;
-  role: 'client' | 'admin';
-  createdAt: any;
-}
-
-// --- Scout (intake & routing agent) ---
-
-export const SCOUT_BUCKETS = [
-  'Data Infrastructure',
-  'Analytics & Insight',
-  'ML / Predictive',
-  'Tooling & Automation',
-  'Advisory / Strategy',
-] as const;
-export type ScoutBucket = typeof SCOUT_BUCKETS[number];
-
-export const PRIMARY_NEED_OPTIONS: { value: PrimaryNeed; label: string }[] = [
-  { value: 'analyze_data', label: 'We have data and want help analyzing it' },
-  { value: 'build_tool', label: 'We need help building a tool, dashboard, or workflow' },
-  { value: 'ml_predictive', label: 'We want to build a predictive model or use machine learning' },
-  { value: 'organize_data', label: "We have data but it's a mess and we need help organizing it" },
-  { value: 'strategy_guidance', label: "We're not sure where to start — we need guidance on our data strategy" },
-  { value: 'something_else', label: 'Something else' },
-];
-
-export type PrimaryNeed =
-  | 'analyze_data'
-  | 'build_tool'
-  | 'ml_predictive'
-  | 'organize_data'
-  | 'strategy_guidance'
-  | 'something_else';
-
-export type ScoutConfidence = 'High' | 'Medium' | 'Low' | null;
-export type ScoutCompositeSignal = 'Ready' | 'Conditional' | 'Not Ready';
-export type ScoutHitlTier = 'L2' | 'L3';
-export type ScoutReviewStatus = 'pending' | 'reviewed';
-export type ScoutReviewAction = 'approved' | 'edited' | 'redirected';
-
-export interface ScoutIntake {
-  id: string;
-  // intake fields (Tally-equivalent, public write-once)
-  org_name: string;
-  contact_name_role: string;
-  contact_email: string;
-  mission: string;
-  scale: string;
-  primary_need: PrimaryNeed;
-  primary_need_other?: string;
-  problem_description: string;
-  current_systems: string;
-  timeline: string;
-  referral_source: string;
-  submittedAt: any;
-  // scout output fields (public write-once, computed at submit time)
-  bucket: ScoutBucket | null;
-  confidence: ScoutConfidence;
-  rationale: string;
-  poc_score: 1 | 2 | 3;
-  clarity_score: 1 | 2 | 3;
-  foothold_score: 1 | 2 | 3;
-  composite_signal: ScoutCompositeSignal;
-  flags: string[];
-  hitlTier: ScoutHitlTier;
-  // review fields (admin-only, written via update)
-  reviewStatus: ScoutReviewStatus;
-  reviewAction?: ScoutReviewAction;
-  finalBucket?: ScoutBucket;
-  reviewedBy?: string;
-  reviewedByEmail?: string;
-  reviewedAt?: any;
-  reviewNotes?: string;
-  onboardingKit?: string;
-}
-
-// --- Architect (Current-State Assessment & maturity model) ---
+import type { WriteTimestamp } from './domain';
+import type { ScoutBucket, ScoutConfidence, ScoutCompositeSignal } from './scout';
 
 export type MaturityScore = 1 | 2 | 3;
 export type CompositeLevel = 'Foundational' | 'Developing' | 'Established';
@@ -124,33 +18,33 @@ export type CsaTool = 'spreadsheets' | 'crm_case_tool' | 'reporting_analytics' |
 export const CSA_OPTIONS = {
   q4_collection_scope: [
     { value: 'systematic', label: 'We collect data systematically across programs' },
-    { value: 'partial', label: 'Some programs collect data consistently, others don’t' },
-    { value: 'not_systematic', label: 'Data collection isn’t systematic yet' },
+    { value: 'partial', label: 'Some programs collect data consistently, others don\'t' },
+    { value: 'not_systematic', label: 'Data collection isn\'t systematic yet' },
   ],
   q6_system_integration: [
     { value: 'most_share_auto', label: 'Most of our systems share data automatically' },
-    { value: 'some_share', label: 'Some systems connect, but most don’t' },
+    { value: 'some_share', label: 'Some systems connect, but most don\'t' },
     { value: 'own_island', label: 'Every system is its own island' },
   ],
   q7_integration_familiarity: [
-    { value: 'very_familiar', label: 'Very familiar — we’ve connected systems before' },
-    { value: 'somewhat_familiar', label: 'Somewhat familiar — we know it’s possible' },
+    { value: 'very_familiar', label: 'Very familiar — we\'ve connected systems before' },
+    { value: 'somewhat_familiar', label: 'Somewhat familiar — we know it\'s possible' },
     { value: 'not_familiar', label: 'Not familiar with system integration at all' },
   ],
   q8_quality_confidence: [
     { value: 'very_confident', label: 'Very confident — our data is accurate and current' },
-    { value: 'mixed', label: 'Mixed — some data is reliable, some isn’t' },
-    { value: 'not_confident', label: 'Not very confident / we don’t track quality' },
+    { value: 'mixed', label: 'Mixed — some data is reliable, some isn\'t' },
+    { value: 'not_confident', label: 'Not very confident / we don\'t track quality' },
   ],
   q11_decision_empowerment: [
     { value: 'anyone_with_access', label: 'Anyone with access to the data can act on it' },
     { value: 'leadership_managers', label: 'Leadership and program managers' },
-    { value: 'not_from_data', label: 'Decisions don’t really get made from data' },
+    { value: 'not_from_data', label: 'Decisions don\'t really get made from data' },
   ],
   q13_reporting_automation: [
     { value: 'mostly_automated', label: 'Mostly automated — reports pull from live data' },
     { value: 'semi_automated', label: 'Semi-automated — some templates, some manual work' },
-    { value: 'none_manual', label: 'We don’t produce regular reports / mostly manual' },
+    { value: 'none_manual', label: 'We don\'t produce regular reports / mostly manual' },
   ],
   q15_staff_confidence: [
     { value: 'dedicated_staff', label: 'We have dedicated staff for data work' },
@@ -257,6 +151,6 @@ export interface ArchitectAssessment {
   // meta
   createdBy: string;
   createdByEmail: string;
-  createdAt: any;
-  updatedAt: any;
+  createdAt: WriteTimestamp;
+  updatedAt: WriteTimestamp;
 }

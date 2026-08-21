@@ -128,6 +128,22 @@ depends on a browser tab being open. The correct direction is `command → trans
 state + event → realtime merely informs clients`. One sentence in the design record
 forecloses it.
 
+### The trust-boundary plate — required for more than one class of principal
+
+Where a system has more than one kind of authenticated caller, enumerate the **actors**,
+not only the attacks. One row per principal — anonymous, authenticated user, staff, admin,
+server function, model provider, database — with four columns: what it may **submit**,
+**read**, **mutate**, and **cause**.
+
+An attack list answers "is this specific hole closed?". This answers "what is this
+principal able to do at all?", which is what surfaces the holes nobody thought to list.
+The test it applies: **is there any principal whose write surface exceeds its authority?**
+That question found a live hole in a real run — partner orgs could advance their own
+lifecycle state, making the subject of a gate its own approver.
+
+Include the model provider as a principal. It reads whatever a prompt includes, which
+makes prompt assembly a tenancy-scoped read like any other.
+
 ### The provenance contract — required for any system with AI-generated content
 
 If a model generates content a human reads or approves, the design record must state

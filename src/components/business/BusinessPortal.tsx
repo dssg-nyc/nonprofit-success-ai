@@ -4,7 +4,7 @@ import {
   supabase, liveQuery, toColumns, rowToDomain, handleSupabaseError, OperationType,
 } from '../../lib/supabase';
 import { Business, Engagement, EngagementStage, EngagementStatus } from '../../types';
-import { motion, AnimatePresence } from 'motion/react';
+import type { LucideIcon } from 'lucide-react';
 import {
   History,
   DollarSign,
@@ -14,14 +14,11 @@ import {
   CheckCircle,
   ChevronLeft,
   RefreshCcw,
-  Calendar,
   Save,
-  Clock,
-  ExternalLink,
   Building2
 } from 'lucide-react';
 
-const STAGES: { id: EngagementStage; label: string; short: string; icon: any; color: string }[] = [
+const STAGES: { id: EngagementStage; label: string; short: string; icon: LucideIcon; color: string }[] = [
   { id: 'initial_meeting', label: 'Initial Meeting', short: 'Meeting', icon: History, color: 'text-blue-600 bg-blue-100' },
   { id: 'budget_check', label: 'Budget Check', short: 'Budget', icon: DollarSign, color: 'text-emerald-600 bg-emerald-100' },
   { id: 'data_ethics_committee', label: 'Data Ethics Committee', short: 'Ethics', icon: ShieldCheck, color: 'text-amber-600 bg-amber-100' },

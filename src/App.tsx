@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { onAuthChange, fetchRole, signOut } from './lib/supabase';
-import { LogOut, User as UserIcon, LayoutDashboard, Building2, Layers, Compass, ClipboardList } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { LogOut, LayoutDashboard, Compass, ClipboardList } from 'lucide-react';
+import { motion } from 'motion/react';
 
 // Components
 import Login from './components/auth/Login';
@@ -13,7 +13,9 @@ import ScoutReviewQueue from './components/scout/ScoutReviewQueue';
 import ArchitectAssessment from './components/architect/ArchitectAssessment';
 import ArchitectPlan from './components/architect/ArchitectPlan';
 
-function Navbar({ user, isAdmin, onLogout }: { user: any, isAdmin: boolean, onLogout: () => void }) {
+import type { AppUser } from './lib/supabase';
+
+function Navbar({ user, isAdmin, onLogout }: { user: AppUser, isAdmin: boolean, onLogout: () => void }) {
   return (
     <nav className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
@@ -104,7 +106,7 @@ function Navbar({ user, isAdmin, onLogout }: { user: any, isAdmin: boolean, onLo
 }
 
 export default function App() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [role, setRole] = useState<'client' | 'admin' | null>(null);
   const [loading, setLoading] = useState(true);

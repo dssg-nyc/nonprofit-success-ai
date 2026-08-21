@@ -2,7 +2,6 @@ import {
   ArchitectCharter,
   CharterWorkstream,
   NinetyDayPlan,
-  NinetyDayPhase,
   ScoutBucket,
 } from '../types';
 import { MaturityResult } from './architectScoring';

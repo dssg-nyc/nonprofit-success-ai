@@ -9,6 +9,7 @@ import {
   DraftingCompass, ChevronLeft, AlertTriangle, ShieldAlert, Flag,
   CalendarRange, FileText, FileSignature, Presentation, Pencil, CheckCircle2,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 interface Props {
   isDemo?: boolean;
@@ -265,7 +266,7 @@ export default function ArchitectPlan({ isDemo }: Props) {
   );
 }
 
-function Banner({ icon: Icon, tone, title, body }: { icon: any; tone: 'rose' | 'amber'; title: string; body: string }) {
+function Banner({ icon: Icon, tone, title, body }: { icon: LucideIcon; tone: 'rose' | 'amber'; title: string; body: string }) {
   const styles = tone === 'rose'
     ? 'bg-rose-50 border-rose-200 text-rose-700'
     : 'bg-amber-50 border-amber-200 text-amber-700';
@@ -280,7 +281,7 @@ function Banner({ icon: Icon, tone, title, body }: { icon: any; tone: 'rose' | '
   );
 }
 
-function TabButton({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: any; label: string }) {
+function TabButton({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: LucideIcon; label: string }) {
   return (
     <button
       onClick={onClick}

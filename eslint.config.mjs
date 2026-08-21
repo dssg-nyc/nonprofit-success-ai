@@ -30,25 +30,4 @@ export default tseslint.config(
       ],
     },
   },
-
-  // Legacy SPA surface, 2026-08-21. eslint had never run in this repo — `lint` was
-  // `tsc --noEmit` — so turning it on reported 31 pre-existing errors in code nobody was
-  // asked to change. Downgrading the two offending rules HERE, rather than globally or
-  // via inline disables, keeps them as hard errors everywhere else and for every new
-  // file, and keeps the count visible in the gate output instead of hidden.
-  //
-  // This block shrinks as `src/` is refactored by issue and is deleted when the count
-  // reaches zero. Do not widen it, and do not add rules to it to make new code pass.
-  {
-    files: [
-      "src/components/**/*.{ts,tsx}",
-      "src/lib/**/*.ts",
-      "src/types.ts",
-      "src/App.tsx",
-    ],
-    rules: {
-      "@typescript-eslint/no-unused-vars": "warn",
-      "@typescript-eslint/no-explicit-any": "warn",
-    },
-  },
 );
