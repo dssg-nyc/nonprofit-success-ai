@@ -1,12 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signInWithPopup, 
-  GoogleAuthProvider 
-} from 'firebase/auth';
-import { auth, db } from '../../lib/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../../lib/supabase';
 import { motion } from 'motion/react';
 import { Mail, Lock, LogIn, UserPlus, Globe, Eye } from 'lucide-react';
 
@@ -27,22 +20,16 @@ export default function Login({ onDemoMode }: LoginProps) {
     setLoading(true);
 
     try {
-      if (isRegistering) {
-        const { user } = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, 'users', user.uid), {
-          email: user.email,
-          role: 'client',
-          createdAt: serverTimestamp(),
-        });
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
+      // No profile write here. The public.users row is created by the on_auth_user_created
+      // trigger (0008_user_provisioning.sql), so it cannot be skipped by a signup path that
+      // forgets it — which is exactly how the Google flow used to miss it.
+      const { error: authError } = isRegistering
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
+
+      if (authError) throw authError;
     } catch (err: any) {
-      if (err.code === 'auth/operation-not-allowed') {
-        setError('Email/Password sign-in is disabled. Please use Google Login or Demo Mode.');
-      } else {
-        setError(err.message);
-      }
+      setError(err?.message ?? 'Sign-in failed.');
     } finally {
       setLoading(false);
     }
@@ -52,11 +39,20 @@ export default function Login({ onDemoMode }: LoginProps) {
     setError('');
     setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      // Redirect flow, not a popup: Supabase OAuth is redirect-based, and the destination
+      // must be on the project's allow-list (config.toml additional_redirect_urls locally;
+      // Authentication -> URL Configuration on a hosted project).
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin },
+      });
+      if (oauthError) throw oauthError;
+      // On success the browser navigates away, so `loading` is never cleared here.
     } catch (err: any) {
-      setError(err.message);
-    } finally {
+      setError(
+        err?.message ??
+          'Google sign-in failed. It must be enabled in the Supabase project (Authentication -> Providers).',
+      );
       setLoading(false);
     }
   };

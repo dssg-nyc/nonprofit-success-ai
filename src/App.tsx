@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
-import { onAuthStateChanged, User, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
+import { onAuthChange, fetchRole, signOut } from './lib/supabase';
 import { LogOut, User as UserIcon, LayoutDashboard, Building2, Layers, Compass, ClipboardList } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -112,25 +110,12 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+    const unsubscribe = onAuthChange(async (u) => {
       if (isDemo) return;
       setUser(u);
-      if (u) {
-        try {
-          const profile = await getDoc(doc(db, 'users', u.uid));
-          setRole(profile.exists() ? profile.data().role : null);
-        } catch (err) {
-          setRole(null);
-          try {
-            handleFirestoreError(err, OperationType.GET, `users/${u.uid}`);
-          } catch {
-            // handleFirestoreError logs then rethrows by design; swallowed here
-            // so a profile-fetch failure doesn't strand the app on the loading spinner.
-          }
-        }
-      } else {
-        setRole(null);
-      }
+      // fetchRole reads public.users through RLS, so it returns the caller's own row and
+      // nothing else. A null role fails closed: isAdmin stays false.
+      setRole(u ? await fetchRole() : null);
       setLoading(false);
     });
     return unsubscribe;
@@ -154,7 +139,7 @@ export default function App() {
       setUser(null);
       setRole(null);
     } else {
-      signOut(auth);
+      void signOut();
     }
   };
 

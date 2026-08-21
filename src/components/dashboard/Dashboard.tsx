@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
+import {
+  supabase, liveQuery, toColumns, handleSupabaseError, OperationType,
+} from '../../lib/supabase';
 import { Business } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Building2, ChevronRight, Info, CheckCircle2, Circle, X, Layers } from 'lucide-react';
@@ -48,39 +49,55 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
       return;
     }
 
-    if (!auth.currentUser) return;
-
-    const q = query(
-      collection(db, 'businesses'),
-      where('ownerId', '==', auth.currentUser.uid)
+    // No explicit owner filter: businesses_select_own already restricts SELECT to
+    // `owner_id = auth.uid()`, so the database applies the scoping the Firestore `where`
+    // clause used to. Re-stating it here would duplicate the rule in a second place where
+    // it could drift out of step with the policy.
+    const unsubscribe = liveQuery<Business>(
+      'businesses',
+      () => supabase.from('businesses').select('*'),
+      (rows) => {
+        setBusinesses(rows);
+        setLoading(false);
+      },
+      (err) => {
+        setLoading(false);
+        try {
+          handleSupabaseError(err, OperationType.LIST, 'businesses');
+        } catch { /* logged */ }
+      },
+      ['createdAt', 'updatedAt'],
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Business));
-      setBusinesses(data);
-      setLoading(false);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'businesses');
-    });
-
     return unsubscribe;
-  }, []);
+  }, [isDemo]);
 
   const handleAddBusiness = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth.currentUser) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
     try {
-      await addDoc(collection(db, 'businesses'), {
-        ...newBusiness,
-        ownerId: auth.currentUser.uid,
-        certified: false,
-        createdAt: serverTimestamp(),
-      });
+      // owner_id must be sent explicitly and must equal auth.uid(): businesses_insert_own
+      // checks it in WITH CHECK, so a row claiming a different owner is rejected by the
+      // database rather than trusted from the client.
+      const { error } = await supabase.from('businesses').insert(
+        toColumns({
+          ...newBusiness,
+          ownerId: user.id,
+          certified: false,
+        }),
+      );
+
+      if (error) handleSupabaseError(error, OperationType.CREATE, 'businesses');
+
       setShowAddModal(false);
       setNewBusiness({ name: '', type: 'small_business', industry: '', address: '' });
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'businesses');
+      try {
+        handleSupabaseError(err, OperationType.CREATE, 'businesses');
+      } catch { /* logged */ }
     }
   };
 

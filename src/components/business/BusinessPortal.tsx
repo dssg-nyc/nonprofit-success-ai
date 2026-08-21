@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, setDoc, serverTimestamp, addDoc } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
+import {
+  supabase, liveQuery, toColumns, rowToDomain, handleSupabaseError, OperationType,
+} from '../../lib/supabase';
 import { Business, Engagement, EngagementStage, EngagementStatus } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -96,33 +97,36 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       return;
     }
 
-    if (!id || !auth.currentUser) return;
+    if (!id) return;
 
-    // Fetch Business
+    // Fetch Business. RLS restricts this to rows the caller owns, so a business belonging
+    // to someone else comes back empty and redirects — the same outcome as "not found",
+    // which is deliberate: it does not disclose that the row exists.
     const fetchBusiness = async () => {
-      try {
-        const d = await getDoc(doc(db, 'businesses', id));
-        if (d.exists()) {
-          setBusiness({ id: d.id, ...d.data() } as Business);
-        } else {
-          navigate('/dashboard');
-        }
-      } catch (err) {
-        handleFirestoreError(err, OperationType.GET, `businesses/${id}`);
+      const { data, error } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error) {
+        try {
+          handleSupabaseError(error, OperationType.GET, `businesses/${id}`);
+        } catch { /* logged */ }
+        return;
       }
+
+      if (data) setBusiness(rowToDomain<Business>(data, ['createdAt', 'updatedAt']));
+      else navigate('/dashboard');
     };
 
-    fetchBusiness();
+    void fetchBusiness();
 
-    // Listen to Engagements
-    const q = query(
-      collection(db, 'engagements'),
-      where('businessId', '==', id)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Engagement));
-      setEngagements(data);
+    const unsubscribe = liveQuery<Engagement>(
+      'engagements',
+      () => supabase.from('engagements').select('*').eq('business_id', id),
+      (data) => {
+        setEngagements(data);
       
       // If we have engagements, set the latest one as active by default or the first one
       if (data.length > 0) {
@@ -132,13 +136,19 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
         else setActiveStage(data[data.length - 1].stage);
       }
       
-      setLoading(false);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'engagements');
-    });
+        setLoading(false);
+      },
+      (err) => {
+        setLoading(false);
+        try {
+          handleSupabaseError(err, OperationType.LIST, 'engagements');
+        } catch { /* logged */ }
+      },
+      ['createdAt', 'updatedAt'],
+    );
 
     return unsubscribe;
-  }, [id]);
+  }, [id, isDemo, navigate]);
 
   const getCurrentEngagement = () => engagements.find(e => e.stage === activeStage);
 
@@ -162,32 +172,46 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       return;
     }
 
-    if (!id || !auth.currentUser) return;
+    if (!id) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     setSaving(true);
-    
+
     const existing = getCurrentEngagement();
-    
+
     try {
       if (existing) {
-        await updateDoc(doc(db, 'engagements', existing.id), {
-          ...extraData,
-          status,
-          updatedAt: serverTimestamp(),
-        });
+        const { error } = await supabase
+          .from('engagements')
+          .update(toColumns({ ...extraData, status, updatedAt: new Date().toISOString() }))
+          .eq('id', existing.id);
+
+        if (error) handleSupabaseError(error, OperationType.UPDATE, `engagements/${existing.id}`);
       } else {
-        // Create new engagement record for this stage
-        const engagementId = `${id}_${activeStage}`;
-        await setDoc(doc(db, 'engagements', engagementId), {
-          businessId: id,
-          ownerId: auth.currentUser.uid,
-          stage: activeStage,
-          status,
-          updatedAt: serverTimestamp(),
-          ...extraData
-        });
+        // Firestore used a deterministic id (`${businessId}_${stage}`) so a double-submit
+        // overwrote rather than duplicating. Surrogate uuid keys lose that, so 0001_init
+        // adds `unique (business_id, stage)` and this upserts onto it — same guarantee,
+        // enforced by the database instead of by id construction.
+        const { error } = await supabase.from('engagements').upsert(
+          toColumns({
+            businessId: id,
+            ownerId: user.id,
+            stage: activeStage,
+            status,
+            updatedAt: new Date().toISOString(),
+            ...extraData,
+          }),
+          { onConflict: 'business_id,stage' },
+        );
+
+        if (error) handleSupabaseError(error, OperationType.CREATE, 'engagements');
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'engagements');
+      try {
+        handleSupabaseError(err, OperationType.WRITE, 'engagements');
+      } catch { /* logged */ }
     } finally {
       setSaving(false);
     }
