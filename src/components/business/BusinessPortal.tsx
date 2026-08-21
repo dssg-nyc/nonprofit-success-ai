@@ -127,7 +127,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       () => supabase.from('engagements').select('*').eq('business_id', id),
       (data) => {
         setEngagements(data);
-      
+
       // If we have engagements, set the latest one as active by default or the first one
       if (data.length > 0) {
         // Find most recent or in_progress stage
@@ -135,7 +135,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
         if (inProgress) setActiveStage(inProgress.stage);
         else setActiveStage(data[data.length - 1].stage);
       }
-      
+
         setLoading(false);
       },
       (err) => {
@@ -227,7 +227,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       {/* Header Strategy */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
-          <button 
+          <button
             onClick={() => navigate('/dashboard')}
             className="flex items-center gap-2 text-slate-400 hover:text-dssg-blue transition-all font-bold text-[10px] uppercase tracking-[0.2em]"
           >
@@ -247,7 +247,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       <div className="max-w-7xl mx-auto px-4 py-12 animate-fade-in-up">
         {/* Bento Grid Strategy */}
         <div className="grid grid-cols-12 grid-rows-6 gap-8 h-auto lg:h-[900px]">
-          
+
           {/* Profile Card — Brand Authority Variant */}
           <div className="col-span-12 lg:col-span-4 row-span-2 bento-card bg-dssg-blue text-white p-10 relative overflow-hidden flex flex-col justify-between">
             <div className="relative z-10">
@@ -300,7 +300,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                 const stageData = engagements.find(e => e.stage === s.id);
                 const isCompleted = stageData?.status === 'completed';
                 const isActive = activeStage === s.id;
-                
+
                 return (
                   <div key={s.id} className="flex flex-col items-center gap-4 relative z-10 group cursor-pointer" onClick={() => setActiveStage(s.id)}>
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 border ${
@@ -405,7 +405,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                     <div className="flex-grow">
                       <p className="text-xs font-bold text-slate-700">Project Status</p>
                       <div className="flex gap-2 mt-2">
-                         <button 
+                         <button
                           onClick={() => updateStage('in_progress')}
                           className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
                             currentEngagement?.status === 'in_progress' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
@@ -413,7 +413,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                          >
                            In Progress
                          </button>
-                         <button 
+                         <button
                           onClick={() => updateStage('completed')}
                           className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
                             currentEngagement?.status === 'completed' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
@@ -427,7 +427,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
 
                   <div className="space-y-2">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Stage Log</p>
-                    <textarea 
+                    <textarea
                       className="w-full h-32 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-blue-100 outline-none resize-none"
                       placeholder="Add milestone notes..."
                       value={currentEngagement?.notes || ''}
@@ -437,7 +437,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                 </div>
              </div>
 
-             <button 
+             <button
               disabled={saving}
               className="w-full py-4 bg-dssg-blue text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all font-display uppercase tracking-widest text-[11px]"
              >

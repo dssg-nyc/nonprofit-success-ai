@@ -1,0 +1,75 @@
+name: 🐛 Bug
+description: Something is broken or behaves incorrectly
+labels: ["bug", "backlog"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues for this
+          required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: What happens
+      description: The observed behavior, not the diagnosis.
+      placeholder: "`npm run build` succeeds but the Scout review queue renders empty."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should happen instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >
+        Exact commands. Scoping routes this to a plan with a repro-steps and
+        root-cause section, so this field becomes that plan's starting point.
+      placeholder: |
+        1. npm run dev
+        2. open http://localhost:3000 and sign in as a staff user
+        3. the review queue shows no rows
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >
+        Error output, logs, or the file:line you suspect. Paste the failure verbatim —
+        a summary of an error is not the error.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: scope
+    attributes:
+      label: Where
+      description: Package or path, if known.
+      placeholder: "src/evals/pipelines/grade.ts"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: routing
+    attributes:
+      label: Is the cause known?
+      description: >
+        Routes triage. "Known" goes straight to a fix plan; "not yet" adds an investigation stage first. Pick "unsure" freely — it is
+        a signal, not a failure, and triage will make the call.
+      options:
+        - Known — the issue names the cause or the file
+        - Not yet — needs investigation
+        - Unsure
+    validations:
+      required: true

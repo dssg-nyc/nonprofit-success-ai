@@ -1,0 +1,50 @@
+name: CD
+
+# The deploy half of the ci/cd split ci.yml's header comments anticipate. Runs only on
+# push to main, after CI's own checks pass on that commit.
+#
+# The full eval gate (judges included, `--gate` against src/evals/targets.yaml) belongs
+# here and is not wired yet — the harness has not been ported to this repo. Reinstate the
+# `gate` job, and `needs: [gate]` on deploy, alongside the harness.
+#
+# Requires repo secrets VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID. The two IDs come
+# from `.vercel/repo.json` after `vercel link` (or Vercel → Settings → General); the token
+# is created at Vercel → Account Settings → Tokens. Provisioning them is a manual,
+# out-of-band step, not part of this workflow.
+#
+# This workflow owns deployment, so Vercel's own Git integration must be switched off
+# (Vercel → Settings → Git → Ignored Build Step → `exit 0`). Leaving both enabled produces
+# two competing deploys per push.
+#
+# The app's runtime config (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) is NOT set here —
+# `vercel pull` fetches it from the Vercel project's own environment variables, so those
+# must be configured in the dashboard or the deployed build fails to start.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Job-level, not step-level: `vercel pull` and `vercel build` need these as much as
+    # `deploy` does — without them the CLI cannot tell which project it is operating on,
+    # and `pull` fails before a build ever happens.
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Build
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

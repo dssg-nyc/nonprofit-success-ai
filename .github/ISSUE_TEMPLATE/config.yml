@@ -1,0 +1,13 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Question about contributing
+    url: https://github.com/dssg-nyc/nonprofit-success-ai/blob/main/CONTRIBUTING.md
+    about: >
+      Setup, branch and commit conventions, the pre-PR gate, and what reviewers look for.
+      Read this before filing — most "how do I" questions are answered here.
+  - name: 📬 Reach DSSG NYC
+    url: https://www.nyc-dssg.org
+    about: >
+      Questions about the volunteer program, joining a cohort, or partner engagement —
+      anything that is not a change to this codebase. Contact details are on the site;
+      dssgnyc@gmail.com reaches the program directly.

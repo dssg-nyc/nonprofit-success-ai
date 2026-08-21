@@ -96,7 +96,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().role == 'client';
-      allow update: if isOwner(userId) && isValidUser(incoming()) && 
+      allow update: if isOwner(userId) && isValidUser(incoming()) &&
                     incoming().role == existing().role && // Immutable role
                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt']);
     }

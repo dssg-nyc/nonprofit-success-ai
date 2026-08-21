@@ -22,9 +22,9 @@ function Navbar({ user, isAdmin, onLogout }: { user: any, isAdmin: boolean, onLo
             <div className="flex items-center gap-3">
               {/* Logo Icon Pattern */}
               <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center p-1.5 shadow-sm border border-slate-100 group-hover:shadow-md transition-all">
-                <img 
-                  src="/logo.png" 
-                  alt="DSSG" 
+                <img
+                  src="/logo.png"
+                  alt="DSSG"
                   className="w-full h-full object-contain"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
@@ -49,7 +49,7 @@ function Navbar({ user, isAdmin, onLogout }: { user: any, isAdmin: boolean, onLo
             </div>
           </Link>
         </div>
-        
+
         {user ? (
           <div className="flex items-center gap-8">
             <Link to="/dashboard" className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2">
@@ -75,7 +75,7 @@ function Navbar({ user, isAdmin, onLogout }: { user: any, isAdmin: boolean, onLo
               <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-dssg-blue font-bold text-sm">
                 {user.email?.[0] || 'U'}
               </div>
-              <button 
+              <button
                 onClick={onLogout}
                 className="p-2 text-slate-300 hover:text-red-500 transition-colors"
                 title="Logout"
@@ -148,7 +148,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-base">
-        <motion.div 
+        <motion.div
           animate={{ scale: [1, 1.1, 1], rotate: [0, 90, 0] }}
           transition={{ repeat: Infinity, duration: 2 }}
           className="w-12 h-12 bg-dssg-blue rounded-xl"
@@ -193,7 +193,7 @@ export default function App() {
             <Route path="/" element={<Navigate to={user ? "/dashboard" : "/login"} />} />
           </Routes>
         </main>
-        
+
         <footer className="bg-dssg-blue text-white py-20 px-4 mt-auto">
           <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-12">
             <div className="md:col-span-5">
@@ -210,7 +210,7 @@ export default function App() {
                 <div className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 transition-colors cursor-pointer" />
               </div>
             </div>
-            
+
             <div className="md:col-span-7 grid grid-cols-2 md:grid-cols-3 gap-8">
               <div>
                 <h5 className="text-[10px] font-bold uppercase tracking-[0.2em] text-blue-300 mb-6">Programs</h5>
@@ -241,7 +241,7 @@ export default function App() {
               </div>
             </div>
           </div>
-          
+
           <div className="max-w-7xl mx-auto mt-20 pt-8 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-6">
             <p className="text-[10px] font-bold text-blue-300 tracking-widest uppercase">
               © 2026 DATA SCIENCE FOR SOCIAL GOOD NEW YORK CITY

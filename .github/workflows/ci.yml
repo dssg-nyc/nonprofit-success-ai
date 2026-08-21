@@ -1,0 +1,59 @@
+name: CI
+
+# Bespoke workflow — no reusable TypeScript workflow exists in ai-project-template yet
+# (only python-ci.yml does). This mirrors python-ci.yml's job shape (lint/typecheck/test/build)
+# so extracting a shared typescript-ci.yml later is mechanical.
+# Tracked in the AIT issue: "extract reusable typescript-ci.yml".
+#
+# No eval gate yet: the harness (src/evals/, targets.yaml) has not been ported to this
+# repo. Add the heuristics-only gate job back alongside the harness, not before it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run type-check
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build

@@ -117,7 +117,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
             Manage your partner businesses and track their progress through the DSSG engagement lifecycle. High-impact data solutions for NYC's social sector.
           </p>
         </div>
-        <button 
+        <button
           onClick={() => setShowAddModal(true)}
           className="btn-primary flex items-center gap-2 whitespace-nowrap"
         >
@@ -158,7 +158,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
           </div>
           <h3 className="text-2xl font-bold text-slate-900">No active accounts</h3>
           <p className="text-slate-500 mt-2 mb-8 max-w-sm mx-auto">Register a small business or nonprofit to start tracking your DSSG onboarding roadmap.</p>
-          <button 
+          <button
             onClick={() => setShowAddModal(true)}
             className="bg-slate-900 text-white font-bold px-8 py-3 rounded-xl hover:bg-slate-800 transition-all"
           >
@@ -168,7 +168,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {businesses.map((business) => (
-            <motion.div 
+            <motion.div
               layoutId={business.id}
               key={business.id}
               onClick={() => navigate(`/business/${business.id}`)}
@@ -179,7 +179,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
               <div className="absolute -right-6 -bottom-6 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity duration-500 scale-150 rotate-12">
                 <Building2 size={160} />
               </div>
-              
+
               <div className="flex justify-between items-start mb-8">
                 <div className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-[0.15em] ${
                   business.type === 'nonprofit' ? 'bg-purple-50 text-purple-600 border border-purple-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
@@ -219,14 +219,14 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
       <AnimatePresence>
         {showAddModal && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowAddModal(false)}
               className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -243,7 +243,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
                 <form onSubmit={handleAddBusiness} className="space-y-4">
                   <div className="space-y-1">
                     <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Business Name</label>
-                    <input 
+                    <input
                       required
                       value={newBusiness.name}
                       onChange={e => setNewBusiness({...newBusiness, name: e.target.value})}
@@ -255,7 +255,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Entity Type</label>
-                      <select 
+                      <select
                         value={newBusiness.type}
                         onChange={e => setNewBusiness({...newBusiness, type: e.target.value as any})}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-dssg-blue capitalize"
@@ -266,7 +266,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Industry</label>
-                      <input 
+                      <input
                         value={newBusiness.industry}
                         onChange={e => setNewBusiness({...newBusiness, industry: e.target.value})}
                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-dssg-blue"
@@ -276,7 +276,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
                   </div>
 
                   <div className="pt-6">
-                    <button 
+                    <button
                       type="submit"
                       className="w-full py-4 bg-dssg-orange text-white rounded-xl font-bold shadow-lg shadow-orange-900/10 hover:bg-dssg-orange-light hover:-translate-y-0.5 active:translate-y-0 transition-all font-display"
                     >

@@ -59,7 +59,7 @@ export default function Login({ onDemoMode }: LoginProps) {
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)] p-4 bg-slate-50">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200"
@@ -77,15 +77,15 @@ export default function Login({ onDemoMode }: LoginProps) {
         </div>
 
         <div className="space-y-4">
-          <button 
+          <button
             onClick={handleGoogleLogin}
             className="w-full py-3 px-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 shadow-sm"
           >
             <Globe className="text-dssg-blue" size={18} />
             Continue with Google
           </button>
-          
-          <button 
+
+          <button
             onClick={onDemoMode}
             className="w-full py-3 px-4 bg-dssg-blue text-white rounded-xl font-bold hover:bg-dssg-blue-light transition-all flex items-center justify-center gap-3 shadow-lg shadow-blue-900/10"
           >
@@ -107,8 +107,8 @@ export default function Login({ onDemoMode }: LoginProps) {
               <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Email Address</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -122,8 +122,8 @@ export default function Login({ onDemoMode }: LoginProps) {
               <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -134,7 +134,7 @@ export default function Login({ onDemoMode }: LoginProps) {
             </div>
 
             {error && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="text-red-600 text-[11px] font-bold bg-red-50 p-4 rounded-xl border border-red-100 leading-relaxed"
@@ -143,8 +143,8 @@ export default function Login({ onDemoMode }: LoginProps) {
               </motion.div>
             )}
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="w-full py-4 bg-dssg-orange text-white rounded-xl font-bold shadow-lg shadow-orange-900/10 hover:bg-dssg-orange-light active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
@@ -158,7 +158,7 @@ export default function Login({ onDemoMode }: LoginProps) {
         </div>
 
         <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-          <button 
+          <button
             onClick={() => setIsRegistering(!isRegistering)}
             className="text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors"
           >
