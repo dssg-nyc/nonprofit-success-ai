@@ -11,7 +11,7 @@ A CRM sync between this repo's data (businesses, engagements) and HubSpot, so
 partner-org and engagement data doesn't have to be entered twice. Not yet connected to
 any of the five agents' specs — most likely consumer is Chronicle (impact
 statements/case studies, [chronicle.md](../agents/chronicle.md)) or Envoy (partner
-comms, [communications-service.md](../services/communications-service.md)), since both already read `engagements` state, but
+comms, [envoy.md](../platform/agents/envoy.md)), since both already read `engagements` state, but
 this link is undesigned.
 
 ## Why MCP

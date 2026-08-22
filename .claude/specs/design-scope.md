@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Date:** 2026-08-21
-**Roles:** PM: Jian · EM: Ramsey · Des: Tony · CRM: Karthik
+**Roles:** Lead: Jian · Agentic/Platform: Ramsey · Design: Tony · Data/CRM: Karthik
 **Source:** `docs/nonprofit-success-product-requirements.html` (Tony Amodeo, Data Diplomat Cohort)
 
 ## Problem Statement

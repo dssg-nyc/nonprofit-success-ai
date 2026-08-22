@@ -139,6 +139,38 @@ The Designer role is specifically accountable for:
 - **Accessibility throughout** — WCAG level, keyboard navigation requirements, screen reader considerations
 - **Content design** — what the system says to users in each state (empty, loading, error, success)
 
+## HITL Gates
+
+This skill has two mandatory pause points. Do not proceed past either without
+explicit user approval.
+
+### Gate 1 — PRD review
+
+After writing `.claude/specs/design-requirements.md`:
+
+1. Present a section-by-section summary (not the full doc — the user has the file open)
+2. Call out every decision that was made vs deferred, and every `§16` open item
+3. **Stop and ask:** "PRD is ready for review. Read through `.claude/specs/design-requirements.md`
+   and let me know what to revise — or approve to proceed to HTML rendering."
+4. Do NOT render HTML until the user approves
+
+Park every unknown in §16 rather than guessing. A guess that passes review silently
+is worse than a question that pauses it.
+
+### Gate 2 — HTML Overview tab
+
+After the user approves the PRD, render the **Overview tab only** into the design
+record HTML (`docs/<project>-system-design.html`):
+
+- If the HTML file does not exist, create it with the shell (tab bar, CSS tokens,
+  hash router) and the Overview tab populated
+- If it exists, update only the Overview tab content — do not touch other tabs
+- The Overview tab contains: problem summary (compressed from §1), audience cards
+  (from §4), shared-capability inventory (from §9), and the TOC skeleton
+
+After rendering, confirm: "Overview tab rendered. The next stage is `/design-system`
+to add Architecture and Components."
+
 ## Output
 
 `.claude/specs/design-requirements.md`, tracked, with a status header:
@@ -150,36 +182,24 @@ The Designer role is specifically accountable for:
 **Design doc:** <path to upstream design doc>
 ```
 
-Present the draft section-by-section for confirmation before writing. Park every
-unknown in §13 rather than guessing.
+## Boundary with `/design-system` and `/design-roadmap`
 
-## Boundary with `/design-system`
+**The PRD spec and the design record HTML are separate artifacts with separate lifecycles.**
+The PRD (`.claude/specs/design-requirements.md`) ratifies once and freezes; the HTML
+(`docs/<project>-system-design.html`) is re-verified against the working tree at every
+publish.
 
-**These are two separate documents with two navigation idioms. Do not merge them, and do
-not write tabs into a file `/design-system` also writes.**
+**The HTML is built incrementally across all three design skills:**
 
-| | `/design-product` (this skill) | `/design-system` |
+| Skill | Renders to HTML | After HITL gate on |
 |---|---|---|
-| Artifact | `.claude/specs/design-requirements.md`, optionally an HTML render | `docs/<project>-platform.html` |
-| Navigation | sticky **sidenav**, flat scrolling sections | **tabs**, hash-routed panels |
-| Read how | once, top to bottom | jumped into — one plate, or the Delta tab |
-| Lifecycle | ratifies once, then freezes | re-verified against the working tree at every publish |
-| Owner | the trio (PM, EM, Designer) | the Architect |
+| `/design-product` | Overview tab | PRD spec |
+| `/design-system` | Architecture + Components + Platform tabs | Component specs |
+| `/design-roadmap` | Roadmap tab (milestones, delta, issues) | Draft issue backlog |
 
-Three reasons the split holds:
-
-1. **Different lifecycles.** A frozen PRD should not be republished every time build
-   state moves, which is what one shared file would force.
-2. **`§N` is this document's stable API.** Reviews, specs, and the design record's PRD
-   coverage table all cite it. Interleaving Architect-owned tabs into the same file
-   renumbers sections and breaks every citation.
-3. **One writer per file is what makes the pipeline gate enforceable.** `/design-system`
-   cites this PRD as an input and names it in its footer. That is the right coupling —
-   reference, not co-authorship.
-
-Where an HTML render of the PRD is produced, it uses the sidenav idiom and the shared
-DSSG tokens (Inter / Fraunces / IBM Plex Mono, royal blue + orange, `--radius: 14px`),
-never the tabbed plate layout.
+Each skill owns its tabs — it may update them on re-run but must not modify tabs owned
+by another skill. The PRD's `§N` numbering is its stable API; the HTML cites it by
+reference, never by embedding.
 
 ---
 

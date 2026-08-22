@@ -9,41 +9,29 @@
 ## §1 Executive Summary
 
 Nonprofit Success AI is a CSM-grade lifecycle platform for every pro bono engagement
-DSSG NYC runs — a React SPA backed by three focused AI agents (Scout, Architect,
-Chronicle), a shared deterministic service layer, and centralized evaluation. The
+DSSG NYC runs — a React SPA backed by five focused AI agents (Scout, Architect,
+Pulse, Envoy, Chronicle), and centralized evaluation. The
 platform routes nonprofits from intake through assessment, planning, delivery, and
 impact wrap-up, with human-in-the-loop oversight at every partner-facing decision.
 
-**Ratified 2026-08-21 — the roster is three agents plus shared services.** The original
-five-agent roster (Scout, Architect, Pulse, Envoy, Chronicle) is consolidated: Scout,
-Architect, and Chronicle remain agents; Pulse becomes the **Health Service** and Envoy the
-**Communications Service**. Pulse's health monitoring is deterministic threshold
-arithmetic that does not need a reasoning loop; Envoy's communications are templated
-drafts that belong in a shared service — though the *drafting* half still calls a model
-and remains **L3, always**. The rule is **agents reason; services execute**.
-
-Two qualifications carried from the counter-argument, both still live:
-
-- Neither component lost engineering detail. `platform/services/health-service.md` and
-  `communications-service.md` carry the prior agent specs' rubrics, taxonomies, and HITL
-  rationale in full.
-- §7's **L4** tier for partner-facing communications is unreconciled with describing the
-  same component as a tool-driven execution service. Nothing is blocked — drafting is L3
-  and no send path exists — but resolve it when the send path is designed.
-
-See `design-system.md` §5 for the full resolution.
+**Ratified — the roster is five agents.** Scout, Architect, Pulse, Envoy, and Chronicle
+are each agents. Pulse's health monitoring is deterministic threshold arithmetic — no
+reasoning loop — but it remains an agent by roster. Envoy's communications drafting is
+**L3, always**: every partner-facing draft requires staff approval before any send path
+exists.
 
 **Recommendation:** The system should be delivered as six initiatives (I1–I6) in
 dependency order, not as a single release. I1 (Server Boundary & Scout) is the keystone
 with zero external dependencies.
 
-**Implementation is organized as three workstreams, one per owner** (§5–§7):
+**Implementation is organized as three workstreams** (§5–§7). Jian is tech lead —
+reviews and supports across all workstreams.
 
 | # | Workstream | Owner | Concern |
 |---|---|---|---|
 | WS1 | Design & UX | Tony | Every surface a human touches |
-| WS2 | Platform | Karthik | Schema, RLS, `/api`, agents, evals, deployment |
-| WS3 | CRM & Integrations | Karthik | HubSpot, MCP catalog, plugins, calendar/email |
+| WS2 | Data Engineering | Karthik | Schema, RLS, migrations, tenancy, CI/CD, CRM/HubSpot sync |
+| WS3 | Agentic / Platform | Ramsey | Five agents, model gateway, evals, knowledge, MCP, plugins |
 
 HubSpot is the CRM of record; Supabase owns the engagement state machine. The boundary
 between them (§7) is the single most consequential integration decision in this document.
@@ -195,14 +183,13 @@ or the integrations that populate them.
 - Every screen has a defined zero-data, loading, and error state (§4)
 - WCAG 2.1 AA, full keyboard navigation, `prefers-reduced-motion` honored
 
-## §6 Workstream 2 — Platform: KARTHIK
+## §6 Workstream 2 — Data Engineering: KARTHIK
 
-**Owns:** the Supabase schema and RLS, the `/api` server boundary, the three agents and
-their deterministic fallbacks, the model gateway, HITL tiering, observability, the eval
-harness, and CI/CD.
+**Owns:** the Supabase schema and RLS, migrations, tenancy, observability tables, CI/CD,
+and CRM/HubSpot sync (moved from WS3 — see §7).
 
-**Does not own:** what the screens look like (WS1), or how an external system is reached
-(WS3 — the platform calls the registry, it does not embed vendor SDKs).
+**Does not own:** the agents or their fallbacks (WS3 — Ramsey), what the screens look
+like (WS1), or the model gateway/eval harness (WS3).
 
 ### Server boundary — Vercel Functions under `/api`
 
@@ -295,18 +282,19 @@ version was signed.
 - An immutable record (signature, approval, completed stage) rejects later writes, verified by test
 - `make gate` (type-check, lint, test, build) passes on every PR
 
-## §7 Workstream 3 — CRM & Integrations: KARTHIK
+## §7 Workstream 3 — Agentic / Platform: RAMSEY
 
-**Owns:** HubSpot as the CRM of record, the MCP catalog and gateway, the plugin registry,
-calendar and email delivery, and the outbox that makes external side effects reliable.
+**Owns:** the five agents and their deterministic fallbacks, the model gateway, HITL
+tiering, the eval harness, the knowledge base, codemap indexer, MCP server, and
+skills/plugin registries.
 
-**Does not own:** the canonical operational schema (WS2 — HubSpot syncs *to* it, it is not
-the source of truth for engagement state), or any UI (WS1).
+**Does not own:** the canonical operational schema (WS2), CRM integrations (WS2 — Karthik
+owns HubSpot sync), or any UI (WS1).
 
-**Note:** WS2 and WS3 share an owner. They stay separate streams because the boundary
-between them is the one most likely to erode — the moment an agent embeds a HubSpot call
-directly, the registry stops being the contract. Two streams keep that seam visible in
-review even with one person on both sides.
+**Note:** CRM & HubSpot sync stays with WS2 (Karthik) because the sync boundary between
+HubSpot and Supabase is a data-engineering concern — it lives in the schema, not in the
+agent layer. The plugin registry that CRM writes through is WS3 (Ramsey), which keeps
+the seam visible.
 
 ### HubSpot — CRM of record
 
@@ -353,6 +341,8 @@ per agent.
 |---|---|---|---|
 | Scout | `generateObject` — bucket + confidence + rationale | `routeScoutIntake()` — keyword/heuristic scoring | Yes (`/api/route-intake`) |
 | Architect | `generateObject` — charter + plan from CSA answers | `generateCharter()` / `generatePlan()` — template-based | Yes (`/api/architect-assess`) |
+| Pulse | No model call — deterministic only | Threshold arithmetic over `engagement_events` | Yes (`/api/pulse-health`) |
+| Envoy | `generateObject` — communications draft, template-based fallback | Template-based draft | Yes (`/api/envoy-draft`) |
 | Chronicle | `generateObject` — impact memo + case study | `generateChronicleDraft()` — template-based | Yes (`/api/chronicle-draft`) |
 | Meeting intel | `generateObject` — decisions + action items | Hard failure (no fallback — extraction without a model is not useful) | Yes (`/api/meeting-extract`) |
 
@@ -392,6 +382,8 @@ What each agent does **not** own is as load-bearing as what it does:
 |---|---|---|---|
 | Scout | Qualification, readiness, routing | Retrieval, skills, MCPs, model gateway, approvals | Tasks, calendar, CRM persistence |
 | Architect | Assessment, planning, scoping | Retrieval, skills, MCPs, contract service, approvals | Independent task/calendar stores |
+| Pulse | Engagement health monitoring, activity tracking | `engagement_events` reads, model gateway (none) | Stage transitions, communications |
+| Envoy | Partner communications drafting | Skills, MCPs, model gateway, approvals | Operational CRM state, send authority |
 | Chronicle | Impact synthesis, lessons, knowledge candidates | Retrieval, memory, evaluation, approvals | Operational CRM state |
 
 ### Capability ownership
@@ -407,22 +399,16 @@ Applying "agents reason; services execute" through each capability:
 | Charter generation | Architect | Agent | Requires narrative synthesis from scores + answers |
 | 90-day plan generation | Architect | Agent | Requires plan shape selection + milestone synthesis |
 | Meeting extraction | Architect (input) | Agent | Structured extraction from unstructured transcript |
-| Health monitoring | Health service | Service | Deterministic thresholds — was Pulse agent |
-| Activity tracking | Health service | Service | `engagement_events` CRUD — no reasoning |
+| Health monitoring | Pulse | Agent (deterministic) | Threshold arithmetic over structured event data |
+| Activity tracking | Pulse | Agent (deterministic) | `engagement_events` CRUD — no model call |
 | Stage transitions | Platform (state machine) | Service | Database trigger — no agent involvement |
-| Partner communications | Communications service | Service | Templates + optional AI draft — was Envoy agent |
+| Partner communications | Envoy | Agent | Templates + AI draft, L3-gated |
 | Impact synthesis | Chronicle | Agent | Cross-engagement reasoning for case studies |
 | Knowledge retrieval | Knowledge service | Service | Postgres query — no agent reasoning |
 | Contract signing | Platform (`/api`) | Service | Server timestamp + immutable write — no AI |
 | Eval grading | Eval harness | Service | Deterministic graders + LLM judges |
 | Telemetry | Observability | Service | `agent_runs` writes — no reasoning |
 | Approval queue | Platform | Service | One centralized surface for all agents |
-
-**Reassignments from the original five-agent model:**
-- Pulse → deterministic health service: health is threshold arithmetic over structured
-  numbers; a model would add latency and non-determinism to arithmetic
-- Envoy → shared communications service: drafts are templated, staff-initiated, and
-  L3-gated; the reasoning loop adds no value over a template + optional model polish
 
 ## §10 Platform Registries
 
@@ -566,19 +552,19 @@ Architect assessment → charter → contract signature → engagement created.
 | Part | Workstream | Owner | Primary deliverables |
 |---|---|---|---|
 | 1 | Design & UX | Tony | Auth shell, dashboard, Scout review queue, Architect workflow, contract preview/signing, engagement/task views, accessibility |
-| 2 | Platform | Karthik | Supabase schema/RLS, `/api` boundary, three agents + fallbacks, model gateway, HITL tiering, observability, eval harness, CI/CD |
-| 3 | CRM & Integrations | Karthik | HubSpot sync, MCP catalog + gateway, plugin registry, calendar/email, outbox pattern, `tool_calls` audit |
+| 2 | Data Engineering | Karthik | Supabase schema/RLS, migrations, tenancy, observability tables, CI/CD, HubSpot CRM sync |
+| 3 | Agentic / Platform | Ramsey | Five agents + fallbacks, model gateway, HITL tiering, eval harness, knowledge base, codemap, MCP server, plugin registry |
 
 ## §15 Quality Ladder
 
 | Level | Check | Applies to | Gate | Owner |
 |---|---|---|---|---|
-| Q0 | Unit / schema / permission tests | Code, tools, RLS, structured outputs | Required — every PR | Karthik |
-| Q1 | Golden-set regression | Scout, Architect, Chronicle; prompts, retrieval | Required — I1 onward | Karthik |
-| Q2 | LLM-as-judge | Quality, relevance, completeness, groundedness | Required, calibrated against human labels | Karthik |
+| Q0 | Unit / schema / permission tests | Code, tools, RLS, structured outputs | Required — every PR | Karthik (schema/RLS) + Ramsey (agents) |
+| Q1 | Golden-set regression | Scout, Architect, Chronicle; prompts, retrieval | Required — I1 onward | Ramsey |
+| Q2 | LLM-as-judge | Quality, relevance, completeness, groundedness | Required, calibrated against human labels | Ramsey |
 | Q3 | **Adversarial / safety** | Prompt injection, tool abuse, data leakage | Required — **owner unassigned, see §17 Q11** | **TBD** |
 | Q4 | Human acceptance | High-impact workflows and UX | Required pre-production | Tony + Ramsey |
-| Q5 | Production monitoring | Drift, errors, latency, cost, staff override rate | Continuous | Karthik |
+| Q5 | Production monitoring | Drift, errors, latency, cost, staff override rate | Continuous | Ramsey |
 
 **Concrete thresholds:**
 
@@ -607,7 +593,7 @@ required, not aspirational — and it currently has no owner.
 
 | # | Reviewer must assess | Section |
 |---|---|---|
-| 1 | ~~Is the 3-agent + services consolidation the right call?~~ **Ratified 2026-08-21** — three agents plus services. Remaining open: §7's L4 tier for partner-facing comms vs. the service framing. | §1, §9 |
+| 1 | ~~Is the 3-agent + services consolidation the right call?~~ **Ratified — five agents.** Scout, Architect, Pulse, Envoy, Chronicle. ~~Q9 resolved.~~ | §1, §9 |
 | 2 | Is the initiative ordering (I1 → I2 → I4 critical path) correct? | §14, design doc §Dependency Map |
 | 3 | Are the HITL tiers correctly assigned? (L2 for Scout high-confidence, L3 for everything else) | §8, §12 |
 | 4 | Is the failure contract (non-2xx without body) the right pattern for all endpoints? | §6 |
@@ -615,7 +601,7 @@ required, not aspirational — and it currently has no owner.
 | 6 | Should approved intake → Business + Engagement creation be automated in I1 or kept manual? | §17 Q2 |
 | 7 | Is the contract signing mechanism (typed name + checkbox) legally sufficient? | §12 CF3 |
 | 8 | Are the quality gate thresholds realistic? | §15 |
-| 9 | **Is the three-workstream split right, and does Karthik owning both WS2 and WS3 hold?** | §5–§7 |
+| 9 | ~~Is the three-workstream split right, and does Karthik owning both WS2 and WS3 hold?~~ **Resolved 2026-08-22** — WS2 = Karthik (DE + CRM), WS3 = Ramsey (Agentic/Platform). Jian = tech lead/reviewer. | §5–§7 |
 | 10 | **Is the HubSpot sync boundary correct — specifically that lifecycle stage never advances from HubSpot?** | §7 |
 | 11 | **Who owns Q3 adversarial/safety testing?** | §15 |
 | 12 | Is the memory promotion gate strict enough for partner-confidential content? | §11 |
@@ -633,9 +619,9 @@ required, not aspirational — and it currently has no owner.
 | 6 | `compositeSignal()` Not-Ready bug fix | No | I1 (Scout move) | I1 execute | EM |
 | 7 | Shared services scope for I3 (task service, calendar) | No | I3 plan | I3 plan | PM + EM |
 | 8 | `demoStore.ts` retirement strategy (per-screen or dedicated pass) | No | Each initiative | I1 plan | EM |
-| 9 | Pulse/Envoy as agents vs. services — final call | **Blocking** | §9 responsibility matrix | Before I3 plan | PM + EM |
-| 10 | HubSpot sync direction per field — ratify §7 table | No | WS3 first plugin entry | Before I3 | Karthik + PM |
+| 9 | ~~Pulse/Envoy as agents vs. services — final call~~ | ~~**Blocking**~~ | **Resolved — both are agents** | 2026-08-22 | PM + EM |
+| 10 | HubSpot sync direction per field — ratify §7 table | No | WS2 first plugin entry | Before I3 | Karthik + PM |
 | 11 | **Q3 adversarial/safety owner** | **Yes** | I6 eval harness scope; nothing gates injection today | Before I6 plan | PM |
 | 12 | `signatures` / `audit_events` — pilot or post-pilot? | No | I4 schema shape | I4 plan | Karthik |
-| 13 | Registry timing — build at second consumer, or up front with I6? | No | WS3 sequencing | I6 plan | Karthik |
-| 14 | Does the memory promotion gate need a classification taxonomy for partner-confidential data? | No | I5 (Chronicle → knowledge base) | I5 plan | PM + Karthik |
+| 13 | Registry timing — build at second consumer, or up front with I6? | No | WS3 sequencing | I6 plan | Ramsey |
+| 14 | Does the memory promotion gate need a classification taxonomy for partner-confidential data? | No | I5 (Chronicle → knowledge base) | I5 plan | PM + Ramsey |

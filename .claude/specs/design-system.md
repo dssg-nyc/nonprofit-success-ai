@@ -48,40 +48,43 @@ without `/api` in place would have to re-introduce exactly the exposure just rem
 
 ---
 
-## 2. Three agents and three services
+## 2. Five agents
 
-Scopes are as agreed in the 2026-08-06 meeting; the roster was resolved from five agents
-to three agents plus named services on 2026-08-21 (see §5). Full specs live under
-[.claude/specs/platform/](platform/) — `agents/` for the three, `services/` for the rest.
+Scopes are as agreed in the 2026-08-06 meeting; the roster is five agents. Full specs
+live under [.claude/specs/platform/](platform/) — `agents/` for the five, `services/`
+for the shared platform services.
 
-### What separates an agent from a service
+### What separates an agent from a shared platform service
 
-**Agents reason; services execute.** An agent is a decision surface where the system
-produces a judgment from unstructured or ambiguous input — a judgment a human would
-otherwise make by reading and weighing. A service is deterministic: given the same inputs
-it returns the same output, and a human can reproduce it by hand.
+All five components in the roster are agents. The distinction that matters is between
+**agents** (the five domain-specific components) and **shared platform services** (the
+Contract & Consent Gate, which any agent invokes as infrastructure).
 
-The test is the *nature of the work*, not whether a model is called today. Architect's
-maturity scoring is a mechanical rubric with no model call, yet Architect is an agent —
-because the charter and 90-day plan it produces are narrative synthesis. The Health
-Service is threshold arithmetic over four numbers, so it is a service even though it sits
-at the same point in the lifecycle Pulse once did.
+The five agents vary in how much reasoning they do. Architect's maturity scoring is a
+mechanical rubric with no model call, yet Architect is an agent — because the charter and
+90-day plan it produces are narrative synthesis. Pulse's health verdict is deterministic
+threshold arithmetic — a model would add latency and non-determinism to a calculation
+staff must be able to reproduce by hand — but Pulse is still an agent in the roster,
+with its own spec, eval metrics, and HITL tier. Envoy's drafting calls a model and is
+L3-gated; its delivery is deterministic, but drafting is the work that matters and it is
+a model call. Determinism is a characteristic of a particular agent path, not a reason to
+remove a component from the agent roster.
 
 | Component | Type | Scope | State |
 |---|---|---|---|
 | **Scout** | Agent | Light-touch intake triage and routing (~10-question form) → bucket + confidence, engagement-readiness signal, recommended onboarding kit. **Also absorbs meeting intelligence** — transcript capture, extraction, calendar coordination. | Intake built (`src/components/`, `src/lib/scoutRouting.ts`); meeting intelligence **specified** — [scout.md](platform/agents/scout.md) |
 | **Architect** | Agent | 18-question current-state assessment → deterministic scoring, then charter and 90-day plan. | Built (`src/components/`, `src/lib/architectPlan.ts`, `architectScoring.ts`) — [architect.md](platform/agents/architect.md) |
+| **Pulse** | Agent | Internal engagement-health verdict, computed per engagement on read. Deterministic — no model path by design. | **Specified** here; built in the prototype — [pulse.md](platform/agents/pulse.md) |
+| **Envoy** | Agent | Partner communications across five occasions; drafting calls a model and is L3, delivery is deterministic. | **Specified** here; drafting built in the prototype. **No send path** — [envoy.md](platform/agents/envoy.md) |
 | **Chronicle** | Agent | Impact statements and case studies, gated by a readiness check on the record. Carries the feedback edge into Scout. | **Specified** here; drafting built in the prototype. Feedback loop still undesigned — [chronicle.md](platform/agents/chronicle.md) |
-| **Health Service** *(was Pulse)* | Service | Internal engagement-health verdict, computed per engagement on read. | **Specified** here; built in the prototype. No model path by design — [health-service.md](platform/services/health-service.md) |
-| **Communications Service** *(was Envoy)* | Service | Partner communications across five occasions; drafting is L3, delivery is deterministic. | **Specified** here; drafting built in the prototype. **No send path** — [communications-service.md](platform/services/communications-service.md) |
 | **Contract & Consent Gate** | Service | Server-stamped signature and immutable write. | **Specified** — [contract-consent.md](platform/services/contract-consent.md) |
 
 **The State column records this tree, not the prototype.** Only Scout and Architect have
 code here, as `src/lib/*.ts` rather than under `src/agents/`, and there is no `api/` at
-all. Porting each component is its own issue; "Specified" is the target those issues close
-against. In the prototype the other four are built but unwired — logic and `/api` endpoint
-exist with tests, nothing in the SPA calls them. Even there, Chronicle's feedback loop into
-Scout remains undesigned, and nothing has a scheduler or a send / publish path.
+all. Porting each agent is its own issue; "Specified" is the target those issues close
+against. In the prototype the other three agents are built but unwired — logic and `/api`
+endpoint exist with tests, nothing in the SPA calls them. Even there, Chronicle's feedback
+loop into Scout remains undesigned, and nothing has a scheduler or a send / publish path.
 
 **Scout's meeting-intelligence extension is specified** — [scout.md](platform/agents/scout.md)
 §2 supersedes the old `scout-design.md`, which was intake-only, described an n8n webhook
@@ -90,7 +93,7 @@ flow, and said nothing about meetings, transcripts, or calendars.
 ### Human-in-the-loop tiering
 
 The pattern is already implemented in Scout (`src/types/scout.ts:61`, `hitlTier`) and
-carries forward to every agent and to any service whose output reaches a partner:
+carries forward to all five agents:
 
 - **L2** — high confidence and Ready: the agent acts, a human is notified, the action is reversible.
 - **L3** — low confidence, or Conditional/Not Ready: the agent drafts and a human must approve
@@ -98,11 +101,10 @@ carries forward to every agent and to any service whose output reaches a partner
 
 ### Agent path contract
 
-Every path that can fail — a model call, a network hop, a parse — obeys these rules,
-whether it belongs to an agent or to the drafting half of a service. Scout, the
-Communications Service, and Chronicle implement the first three today; rule 4 binds
-nowhere yet. The Health Service has no model path at all, so rules 1–2 are satisfied
-trivially: the deterministic computation is the only path.
+Every path that can fail — a model call, a network hop, a parse — obeys these rules.
+Scout, Envoy, and Chronicle implement the first three today; rule 4 binds nowhere yet.
+Pulse has no model path at all, so rules 1–2 are satisfied trivially: the deterministic
+computation is the only path.
 
 1. **A deterministic result always exists.** Every model-backed path has a pure local
    counterpart that produces a usable result with no network call.
@@ -271,55 +273,42 @@ is the verdict; where a source conflicts with a row below, this row wins.
 
 | Question | Revised design doc | PRD | Superseded org doc | **Verdict here** |
 |---|---|---|---|---|
-| Agent count | Three (Pulse, Envoy demoted to services) | — | Seven org-wide | **Five.** See below. |
+| Agent count | Five | — | Seven org-wide | **Five.** See below. |
 | Model gateway | — | `/platform/` shared runtime | LiteLLM, "when the second agent ships" | **In-repo** `src/model/`. No second consumer exists; LiteLLM is a deployment concern we do not have. |
 | Agent telemetry table | — | `agent_runs` | `ai_invocations` | **`agent_runs`** — the PRD's vocabulary, since that is what a collaborator will read. |
 | Repo topology | — | `/platform/*` at root, shared package | Three repos incl. `platform-api` | **Single repo.** `platform-api` is backlog; this repo owns its platform layer. |
 | Tenancy | — | Organization-scoped | — | **Open, recommendation = organization.** [crm/data-model.md](crm/data-model.md) §1. |
 | Framework | Vercel AI SDK | — | Per-surface (LangGraph, PydanticAI, ADK) | **Vercel AI SDK** for this repo. |
 
-### The roster: three agents, shared services
+### The roster: five agents
 
-**Resolved 2026-08-21 — ratified at three agents.** This section previously argued for
-keeping five; that argument is withdrawn. The roster is:
+**Resolved 2026-08-22 — ratified at five agents.** The roster is:
 
 | Component | Type | Why |
 |---|---|---|
 | **Scout** | Agent | Reasoning over free-text intake answers |
 | **Architect** | Agent | Narrative synthesis of charter + plan (scoring itself is deterministic) |
+| **Pulse** | Agent | Deterministic health verdict — threshold arithmetic over structured engagement data |
+| **Envoy** | Agent | Drafting calls a model, L3-gated; delivery is deterministic |
 | **Chronicle** | Agent | Cross-engagement reasoning for impact synthesis |
-| **Health Service** *(was Pulse)* | Service | Deterministic thresholds over structured data |
-| **Communications Service** *(was Envoy)* | Service | Templates + optional AI polish; owns delivery, not occasion judgment |
 | **Contract & Consent Gate** | Service | Server timestamp + immutable write |
 
-The governing rule is **agents reason; services execute**. `computePulseSignal` is
-threshold arithmetic over four numbers — a model would add latency and non-determinism to
-a calculation staff must be able to reproduce by hand. That is a service.
+**Engineering characteristics of each agent:**
 
-**What the five-agent position got right, and which survives the change:**
-
-- **The engineering detail is not lost.** `platform/services/health-service.md` and
-  `communications-service.md` each carry the prior agent spec's rubric, taxonomy, and HITL
-  rationale in full. Demotion changed the framing, not the content — which is why the
-  service specs were written to straddle both positions.
-- **Drafting and sending are genuinely different acts.** Choosing the occasion, assembling
-  context, and setting tone is judgment; SMTP, templates, and retry are execution. The
-  Communications Service owns both, but only the execution half is deterministic — the
-  drafting half still calls a model and is still **L3, always**. A service is not
-  automatically a template renderer.
+- **Pulse** is deterministic end to end. `computePulseSignal` is threshold arithmetic
+  over four numbers — a model would add latency and non-determinism to a calculation staff
+  must reproduce by hand. Determinism is a characteristic of Pulse's path, not a reason
+  to remove it from the roster. It still has its own spec, eval metrics, and HITL tier.
+- **Envoy** has two distinct halves. Choosing the occasion, assembling context, and setting
+  tone is judgment that calls a model and is **L3, always**. SMTP, templates, and retry are
+  deterministic execution. Envoy owns both halves; the model call is what makes it an agent.
 - **The L4 tension is real and stays flagged.** `design-requirements.md` puts
-  partner-facing communications at **L4**, its strictest tier, while describing the
-  component as a tool-driven execution service. Those cannot both be true as written.
-  Resolve when the send path is designed — the drafting side is L3 today and nothing
-  sends, so nothing is blocked. See `communications-service.md` Open questions.
+  partner-facing communications at **L4**, its strictest tier, while the current spec
+  treats drafting as L3. Resolve when the send path is designed — nothing sends today, so
+  nothing is blocked. See `envoy.md` Open questions.
 - **Envoy must not become a second system of record.** Communications history lives in the
-  canonical `communications` table (`crm/data-model.md` §3), never inside the component
-  that drafts.
-
-**Why this resolution over the alternative:** the two positions never disagreed about
-behavior — only about whether "agent" names a decision surface or a model call. Three
-agents plus named services makes the split visible in the file tree, which is where the
-next reader looks first.
+  canonical `communications` table (`crm/data-model.md` §3), never inside the agent that
+  drafts.
 
 ---
 
@@ -331,8 +320,8 @@ These are decided-to-be-undecided. Each is tracked; none blocks the platform wor
   command, `POST /api/engagement-transition`, is the only writer, for every stage and every
   actor — no agent owns lifecycle writes. See [crm/lifecycle.md](crm/lifecycle.md) §2, which
   also records that `stage` is not a cursor: `unique (business_id, stage)` makes it one row
-  *per* stage, so a transition inserts rather than updates. The Health Service still only
-  reads `stage` and `daysInStage`; that boundary is unchanged.
+  *per* stage, so a transition inserts rather than updates. Pulse still only reads
+  `stage` and `daysInStage`; that boundary is unchanged.
 - **`engagement_events` producer.** Migration 0002 creates the table, its RLS, and its
   append-only guarantee, and Pulse reads it — but nothing writes to it yet. Until a producer
   lands, every engagement reads as `at_risk` with "no recorded activity". New with this work,

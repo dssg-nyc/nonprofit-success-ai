@@ -1,5 +1,7 @@
 # nonprofit-success-ai
 
+Refs: typescript.md
+
 ## What this repo is
 
 The **NYC-DSSG partner portal** — a single-repo TypeScript SPA, being extended with five
@@ -149,8 +151,8 @@ Repo-local (`.claude/specs/`):
 | `design-interface.md` | Visual language, typography, palette, component patterns |
 | `stack/` | How to write code: `react-vite.md`, `vercel-ai-sdk.md`, `vercel-functions.md` |
 | `crm/` | Data model (incl. provenance §7), security + trust boundaries, access model, `lifecycle.md` (the state machine), Supabase conventions |
-| `platform/agents/` | One spec per agent: `scout.md`, `architect.md`, `chronicle.md` |
-| `platform/services/` | `health-service.md`, `communications-service.md`, `contract-consent.md` |
+| `platform/agents/` | One spec per agent: `scout.md`, `architect.md`, `pulse.md`, `envoy.md`, `chronicle.md` |
+| `platform/services/` | `contract-consent.md` |
 | `platform/infra/` | `eval-harness.md`, `model-gateway.md`, `observability.md` |
 | `platform/knowledge.md` | Knowledge base design (PROPOSED) |
 

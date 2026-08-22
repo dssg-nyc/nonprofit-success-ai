@@ -1,13 +1,11 @@
-# Health Service
+# Pulse
 **Plate:** C4.1 in docs/nonprofit-success-system-design.html
 **Status:** GAP
 **PRD sections:** §8
 
-> Design note: the prior agent spec (Pulse) framed this as an agent; the PRD's
-> consolidated model classifies it as a service. Both are aligned on the core engineering
-> decisions — deterministic-only computation, pull-on-read, no model call — but the framing
-> here is authoritative. The Pulse spec's engineering detail (health taxonomy, thresholds,
-> stage windows, HITL rationale) is carried here in full.
+> Design note: the prior consolidated model classified this as a service (Health Service);
+> the current roster restores it as the Pulse agent. The engineering decisions are unchanged
+> — deterministic-only computation, pull-on-read, no model call.
 
 ## Responsibility
 
@@ -15,7 +13,7 @@ Computes a deterministic engagement health status from engagement events — `on
 `at_risk` / `stalled` — based on days-silent, stage-overrun, and blocker flags, with no
 model call. Surfaces that status to DSSG staff so problems are visible before an engagement
 stalls or misses its 90-day plan milestones. Internal-facing only — health output goes to
-staff, never to the partner org (contrast Communications Service, which is partner-facing).
+staff, never to the partner org (contrast Envoy, which is partner-facing).
 
 ## §1 Trigger
 
@@ -123,14 +121,14 @@ deterministic.
 
 ## §7 What this service is not
 
-**The health service does not write `engagements.stage`.** Per the 2026-08-06 meeting
+**Pulse does not write `engagements.stage`.** Per the 2026-08-06 meeting
 resolution, this service only *observes* engagement health. U5 was resolved 2026-08-21 —
 the writer is a server-side domain command, `POST /api/engagement-transition`
 ([crm/lifecycle.md](../../crm/lifecycle.md) §2) — and this service is deliberately not it.
 Making the observer the writer would make health signals self-fulfilling.
 
-**An at-risk signal does not auto-trigger a communication draft.** The health service
-surfaces the signal to staff, who then decide to initiate via Communications Service.
+**An at-risk signal does not auto-trigger a communication draft.** Pulse surfaces the
+signal to staff, who then decide to initiate via Envoy.
 
 ## Contract
 
@@ -148,8 +146,8 @@ surfaces the signal to staff, who then decide to initiate via Communications Ser
 - Service is server-side only, imported by `api/` handlers or SSR data fetchers. Dashboard components receive `HealthResult` as a prop and do not call Supabase directly for health state.
 - Read-only Supabase client (anon key with RLS) is sufficient — no service-role access needed.
 - An unknown stage has no window rather than a default one — no stage added by migration without updating `STAGE_WINDOW_DAYS` can mark every engagement in it stalled.
-- Health service does not write `engagements.stage`. The writer is the transition command ([crm/lifecycle.md](../../crm/lifecycle.md) §2); this service reads only.
-- An at-risk result must not auto-trigger a Communications Service draft — surfaces signal to staff only.
+- Pulse does not write `engagements.stage`. The writer is the transition command ([crm/lifecycle.md](../../crm/lifecycle.md) §2); Pulse reads only.
+- An at-risk result must not auto-trigger an Envoy draft — surfaces signal to staff only.
 
 ## Dependencies
 
@@ -161,7 +159,7 @@ surfaces the signal to staff, who then decide to initiate via Communications Ser
 
 Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
 
-- **D13** — Health Service: `computeEngagementHealth()` — SPECIFIED
+- **D13** — Pulse: `computeEngagementHealth()` — SPECIFIED
 - **D16** — `engagement_events` producer; until it lands every engagement reads `at_risk` — GAP
 
 ## Test contract
@@ -198,7 +196,7 @@ Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
 3. ~~Are the thresholds uniform across stages, or per-stage?~~ **Resolved 2026-08-21 — both.** The silence thresholds (`STALLED_SILENCE_DAYS`, `AT_RISK_SILENCE_DAYS`) are uniform; stage overrun is per-stage via `STAGE_WINDOW_DAYS`. Still open: whether the six window values are right, which needs data from a producer for `engagement_events` (question 4).
 4. Who writes `engagement_events` — the table and its RLS exist; no producer does. The transition command becomes the first ([crm/lifecycle.md](../../crm/lifecycle.md) §4 writes an event on every transition), but it does not cover `session_held` or `note_added`. Until a fuller producer lands, engagements with no events read as `at_risk` with "no recorded activity".
 5. Whether a scheduled weekly digest is worth adding on top of pull-on-read (would call the same function).
-6. Whether Communications Service comms history should feed back as an activity signal (reverse direction of the Pulse→Envoy/Communications relationship — undesigned).
+6. Whether Envoy comms history should feed back as an activity signal (reverse direction of the Pulse→Envoy relationship — undesigned).
 
 ## Requirement Trace
 

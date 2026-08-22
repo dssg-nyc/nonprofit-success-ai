@@ -40,7 +40,7 @@ and the distinction changes the answer:
 
 **Decision: keep the row-per-stage shape.** It is append-structured, which is the right
 property for a lifecycle — it retains when each stage was entered and how long it held,
-which a single mutable cursor destroys on every write. The Health Service needs exactly
+which a single mutable cursor destroys on every write. Pulse needs exactly
 that (`daysInStage`, per-stage windows), and it cannot be reconstructed from a cursor.
 
 The cost is that `stage` reads like a cursor to anyone who has not read this section. §3
@@ -63,9 +63,9 @@ pipeline order:
 | 6 | `membership` | Ongoing DSSG membership relationship post-delivery | — (terminal) | 90d |
 
 Windows are the `STAGE_WINDOW_DAYS` table in
-[health-service.md](../platform/services/health-service.md) §4 and are **provisional
+[pulse.md](../platform/agents/pulse.md) §4 and are **provisional
 estimates, not measured values** — that spec owns them; this table restates them so the
-lifecycle reads in one place. They are advisory: an overrun makes the Health Service report
+lifecycle reads in one place. They are advisory: an overrun makes Pulse report
 `stalled`, it never blocks a transition.
 
 **Why six over the five in earlier docs.** Six is what every artifact that has ever
@@ -117,7 +117,7 @@ new one — the roll-out has to account for the portal losing a write it current
 |---|---|
 | **The partner org (status quo)** | The subject of a decision cannot be its own approver. Budget check and ethics committee are DSSG-internal gates by definition. |
 | **Staff, via a direct admin RLS policy** | Ships stage-writing as a *grant* rather than a *transition*: an admin UPDATE policy authorizes writing any value from any state, so guards, approvals, and events all become optional. `0002` refuses this explicitly (`0002:23-25`) and it was right to. |
-| **The Health Service** | It reads `stage` to judge overrun. Making the observer the writer means health signals become self-fulfilling. [health-service.md](../platform/services/health-service.md) §7 already rules this out. |
+| **Pulse** | It reads `stage` to judge overrun. Making the observer the writer means health signals become self-fulfilling. [pulse.md](../platform/agents/pulse.md) §7 already rules this out. |
 | **An agent (Scout / Architect / Chronicle)** | Agents reason over ambiguous input; a transition is a guard evaluation over structured state. An agent may *propose* one (§6), never commit it. |
 | **A HubSpot webhook** | `design-requirements.md`:319, 346 — Supabase owns the state machine; a stage never advances because an external system said so. |
 
@@ -176,7 +176,7 @@ The single most confusing thing about this model, stated once:
 | `daysInStage` | **Derived** | `now() - created_at` of the current stage's row. |
 | **Stage history** | **Derived** | The set of rows itself, ordered by enum position. No separate table. |
 | `daysSinceLastEvent` | **Derived** | Max `created_at` from `engagement_events`. |
-| **Health status** | **Derived** | Computed on read by the Health Service. Never stored — see [health-service.md](../platform/services/health-service.md) §1. |
+| **Health status** | **Derived** | Computed on read by Pulse. Never stored — see [pulse.md](../platform/agents/pulse.md) §1. |
 | **Engagement complete** | **Derived** | §5. |
 | `assessment_id` | **Persisted** | Nullable FK to the Architect plan (`0002`). |
 
@@ -230,8 +230,8 @@ edit.** See §5 for why the answer is not "no".
 reverted-to stage's row returns to `status = 'in_progress'` and the intervening rows keep
 `status = 'completed'` with their original timestamps. The `stage_reverted` event is what
 makes the reversal legible. A reversal that erased the forward path would make the record
-lie about what happened, and would silently reset `daysInStage` — hiding from the Health
-Service exactly the engagement most in trouble.
+lie about what happened, and would silently reset `daysInStage` — hiding from Pulse
+exactly the engagement most in trouble.
 
 **Non-transitions — what the state machine explicitly does not permit:**
 
@@ -417,7 +417,7 @@ what they establish.
   becomes `unique (project_id, stage)` and every guard here re-scopes. **Nothing else in
   this spec changes**, which is a deliberate property of keeping stage row-scoped.
 - **Stage windows are unmeasured.** The §1 table is provisional
-  ([health-service.md](../platform/services/health-service.md) §4). Revisit after ~10
+  ([pulse.md](../platform/agents/pulse.md) §4). Revisit after ~10
   engagements have real per-stage durations — which this spec's `stage_advanced` events are
   what make measurable.
 - **Waiving a milestone** (§5) needs a mechanism. `_deferred/0006` has no `waived` status —

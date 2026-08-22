@@ -73,7 +73,7 @@ Rules that matter:
   description that says "helps with X" will not fire.
 - **`disable-model-invocation: true` unless the skill is meant to be auto-dispatched.**
   Seven of ten skills set it — they are user-invoked stages. The exceptions are
-  `workflow-build`, `workflow-review`, and `workflow-scope`, which other skills call. If a
+  `workflow-build`, `workflow-review`, and `workflow-triage`, which other skills call. If a
   human always types it, set the flag.
 - **`allowed-tools` is a real boundary, not a formality.** Grant only what the skill uses.
   A skill that writes no files does not get `Write`.

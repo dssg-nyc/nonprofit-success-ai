@@ -1,22 +1,21 @@
-# Communications Service
+# Envoy
 **Plate:** C4.3 in docs/nonprofit-success-system-design.html
 **Status:** GAP
 **PRD sections:** §8
 
-> Design note: the prior agent spec (Envoy) framed this as an agent; the PRD's
-> consolidated model classifies it as a service. The service framing is authoritative.
-> Envoy's engineering detail — occasion taxonomy, HITL rationale, Pulse/Health Service
-> relationship, template fallback contract — is carried here in full.
+> Design note: the prior consolidated model classified this as a service (Communications
+> Service); the current roster restores it as the Envoy agent. Envoy handles partner
+> communications — drafting is L3-gated, staff-initiated. The engineering decisions are
+> unchanged — occasion taxonomy, HITL rationale, Pulse relationship, template fallback
+> contract.
 
 ## Responsibility
 
 Sends templated partner communications with optional model-polished prose — staff-initiated
 only, L3-gated, never autonomous. The partner-facing communications surface — the
-counterpart to Health Service's internal-only scope. Where Health Service surfaces
-engagement status to DSSG staff, Communications Service is what actually reaches the
-partner org.
+counterpart to Pulse's internal-only scope. Where Pulse surfaces engagement status to
+DSSG staff, Envoy is what actually reaches the partner org.
 
-The service is not an agent — it has no reasoning loop, no tool use, no confidence scoring.
 Templates are the primary path; the model is an optional polish step on the body text only.
 Staff sees and may edit the draft before any send.
 
@@ -30,12 +29,12 @@ listed:
    decides *when* to contact a partner is a much larger claim on the relationship than one
    that drafts on request, and drafting quality has to earn trust before timing is worth
    delegating.
-2. Event-suggested (health service proposes a draft might be warranted) — deferred: a
+2. Event-suggested (Pulse proposes a draft might be warranted) — deferred: a
    future state once staff trust is established.
 3. **Staff-initiated (current)** — the approved model.
 
-**Health Service detecting `at_risk` must not auto-trigger a communication draft.** It
-surfaces the signal to staff, who then decide to initiate.
+**Pulse detecting `at_risk` must not auto-trigger a communication draft.** It surfaces
+the signal to staff, who then decide to initiate.
 
 ## §2 Occasions
 
@@ -44,15 +43,15 @@ draft cannot come back attributed to a different occasion than the one requested
 
 Registered occasions: `kickoff` | `check_in` | `milestone_reached` | `at_risk_follow_up` | `wrap_up`
 
-**`at_risk_follow_up` template treats health concerns carefully.** Health Service infers
-from *recorded* activity, so a partner may have been working the whole time without
+**`at_risk_follow_up` template treats health concerns carefully.** Pulse infers from
+*recorded* activity, so a partner may have been working the whole time without
 anything being logged. The draft raises the concern as a question ("we would rather ask
 than assume") rather than an accusation. When no concerns are supplied, the draft owns the
 gap as possibly DSSG's own rather than manufacturing a reason for the follow-up.
 
-## §3 Relationship to Health Service
+## §3 Relationship to Pulse
 
-**Availability, not triggering.** Health Service's `reasons[]` can be passed in as
+**Availability, not triggering.** Pulse's `reasons[]` can be passed in as
 `staffNotes` for an `at_risk_follow_up` draft — that is the whole of the link. An at-risk
 health signal does **not** cause a communication draft to be created; a staff member
 decides whether the situation warrants contacting the partner at all.
@@ -108,7 +107,7 @@ secrets reach the client" constraint (`CLAUDE.md` Conventions).
 - Model polish failure: gateway throws → service falls back to template-only body, `polished = false`, draft returned successfully. Fallback draft still routes through staff confirmation — it is never auto-sent.
 - Double-confirm: second POST to confirm with the same `previewToken` → 409, no second email sent.
 - No new Firebase surface area. `communication_log` writes to Supabase.
-- Staff-initiated only. Health Service detecting `at_risk` must not auto-trigger a communication draft.
+- Staff-initiated only. Pulse detecting `at_risk` must not auto-trigger a communication draft.
 - `occasion` is stamped server-side — a draft cannot be attributed to a different occasion than the one requested.
 - The `at_risk_follow_up` template raises concerns as questions, not accusations. When no concerns are supplied, it owns the gap as possibly DSSG's own.
 - No optional field (`cadence`, `concerns`) is fabricated — if no cadence was agreed, the draft proposes agreeing one rather than naming a rhythm the partner never consented to.
@@ -123,7 +122,7 @@ secrets reach the client" constraint (`CLAUDE.md` Conventions).
 
 Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
 
-- **D10** — Communications Service: draft + delivery, `communications` table — GAP
+- **D10** — Envoy: draft + delivery, `communications` table — GAP
   (`/api/draft-communication`, `/api/send-communication`, occasion templates)
 
 ## Test contract
@@ -147,7 +146,7 @@ Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
 4. Should `communication_log` rows be partner-visible in a future partner portal, or internal staff records only?
 5. Whether `occasion` set needs to grow (e.g. a scheduling or reschedule occasion).
 6. Whether the Architect charter's `cadence` should be read automatically rather than passed in by the caller.
-7. Whether staff-initiated should later become event-suggested — Health Service proposing that a draft *might* be warranted, still without creating one.
+7. Whether staff-initiated should later become event-suggested — Pulse proposing that a draft *might* be warranted, still without creating one.
 
 ## Requirement Trace
 
@@ -160,6 +159,6 @@ Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
 | Trigger model undesigned | prior Envoy spec §Open questions | §1 Trigger | Closed — staff-initiated |
 | HITL tier unratified (L3 working assumption) | prior Envoy spec §HITL tier | §6 HITL tier | Closed — L3, encoded and enforced by schema omission |
 | Deterministic fallback undesigned | prior Envoy spec §Deterministic fallback | §5 Deterministic fallback | Closed — occasion templates |
-| Relationship to Pulse / Health Service health signal undesigned | prior Envoy spec §Open questions | §3 Relationship to Health Service | Closed — availability, not triggering |
+| Relationship to Pulse health signal undesigned | prior Envoy spec §Open questions | §3 Relationship to Pulse | Closed — availability, not triggering |
 | Relationship to Architect's charter cadence | prior Envoy spec §Inputs, §Open questions | §Contract, §Open questions | Partial — `cadence` is consumed, but passed in rather than read automatically |
 | Channel undesigned | prior Envoy spec §Open questions | §Open questions | Carried as open — current channel is email only; in-portal messaging deferred |

@@ -30,7 +30,7 @@ ls .claude/docs/plans/*"$SLUG"* 2>/dev/null
 
 Verify plan Status:
 - `READY` → proceed
-- `PLANNED` or `REFINED` → stop: "Plan is <Status> — run `/workflow-scope #N` first."
+- `PLANNED` or `REFINED` → stop: "Plan is <Status> — run `/workflow-triage #N` first."
 - `IN_PROGRESS` → resume (a previous build was interrupted)
 - `EXECUTED` → skip to review loop (execute already done)
 
@@ -273,7 +273,7 @@ Every stage transition logs to `.claude/docs/telemetry/build-decisions.jsonl`.
 
 ```
 /design-initiative → /design-product → /design-system (→ specs/*.md) → /design-roadmap (→ GH issues)
-   → /workflow-scope #N (→ plan READY)
+   → /workflow-triage #N (→ plan READY)
    → /workflow-build #N
         ├─ build-scout   (execute)
         ├─ /workflow-review → review-scout   (verdict + findings)

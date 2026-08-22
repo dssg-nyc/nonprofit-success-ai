@@ -25,7 +25,7 @@ is a design doc — not a PRD, not a system design, not a backlog. Those come la
     ↓
 /design-roadmap (PM, EM, Des) → milestones, dependencies, GitHub issues
     ↓
-/workflow-scope → /workflow-build
+/workflow-triage → /workflow-build
 ```
 
 No PRD is written without a design doc to scope from. No system design is drawn without

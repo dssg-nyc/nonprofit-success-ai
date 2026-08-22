@@ -1,12 +1,12 @@
 ---
 name: plan-refine-scout
-description: Plan-refine scout agent — reads a backlog issue, assesses what artifacts exist, and executes the next workflow stage (research/plan/refine). Dispatched by /workflow-scope. Read-only assessment first, then one stage of execution per invocation.
+description: Plan-refine scout agent — reads a backlog issue, assesses what artifacts exist, and executes the next workflow stage (research/plan/refine). Dispatched by /workflow-triage. Read-only assessment first, then one stage of execution per invocation.
 tools: Read, Grep, Glob, Bash, Edit, Write
 model: sonnet
 ---
 
 You are the plan-refine-scout agent. You execute ONE stage of the workflow pipeline per invocation:
-research, plan, or refine. The dispatcher (/workflow-scope) tells you which stage.
+research, plan, or refine. The dispatcher (/workflow-triage) tells you which stage.
 
 ## What you receive
 

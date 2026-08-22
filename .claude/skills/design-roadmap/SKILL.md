@@ -1,6 +1,6 @@
 ---
 name: design-roadmap
-description: "EM role — takes an agreed backlog and files it as real GitHub issues: milestones created, issues opened with acceptance criteria, dependencies wired as task checklists, labels applied. The last design stage before /workflow-scope. Triggers on: 'file the backlog', 'create the issues', 'open tickets for this', 'set up the milestones', '/design-roadmap'."
+description: "EM role — takes an agreed backlog and files it as real GitHub issues: milestones created, issues opened with acceptance criteria, dependencies wired as task checklists, labels applied. The last design stage before /workflow-triage. Triggers on: 'file the backlog', 'create the issues', 'open tickets for this', 'set up the milestones', '/design-roadmap'."
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion
 ---
@@ -27,6 +27,38 @@ lives behind its own invocation rather than firing at the end of a scoping pass.
 
 **Issues live in the repo they change**, not in whichever repo the session runs in. This repo's remote is `dssg-nyc/nonprofit-success-ai`; prefix `NPS-`.
 
+## HITL Gates
+
+This skill has three mandatory pause points. Do not proceed past any without
+explicit user approval. **Issue filing is the LAST step, not the default outcome.**
+
+### Gate 1 — Draft issue backlog review
+
+After creating the draft issue backlog (Step 2–3):
+
+1. Present the milestone structure, issue list, ownership, and dependency map
+2. Call out any scope gaps, ownership ambiguities, or dependency cycles
+3. **Stop and ask:** "Draft issue backlog is ready for review. Check the milestones
+   and issues above — adjust ownership, scope, or ordering before I render to HTML."
+4. Do NOT render HTML until the user approves
+
+### Gate 2 — Full HTML review
+
+After rendering the Roadmap tab to the HTML (Step 4):
+
+1. Confirm what was added: milestones table, delta table, issue backlog section
+2. **Stop and ask:** "Roadmap tab rendered to the design record. Open the full HTML
+   and review all tabs end-to-end before I file GitHub issues."
+3. Do NOT file issues until the user approves the complete HTML
+
+### Gate 3 — Issue filing confirmation
+
+After the user approves the full HTML (Step 5):
+
+1. Run `--dry-run` to print exactly what would be filed
+2. **Stop and ask:** "Ready to file N issues across M milestones. Proceed?"
+3. Only then create GitHub milestones and issues
+
 ## Step 1 — Read the backlog and check the gate
 
 Read the backlog doc — `.claude/specs/design-scope.md` from `/design-initiative` unless a path was passed
@@ -39,7 +71,7 @@ Refuse to file if any of these hold — say which, and stop:
 | --------------------------------------------- | ------------------------------------------------------------------------------ |
 | No milestone doc                              | Issues with no milestone are orphans; the backlog is unsequenced               |
 | A task attaches to no milestone               | Either scope creep or a missing checkpoint — resolve upstream, don't orphan it |
-| A task has no acceptance criteria             | It cannot pass DoR, so `/workflow-scope` will bounce it                        |
+| A task has no acceptance criteria             | It cannot pass DoR, so `/workflow-triage` will bounce it                        |
 | A task has no deliverable, only "implement X" | Not a task, a wish                                                             |
 | The backlog was never reviewed with the user  | Filing unagreed scope is the failure this skill exists to prevent              |
 | The PRD's Q0–Q5 ladder has a level marked Required with no owner | File the owner-assignment issue first (see Step 4) — an unowned gate never runs |
@@ -72,9 +104,28 @@ gh api repos/dssg-nyc/<repo>/milestones -f title="M1 — <named system state>" \
 Only externally-driven milestones get dates. The rest carry sequence position in the
 title — a fabricated due date is worse than none, because it reads as a commitment.
 
-## Step 4 — File the issues
+## Step 4 — Render the Roadmap tab to HTML
 
-For each **new** task, in critical-path order so issue numbers roughly track sequence:
+**Only after Gate 1 approval.** Add/update the Roadmap tab (`#delta`) in
+`docs/<project>-system-design.html`. This tab owns:
+
+- **Milestones table** — M0–MN with name, "what it proves", lead, workstream
+- **Delta table** — the full build queue from `.claude/specs/delta.md`
+- **Decision register** — unratified decisions with blockers
+- **PRD coverage table** — every PRD § with coverage state
+- **Issue backlog section** — the draft issues grouped by milestone, with ownership
+  and dependency columns
+
+Do NOT touch tabs owned by other skills (Overview, Architecture, Components, Platform).
+
+After rendering, add a sidebar TOC link for the issue backlog section if one doesn't
+exist, and update the hash router's `TAB_OF` map for any new section IDs.
+
+**HITL Gate 2** — stop and ask the user to review the full HTML before proceeding.
+
+## Step 5 — File the issues
+
+**Only after Gate 2 approval.** For each **new** task, in critical-path order so issue numbers roughly track sequence:
 
 ```bash
 gh issue create -R dssg-nyc/<repo> \
@@ -136,7 +187,7 @@ Report the ladder's coverage in Step 6: for each of Q0–Q5, its owner, its stat
 (BUILT / PARTIAL / GAP), and the issue that moves it. Say plainly which levels are
 unowned rather than letting them pass silently.
 
-## Step 5 — Wire dependencies
+## Step 6 — Wire dependencies
 
 Dependencies are **task checklists inside the blocked issue**, never sub-issues and never
 extra branches:
@@ -154,7 +205,7 @@ overhead and nothing else.
 Cross-repo references are **fully qualified** (`dssg-nyc/nonprofit-success-ai#65`, not `#65`) —
 a bare `#N` silently rebinds to the destination repo if the issue is ever transferred.
 
-## Step 6 — Write the roadmap doc and report
+## Step 7 — Write the roadmap doc and report
 
 Write `.claude/docs/milestones/<slug>-roadmap.md`:
 
@@ -185,7 +236,7 @@ Then print:
   Milestones: <n>   Issues: <n>   Skipped: <n>
   Critical path: #<a> → #<b> → #<c>
 
-Next: /workflow-scope #<first> → /workflow-build #<first>
+Next: /workflow-triage #<first> → /workflow-build #<first>
 ──────────────────────────────────────
 ```
 
@@ -203,5 +254,20 @@ Next: /workflow-scope #<first> → /workflow-build #<first>
 
 ---
 
-**Upstream**: `/design-specs` → `/design-system` → `/design-initiative`.
-**Next**: `/workflow-scope #N` takes an issue to READY; `/workflow-build #N` builds it.
+## Tab ownership
+
+This skill owns the **Roadmap tab** in `docs/<project>-system-design.html`:
+milestones, delta table, decision register, PRD coverage, issue backlog.
+
+It must not touch tabs owned by other skills:
+
+| Skill | Owns |
+|---|---|
+| `/design-product` | Overview |
+| `/design-system` | Architecture, Components, Platform |
+| `/design-roadmap` (this) | Roadmap (milestones, delta, decisions, PRD coverage, issues) |
+
+---
+
+**Upstream**: `/design-product` (PRD + Overview tab) → `/design-system` (specs + Architecture/Components/Platform tabs).
+**Next**: `/workflow-triage #N` takes an issue to READY; `/workflow-build #N` builds it.

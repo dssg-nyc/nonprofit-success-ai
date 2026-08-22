@@ -634,6 +634,34 @@ landed, and whether it was carried, changed, or dropped — with rationale.>
   it and carry forward its engineering context, findings, and requirement traces.
   The new spec should be deeper than the old one, never shallower.
 
+## HITL Gates
+
+This skill has two mandatory pause points. Do not proceed past either without
+explicit user approval.
+
+### Gate 1 — Spec review
+
+After writing or updating `.claude/specs/platform/{agents,services,infra}/*.md`:
+
+1. Present a summary: which specs were created/updated, key decisions made vs deferred,
+   divergences found between code and prior specs
+2. List every open question from the specs (the `## Open questions` sections)
+3. **Stop and ask:** "Component specs are ready for review. Check the specs in
+   `.claude/specs/` and let me know what to revise — or approve to proceed to HTML."
+4. Do NOT render HTML until the user approves
+
+### Gate 2 — HTML review
+
+After rendering Architecture + Components + Platform tabs to the HTML:
+
+1. Run the publication checklist (diagram count, delta anchors, etc.)
+2. Present the checklist results and any gaps
+3. **Stop and ask:** "HTML tabs rendered. Open the file and review — or approve to
+   continue to `/design-roadmap`."
+
+The Overview tab should already exist from `/design-product`. Do not overwrite it —
+only update if the PRD has changed since it was rendered.
+
 ## Process
 
 1. **Read inputs:** design doc, PRD, existing `.claude/specs/`, and the working tree
@@ -641,10 +669,13 @@ landed, and whether it was carried, changed, or dropped — with rationale.>
 2. **Ask questions** where the design has ambiguous decisions, multiple valid options,
    or contradictions between source documents. Do not guess — surface the decision
    to the user.
-3. **Draw the design record:** C1 → C2 → D1 → C3 plates → platform → Delta.
-4. **Write deep specs** for each plate + platform module, reading the code for each.
-5. **Publish** HTML to `docs/<project>-system-design.html` and specs to `.claude/specs/`.
-6. **Verify** against the publication checklist below before finishing.
+3. **Write deep specs** for each plate + platform module, reading the code for each.
+4. **HITL Gate 1** — present specs for review. Stop until approved.
+5. **Render HTML** — Architecture + Components + Platform tabs only. Do not touch the
+   Overview tab (owned by `/design-product`) or the Roadmap tab (owned by
+   `/design-roadmap`). If those tabs do not exist yet, leave placeholder panels.
+6. **HITL Gate 2** — run publication checklist, present results, stop until approved.
+7. **Verify** against the full publication checklist below before finishing.
 
 ## Publication checklist — run this, don't assume it
 
@@ -693,7 +724,15 @@ cuts milestones and files issues referencing `.claude/specs/` as the build contr
 
 ---
 
-**Upstream:** `/design-initiative` (design doc) + `/design-product` (PRD).
+**Tab ownership model** — the HTML is built incrementally:
+
+| Skill | Owns these tabs | Must not touch |
+|---|---|---|
+| `/design-product` | Overview | Architecture, Components, Platform, Roadmap |
+| `/design-system` (this) | Architecture, Components, Platform | Overview, Roadmap |
+| `/design-roadmap` | Roadmap (milestones, delta, issues) | Overview, Architecture, Components, Platform |
+
+**Upstream:** `/design-initiative` (design doc) + `/design-product` (PRD + Overview tab).
 
 **Next step:** `/design-roadmap` — the trio (PM, EM, Designer) takes the design record's
 plates, D table, and the component specs, and plans the roadmap: milestones, dependencies,

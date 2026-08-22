@@ -15,12 +15,29 @@
 - [ ] Refactor — structure only, no behavior change
 - [ ] Docs / chore — tooling, CI, dependencies, documentation
 
+## Priority
+
+- [ ] Critical
+- [ ] High
+- [ ] Medium
+- [ ] Low
+
 ## Testing
 
 - [ ] `npm run lint` passes
 - [ ] `npm run type-check` passes
 - [ ] `npm run test` passes
 - [ ] Manual testing performed
+
+## Documentation
+
+<!-- What changed, and is it reflected outside the code? -->
+
+- [ ] `.claude/specs/` updated to match (or N/A — no spec covers this change)
+- [ ] `.claude/refs/` or repo `CLAUDE.md` updated (or N/A)
+- [ ] `.claude/` tooling itself changed (skills/agents/README) — describe below, or N/A
+
+<!-- If any box above is unchecked and isn't N/A, say why — e.g. "spec update deferred to #123" -->
 
 
 ## Screenshots

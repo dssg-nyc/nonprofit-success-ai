@@ -44,10 +44,10 @@ most complete of the two namespaces and already carried dependency order.
 | D7 | Move Scout to `src/agents/scout/` + first test suite | SPECIFIED | — | C3.1 | `platform/agents/scout.md` |
 | D8 | Move Architect to `src/agents/architect/` | SPECIFIED | — | C3.2 | `platform/agents/architect.md` |
 | D9 | Contract & Consent gate — server timestamp, immutable write | SPECIFIED | D3 | C4.3 | `platform/services/contract-consent.md` |
-| D10 | Communications Service — draft + delivery, `communications` table | GAP | D3, D5 | C4.2 | `platform/services/communications-service.md` |
+| D10 | Envoy agent — draft + delivery, `communications` table | GAP | D3, D5 | C4.2 | `platform/agents/envoy.md` |
 | D11 | Chronicle agent — readiness gate + model synthesis + eval judge | GAP | D3, D4 | C3.3 | `platform/agents/chronicle.md` |
 | D12 | Eval harness — turn on `targets.yaml` thresholds, gate CI | SPECIFIED | D1 | C4.P | `platform/infra/eval-harness.md` |
-| D13 | Health Service — `computeEngagementHealth()` | SPECIFIED | — | C4.1 | `platform/services/health-service.md` |
+| D13 | Pulse agent — `computeEngagementHealth()` | SPECIFIED | — | C4.1 | `platform/agents/pulse.md` |
 | D14 | Scout meeting intelligence — transcript extraction | SPECIFIED | D1, D7 | C3.1 | `platform/agents/scout.md` §2 |
 | D15 | Chronicle → Scout feedback loop | GAP | D11 | C3.3 | `platform/agents/chronicle.md` |
 | D16 | `engagement_events` producer — nothing writes events yet | GAP | D19 | D1 | `crm/lifecycle.md` §2 |

@@ -774,8 +774,8 @@ footer b{color:#fff; font-weight:500;}
     <h2>Start with retrieval, not a knowledge graph</h2>
     <p class="lede">The proposed vector index and knowledge graph are useful long-term, but they are not prerequisites for the MVP. The first knowledge problem is simpler: retrieve approved prior engagements, templates, and lessons with clear provenance.</p>
     <div class="compare">
-      <div class="col today"><h4>Phase 1</h4><p>Keep canonical engagement records in Firestore. Add a normalized knowledge document for approved templates, case studies, lessons, and decision rules. Retrieve only from approved content and store source IDs with every AI-generated recommendation.</p></div>
-      <div class="col target"><h4>Phase 2</h4><p>When there is enough history to justify it, introduce Postgres/pgvector for semantic retrieval. Add graph relationships only for questions that genuinely require multi-hop relationships; do not build a graph because the architecture diagram has a box for one.</p></div>
+      <div class="col today"><h4>Phase 1</h4><p>Keep canonical engagement records in Supabase Postgres (Firebase migration complete). Add a normalized knowledge document for approved templates, case studies, lessons, and decision rules. Retrieve only from approved content and store source IDs with every AI-generated recommendation.</p></div>
+      <div class="col target"><h4>Phase 2</h4><p>Add the knowledge layer: pgvector migration, hybrid BM25 + vector retrieval with RRF, Granola meeting-note ingestion via webhook, and a read-only MCP surface for volunteers. Measure recall@10 on a golden set before widening rollout. Add graph relationships only for questions that genuinely require multi-hop relationships; do not build a graph because the architecture diagram has a box for one.</p></div>
     </div>
     <div class="callout" style="margin-top:20px;"><p><b>Critical governance rule:</b> raw partner data, transcripts, and AI outputs are not automatically promoted into reusable organizational knowledge. Only approved, provenance-linked artifacts can influence future recommendations.</p></div>
   </div>
@@ -821,7 +821,7 @@ footer b{color:#fff; font-weight:500;}
       <div class="card"><h3>Phase 0 — Hardening</h3><p>Move Scout inference server-side; enforce server-side authorization; define the canonical schemas; create the centralized approval queue; add immutable audit events. This is the immediate blocker to a real pilot.</p></div>
       <div class="card"><h3>Phase 1 — Pilot</h3><p>Ship Scout end-to-end plus Architect assessment/plan generation. Automate approved-intake → Business → Engagement creation. Keep scheduling, communications, contracts, and tasks deterministic.</p></div>
       <div class="card"><h3>Phase 2 — Operational automation</h3><p>Add the shared Task and Health services, one calendar integration, one communications channel, and the contract gate. Introduce Chronicle only after the core engagement records are reliable.</p></div>
-      <div class="card"><h3>Phase 3 — Learning</h3><p>Add retrieval over approved historical artifacts. Measure recommendation quality and only then consider pgvector, a knowledge graph, additional integrations, or a generalized orchestration platform.</p></div>
+      <div class="card"><h3>Phase 3 — Learning</h3><p>Add the knowledge layer: pgvector migration, hybrid BM25 + vector retrieval with RRF, Granola meeting-note ingestion, and a read-only MCP surface for volunteers in Claude Code. Measure recall@10 on a golden set before widening rollout. Only then consider a knowledge graph, additional integrations, or a generalized orchestration platform.</p></div>
     </div>
     <h3 style="margin-top:40px; font-size:1.15rem;">Feasibility verdict</h3>
     <ul class="stage-list" style="max-width:820px;">
