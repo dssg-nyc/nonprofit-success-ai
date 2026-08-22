@@ -64,7 +64,8 @@ flowchart TB
 
     subgraph workflow["Workflow skills"]
         direction TB
-        WB["/workflow-board<br/>read-only GitHub state"]
+        WB["/git-board<br/>read-only GitHub state"]
+        GI["/git-issue<br/>file one roadmap<br/>backlog item"]
 
         subgraph manual["Manual path — invoke one stage at a time"]
             direction LR
@@ -91,6 +92,7 @@ flowchart TB
     docReview[["review doc + verdict"]]
     docDoD{{"DoD checklist<br/>(build/review dimensions)"}}
     docPrDraft[["drafted PR title + body"]]
+    docDelta[["delta registry:<br/>.claude/specs/roadmap.md"]]
 
     WF1 -. "checks against" .-> docDoR
     WF2 -. "checks against" .-> docDoR
@@ -99,17 +101,20 @@ flowchart TB
     docDoD -. "pass/fail produces" .-> docReview
     PR -. reviews .-> docPrDraft
 
-    DR -- "GitHub issues,<br/>label: backlog" --> WB
+    DR -- "whole backlog as<br/>GitHub issues,<br/>label: backlog" --> WB
+    DR -. "cites D/C rows" .-> docDelta
+    docDelta -- "one row at a time" --> GI
+    GI -- "GitHub issue,<br/>label: backlog" --> WB
     manual -- "Status: READY" --> build
     automated -- "Status: READY" --> build
-    build -- "human: review diff,<br/>run make ship,<br/>commit, push" --> PR["/workflow-pr<br/>draft + gh pr create"]
+    build -- "human: review diff,<br/>run make ship,<br/>commit, push" --> PR["/git-pr<br/>draft + gh pr create"]
     PR --> opened(["PR opened"])
 
     classDef gate fill:#fff3cd,stroke:#997404,color:#664d03
     classDef doc fill:#e7f1ff,stroke:#4c6fff,color:#1a2b6b
     classDef checklist fill:#ffe7f0,stroke:#c2185b,color:#6b1a3a
-    class DI,DP,DS,DR,WF1,WF2,RV,PR gate
-    class docScope,docPRD,docOverview,docSpecs,docArch,docBacklog,docRoadmap,docFullHtml,docPlan,docReview,docPrDraft doc
+    class DI,DP,DS,DR,WF1,WF2,RV,PR,GI gate
+    class docScope,docPRD,docOverview,docSpecs,docArch,docBacklog,docRoadmap,docFullHtml,docPlan,docReview,docPrDraft,docDelta doc
     class docDoR,docDoD checklist
 ```
 
@@ -121,7 +126,7 @@ exact detail on each one.
 **`workflow-build` never commits, pushes, or opens anything.** Its loop ends when review
 returns `approve` and the changes sit staged on the branch. Everything from there is the
 human's: review the diff, run `make ship` (lint, type-check, test, build — gate only, it
-does not push), commit, push. `/workflow-pr` picks up only after the branch is on the
+does not push), commit, push. `/git-pr` picks up only after the branch is on the
 remote — it drafts the PR body from the plan doc and diff and stops for approval before
 `gh pr create` runs. Claude never pushes at any point in this sequence.
 
@@ -141,9 +146,10 @@ once, and never on the rendered HTML before its own gate has passed.
 | `/design-roadmap` Gate 1 | the draft backlog printed inline (milestones, issues, dependency map) — not yet a file | terminal output |
 | `/design-roadmap` Gate 2 | `docs/<project>-system-design.html` — Roadmap tab | HTML, tracked |
 | Gate 3 (final) | `docs/<project>-system-design.html` — all tabs | HTML, tracked |
+| `/git-issue` | the drafted issue body per delta, printed inline before `gh issue create` runs | terminal output |
 | `/workflow-refine`, `/workflow-triage` | the plan doc, `.claude/docs/plans/<date>-<slug>.md`, `### Open Questions` section | markdown, git-ignored |
 | `/workflow-review` (inside `/workflow-build`) | the review doc it writes, plus the diff itself | markdown + diff |
-| `/workflow-pr` | the drafted PR body, printed inline before `gh pr create` runs | terminal output |
+| `/git-pr` | the drafted PR body, printed inline before `gh pr create` runs | terminal output |
 
 ## HITL gates — what gets reviewed, and when
 
@@ -161,11 +167,12 @@ been reviewed end to end.
 | `/design-roadmap` | draft issue backlog (milestones, issues, dependency map) | **Gate 1**: review draft backlog | **Gate 2**: Roadmap tab (milestones, delta, issue backlog) |
 | — | — | **Gate 3**: review the complete HTML end to end | *(nothing added — this gate is the checkpoint before filing)* |
 | `/design-roadmap` (cont.) | — | **Gate 4**: confirm exact issue count before filing (`--dry-run` first) | files GitHub issues, label `backlog` |
+| `/git-issue` | drafted issue title + body per delta (from `specs/roadmap.md` + the cited spec + `.github/ISSUE_TEMPLATE`) | approve all / a subset / edit / cancel before `gh issue create` runs | *(no HTML — files GitHub issues, label `backlog`)* |
 | `/workflow-refine` | plan doc `Status:` field | DoR checklist must pass, or it stops and reports the gap | *(not HTML — flips GitHub label `backlog` → `ready`, gated by `AskUserQuestion`)* |
 | `/workflow-triage` | same, for every issue in a batch | same DoR gate, plus a proposed-action table before any label write | same |
 | `/workflow-build` → `/workflow-review` | review doc + verdict | `request_changes` or `insufficient_context` blocks the loop; blocker findings always escalate, never auto-fixed | *(no HTML — this stage writes code, not the design record)* |
 | — (human) | — | review the diff, run `make ship`, commit, push — none of this is a skill | — |
-| `/workflow-pr` | drafted PR title + body (from plan doc + diff) | approve/edit/cancel before `gh pr create` runs | *(no HTML — opens the actual GitHub PR)* |
+| `/git-pr` | drafted PR title + body (from plan doc + diff) | approve/edit/cancel before `gh pr create` runs | *(no HTML — opens the actual GitHub PR)* |
 
 **Each skill pauses on its own draft, never on the HTML.** The HTML gate (Gate 2 in each
 design skill) is a separate, later pause — you're approving *that the draft is faithfully
@@ -210,7 +217,7 @@ Key files:
 | `design-system.md` | Root doc — scope, direction decision, container model, execution semantics |
 | `design-scope.md` | Initiative framing (output of `/design-initiative`) |
 | `design-requirements.md` | PRD (output of `/design-product`) |
-| `delta.md` | The delta registry — every `D{n}`/`C{n}` change-decision ID; other specs cite it, none mint their own |
+| `roadmap.md` | The delta registry — every `D{n}`/`C{n}` change-decision ID; other specs cite it, none mint their own |
 | `crm/*.md` | Data model, access model, lifecycle state machine, Supabase conventions |
 | `platform/agents/*.md` | One spec per product agent (scout, architect, pulse, envoy, chronicle) — a contract for the agent the portal is being extended with, not the `.claude/agents/` tooling subagents below |
 | `platform/services/*.md`, `platform/infra/*.md` | Service and infrastructure specs (eval harness, model gateway, observability) |
@@ -237,15 +244,23 @@ decide whether to load the skill.
 
 | Skill | Role | Reads | Writes |
 |---|---|---|---|
-| `workflow-board` | Read-only GitHub issue state — all open issues, or filtered by owner/label | GitHub issue list | nothing — never edits |
+| `git-board` | Read-only GitHub issue state — all open issues, or filtered by owner/label | GitHub issue list | nothing — never edits |
+| `git-issue` | Files one or a few named roadmap backlog items as GitHub issues | `specs/roadmap.md` D/C rows + the spec each cites + `.github/ISSUE_TEMPLATE/*.yml` | GitHub issues (labels `backlog` + one type label); never edits the registry |
 | `workflow-research` | Phase 1 — investigate one work item | issue body, codebase, web | `## Research` section of `.claude/docs/plans/<date>-<slug>.md` |
 | `workflow-plan` | Phase 2 — turn research into an implementation plan | the same plan doc's `## Research` | `## Plan` section of the same doc, `Status: PLANNED` |
 | `workflow-refine` | Phase 3 — DoR-gate one plan doc | the plan doc + linked issue | `Status:` flips to `REFINED`/`READY`; syncs the GitHub label on `READY` |
 | `workflow-triage` | Orchestrates research → plan → refine, for one issue, a named list, or the whole backlog | a GitHub issue number, a list, `--all`, or inline text | dispatches the three skills above as subagents; drives each plan doc to `READY` |
 | `workflow-build` | Execute → review → fix loop on a READY plan | the plan doc | code changes on the branch (staged, never committed) |
 | `workflow-review` | Pre-commit review against a fixed dimension checklist | the diff (+ plan doc if given) | a review doc + a verdict (`approve` / `comment` / `request_changes` / `insufficient_context`) |
-| `workflow-pr` | Drafts and opens the PR once the branch is pushed | the plan doc + diff + `.github/PULL_REQUEST_TEMPLATE.md` | a filled PR body (priority + documentation-coverage fields included), then the PR itself via `gh pr create` |
+| `git-pr` | Drafts and opens the PR once the branch is pushed | the plan doc + diff + `.github/PULL_REQUEST_TEMPLATE.md` | a filled PR body (priority + documentation-coverage fields included), then the PR itself via `gh pr create` |
 | `create-skill` | Scaffold a new skill matching house conventions | an interview with the contributor | a new `.claude/skills/<name>/SKILL.md` |
+
+**Two paths file GitHub issues, and they do not overlap.** `/design-roadmap` files an
+*entire* agreed backlog at the end of a design pass, creates milestones, and owns the
+HTML Roadmap tab. `/git-issue` files *one or a few* named `D`/`C` rows from
+`.claude/specs/roadmap.md` on demand — it creates no milestones, touches no HTML, and
+mints no delta numbers. Reach for `/git-issue` when a row already exists and just needs
+a ticket; reach for `/design-roadmap` when the backlog itself is what's new.
 
 **Use `workflow-research`/`workflow-plan`/`workflow-refine` directly when you want to
 stop and look between stages** — e.g. you want to read the research before deciding how

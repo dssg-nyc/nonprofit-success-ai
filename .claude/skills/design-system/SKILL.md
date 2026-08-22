@@ -432,7 +432,7 @@ skipped — one component, four modifiers, defined once.
 
 ### The Delta tab — the document's sync point
 
-**The delta numbers come from `.claude/specs/delta.md`. Never mint your own.**
+**The delta numbers come from `.claude/specs/roadmap.md`. Never mint your own.**
 
 That registry owns every `D{n}` and `C{n}`; the Delta tab *renders* it. Read it, render its
 rows in dependency order, and carry each row's state and "needs first" through unchanged.
@@ -710,7 +710,7 @@ Then verify by reading, not counting:
   against the plates — stack refs and infra specs included.
 - **Provenance is a data-model rule**, not a UI note, wherever a model generates content a
   human reads.
-- **Every delta number in the document exists in `.claude/specs/delta.md`** with the same
+- **Every delta number in the document exists in `.claude/specs/roadmap.md`** with the same
   meaning. No number was invented, reused, or renumbered.
 
 **If the diagram count is zero, the document is not publishable.** Go back to step 3 —

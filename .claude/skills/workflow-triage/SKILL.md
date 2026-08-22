@@ -9,7 +9,7 @@ allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion
 The triage entry point — the seam between design and build. Takes backlog work (filed by
 `/design-roadmap`) from unscoped to READY by routing through research → plan → refine as
 subagents. Opus decides the routing; sonnet executes each stage. `/workflow-build` picks
-up from READY. Use `/workflow-board` first if you need to see what's open before picking
+up from READY. Use `/git-board` first if you need to see what's open before picking
 what to triage.
 
 ## Usage
@@ -362,14 +362,14 @@ quality stays auditable:
 ## Pipeline position
 
 ```
-/workflow-board (state) → /workflow-triage (one issue, a list, or --all) → /workflow-build
+/git-board (state) → /workflow-triage (one issue, a list, or --all) → /workflow-build
 ```
 
 ## When to use this vs other skills
 
 - **This skill** (`/workflow-triage`): the orchestrator. One issue, a named list, or the
   whole backlog — same research → plan → refine machinery either way.
-- **`/workflow-board`**: read-only. Shows open GitHub issue state (all or per-owner) so
+- **`/git-board`**: read-only. Shows open GitHub issue state (all or per-owner) so
   you know what to triage. Never edits anything.
 - **`/workflow-refine`**: DoR-gates ONE already-planned issue. This skill's third stage —
   also invocable standalone if you're driving one plan manually.

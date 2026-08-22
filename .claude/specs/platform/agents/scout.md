@@ -187,7 +187,7 @@ Target: moves to `src/agents/scout/routing.ts` with tests. No tests exist yet.
 
 ## Delta rows
 
-Cited from [`delta.md`](../../delta.md) — this spec does not mint numbers.
+Cited from [`roadmap.md`](../../roadmap.md) — this spec does not mint numbers.
 
 - **D1** — server boundary `/api/route-intake` — SPECIFIED
 - **D7** — move Scout to `src/agents/scout/` + first test suite — SPECIFIED

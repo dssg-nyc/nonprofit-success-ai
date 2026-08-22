@@ -29,7 +29,7 @@ Writes structured telemetry for every agent run to `agent_runs` and `tool_calls`
 - **Data:** `agent_runs` table and `tool_calls` table (deferred `supabase/migrations/_deferred/0004_telemetry.sql`)
 
 ## Delta rows
-Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
+Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbers.
 
 - **D4** — observability: `agent_runs` + `tool_calls` + recorder — SPECIFIED
 - **D20** — provenance columns + the run→approval→transition chain — GAP

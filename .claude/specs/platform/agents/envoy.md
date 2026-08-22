@@ -120,7 +120,7 @@ secrets reach the client" constraint (`CLAUDE.md` Conventions).
 
 ## Delta rows
 
-Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
+Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbers.
 
 - **D10** — Envoy: draft + delivery, `communications` table — GAP
   (`/api/draft-communication`, `/api/send-communication`, occasion templates)

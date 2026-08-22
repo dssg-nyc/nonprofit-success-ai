@@ -157,7 +157,7 @@ signal to staff, who then decide to initiate via Envoy.
 
 ## Delta rows
 
-Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
+Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbers.
 
 - **D13** — Pulse: `computeEngagementHealth()` — SPECIFIED
 - **D16** — `engagement_events` producer; until it lands every engagement reads `at_risk` — GAP

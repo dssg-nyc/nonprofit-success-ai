@@ -75,7 +75,7 @@ State the new `Status`, the DoR checklist with each item checked/unchecked, and 
   research and plan. The last stage before build.
 - **`/workflow-triage`**: the orchestrator that dispatches research → plan → refine in
   sequence, for one issue, a list, or the whole backlog. This skill is its third stage.
-- **`/workflow-board`**: read-only GitHub issue state. Use it to see what's open before
+- **`/git-board`**: read-only GitHub issue state. Use it to see what's open before
   choosing what to triage.
 
 Pipeline: `/workflow-research` → `/workflow-plan` → **`/workflow-refine`** → `/workflow-build`

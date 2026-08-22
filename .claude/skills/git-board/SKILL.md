@@ -1,11 +1,11 @@
 ---
-name: workflow-board
-description: "Read-only GitHub issue board — shows open issues, grouped by label/milestone/owner, so you know what to pick up before triaging. Never edits anything. Triggers on: /workflow-board, 'show the board', 'what's open', 'what issues are open', 'show my issues', 'what's assigned to me'."
+name: git-board
+description: "Read-only GitHub issue board — shows open issues, grouped by label/milestone/owner, so you know what to pick up before triaging. Never edits anything. Triggers on: /git-board, 'show the board', 'what's open', 'what issues are open', 'show my issues', 'what's assigned to me'."
 disable-model-invocation: true
 allowed-tools: Bash
 ---
 
-# /workflow-board
+# /git-board
 
 Show the current GitHub issue state. Read-only — this skill never edits a label, body,
 or comment. Use it before `/workflow-triage` to decide what to pick up, or to resume
@@ -14,11 +14,11 @@ where you left off.
 ## Usage
 
 ```
-/workflow-board                    # all open issues, this repo
-/workflow-board --mine             # open issues assigned to the invoking GitHub user
-/workflow-board --user <login>     # open issues assigned to a specific user
-/workflow-board --label ready      # filter by label
-/workflow-board --repo <repo>      # target a different repo
+/git-board                    # all open issues, this repo
+/git-board --mine             # open issues assigned to the invoking GitHub user
+/git-board --user <login>     # open issues assigned to a specific user
+/git-board --label ready      # filter by label
+/git-board --repo <repo>      # target a different repo
 ```
 
 ## Step 1 — Pull issue state

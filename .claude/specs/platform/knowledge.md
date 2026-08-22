@@ -6,6 +6,14 @@
 [chronicle.md](chronicle.md) §Open questions (Q3)
 **Supersedes for this repo:** the separate-service assumption carried in from prior
 design work (see §7)
+**Amended 2026-08-22:** three additions from the semantica/librarian parity analysis —
+D39 (redaction log, §5), D40 (code-embedding storage, §8/§9), D41 (degraded-arm eval,
+§7/§8). Source: `librarian/.claude/docs/research/2026-08-22_semantica-parity.md`.
+The parity read **confirms** §1 and §7: semantica was evaluated as an alternative
+substrate and rejected — its value is deterministic audit for regulated decisions, at the
+cost of a graph store plus a vector store plus ~350 modules. §1's "a second deployable is
+a second thing for a volunteer to host" applies with more force to a polyglot graph
+platform. Postgres + pgvector + RRF stands.
 
 ---
 
@@ -155,6 +163,13 @@ Four rules, all non-optional:
    material under the inherited data-classification rules. Once they are in an embedding they are not
    removable — an embedding is not reversible but it is also not redactable. Redaction is
    an ingestion-time transform.
+5. **Redaction is logged per chunk — D39.** Rules 3 and 4 sit at different granularities:
+   provenance is per *document*, redaction is per *span*. With only document-level
+   provenance, the system cannot answer "which chunks were redacted, under which rule
+   version, and what did the source say before?" — which is the question an audit asks.
+   The log stores the rule id, span offsets, and timestamp, **never the redacted content**;
+   it is a column, not an architecture. Without it a redaction is unauditable, and an
+   unauditable redaction is indistinguishable from a missed one.
 
 ### This partially reopens OQ-1 — in the way the prior design predicted
 
@@ -227,6 +242,12 @@ indistinguishable from working. The retrieval response carries a `degraded` flag
 index-freshness timestamp — this is also design-system.md §2's agent path contract rule 2,
 *"failure is signalled, never simulated,"* applied to retrieval.
 
+**The flag needs an eval arm to mean anything — D41.** The same measurement that produced
+the 0.905 → 0.295 cliff also produced a paired baseline with FTS disabled
+(`librarian/evals/baselines/live-nofts-baseline-*.json` beside `live-baseline-*.json`).
+Gating only the nominal arm reports green in precisely the degraded state the flag was
+invented to surface. Cost is one extra eval run; the pattern is already proven upstream.
+
 ---
 
 ## 8. What this needs that doesn't exist yet
@@ -235,13 +256,14 @@ Ordered. Items 1–2 are the whole substrate delta.
 
 | # | Item | Notes |
 |---|---|---|
-| 1 | Migration `0008_knowledge.sql` | `pgvector` extension; `document_chunks`; `code_symbols`; `code_edges`; RLS mirroring `0007`'s org-scoping; `tsvector` generated column + GIN index; ivfflat index on the embedding |
+| 1 | Migration `0008_knowledge.sql` — D37 | `pgvector` extension; `document_chunks`; `code_symbols`; `code_edges`; RLS mirroring `0007`'s org-scoping; `tsvector` generated column + GIN index; ivfflat index on the embedding. **Settle D40 first** — where symbol vectors live is a column in this migration, not a later tuning knob |
 | 2 | `src/knowledge/` | `retrieval.ts` (hybrid + RRF), `chunk.ts`, `embed.ts`, `ingest.ts`. Obeys §7's boundary rule — imports nothing from `agents/`, `services/`, `app/` |
 | 3 | `/api/knowledge-search` | Session-authed; RLS carries tenancy |
 | 4 | `/api/knowledge-ingest` | Service-role; shared-secret verified; the §5 rules |
 | 5 | `/api/mcp` | Read-only MCP surface over the same retrieval core |
-| 6 | Codemap indexer | GitHub Action, scheduled. Ports the existing codemap indexer/parser as-is; the storage layer moves DuckDB → Postgres |
-| 7 | Eval metric | design-system.md's rule: every agent path needs one. Retrieval's is recall@10 on a golden set |
+| 6 | Codemap indexer — D30 | GitHub Action, scheduled. Ports the existing codemap indexer/parser as-is; the storage layer moves DuckDB → Postgres. The ported source keeps symbol vectors in a separate store (`tools/codemap/symbol_embeddings.py`), so the port must resolve D40 rather than inherit that split by default |
+| 7 | Eval metric — D38 | design-system.md's rule: every agent path needs one. Retrieval's is recall@10 on a golden set |
+| 8 | Degraded-arm eval — D41 | Gate recall@10 **twice**: nominal, and with FTS unavailable. See §7 — a single-arm gate reports green in exactly the condition the `degraded` flag exists to catch |
 
 **Cost check.** Prior measurement of comparable live indexes projected the DSSG corpus
 (~240 source files) at **25–30 MB — 5–6% of the 500 MB Supabase free tier.** The
@@ -264,7 +286,11 @@ must name the unpause step. The prior design calls this a live risk; it stays li
   citation is stale.
 - **Granola's actual webhook contract is unverified.** §5 assumes a webhook with a meeting
   id and a resolvable engagement. Confirm before building `/api/knowledge-ingest`.
-- **Chunking strategy is unspecified.** Size, overlap, and whether code chunks by symbol
-  or by window. Deferred to implementation; it is tunable without a migration.
+- **Chunking strategy is unspecified — but only half of it is deferrable.** Size and
+  overlap for *prose* are tunable without a migration, as stated. **Code is not** — §2
+  already decided the unit is a symbol by giving Core its own tables, so what remains is
+  D40: whether symbol vectors live in `document_chunks` or beside `code_symbols`. That is
+  one retrieval path or two, and §4's "one retrieval core" claim quietly depends on the
+  answer. Migration-shaped; resolve before D37.
 - **Team-asset authoring.** §2 says Team is a document classification, but nothing writes
   those documents yet. Manual authoring is the assumption; no path is designed.

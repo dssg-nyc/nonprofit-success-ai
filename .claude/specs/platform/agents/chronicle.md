@@ -173,7 +173,7 @@ This is registry rows **D15** (the edge) and **D21** (the artifact).
 
 ## Delta rows
 
-Cited from [`delta.md`](../../delta.md) — this spec does not mint numbers.
+Cited from [`roadmap.md`](../../roadmap.md) — this spec does not mint numbers.
 
 - **D11** — Chronicle agent: readiness gate + model synthesis + `/api/chronicle-draft` — GAP
 - **D15** — Chronicle → Scout feedback loop — GAP

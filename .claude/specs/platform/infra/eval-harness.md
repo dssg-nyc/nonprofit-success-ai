@@ -32,7 +32,7 @@ CI gate `eval-heuristics` runs on every PR via `npm run eval:heuristics`. The fu
 - **Data:** `targets.yaml` (threshold config); `src/evals/fixtures/*.jsonl` (golden sets); `agent_runs` (`_deferred/0004_telemetry.sql`, for judge call recording). No Supabase access during heuristic runs.
 
 ## Delta rows
-Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
+Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbers.
 
 - **D12** — eval harness: `registry.ts` + `registry.test.ts` + `targets.yaml` — SPECIFIED
 - **D28** — CI integration: `eval-heuristics` in `ci.yml`, `eval-judge` in `cd.yml` — GAP

@@ -1,11 +1,11 @@
 ---
-name: workflow-pr
-description: "Drafts and opens the pull request after the user has reviewed, tested, committed, and pushed. Fills .github/PULL_REQUEST_TEMPLATE.md from the plan doc and diff — including priority and the documentation-coverage fields — presents the draft, and only runs `gh pr create` after explicit approval. Never pushes; assumes the branch is already on the remote. Triggers on: /workflow-pr, 'open a PR', 'create the pull request', 'draft the PR'."
+name: git-pr
+description: "Drafts and opens the pull request after the user has reviewed, tested, committed, and pushed. Fills .github/PULL_REQUEST_TEMPLATE.md from the plan doc and diff — including priority and the documentation-coverage fields — presents the draft, and only runs `gh pr create` after explicit approval. Never pushes; assumes the branch is already on the remote. Triggers on: /git-pr, 'open a PR', 'create the pull request', 'draft the PR'."
 disable-model-invocation: true
 allowed-tools: Read, Bash, Grep, Glob, AskUserQuestion
 ---
 
-# /workflow-pr
+# /git-pr
 
 The last step after `make ship` passes: turn a reviewed, tested, committed, pushed branch
 into a pull request. This skill drafts; it never pushes and never opens the PR without

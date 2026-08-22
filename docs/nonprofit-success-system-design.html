@@ -1779,10 +1779,10 @@ tr[id]{scroll-margin-top:92px;}
       <table>
         <thead><tr><th>Aspect</th><th>Detail</th><th>State</th></tr></thead>
         <tbody>
-          <tr><td>Intake routing</td><td><code>src/lib/scoutRouting.ts</code> &mdash; deterministic fallback</td><td><span class="pill p-partial">BUILT, NOT WIRED</span> <a class="dnum" href="#d1">&Delta;1</a></td></tr>
+          <tr><td>Intake routing</td><td><code>src/agents/scout/routing.ts</code> &mdash; deterministic fallback</td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d7">&Delta;7</a></td></tr>
           <tr><td>Intake form</td><td><code>src/components/ScoutIntakeForm.tsx</code></td><td><span class="pill p-built">BUILT</span></td></tr>
           <tr><td>Review queue</td><td><code>src/components/scout/ScoutReviewQueue.tsx</code></td><td><span class="pill p-built">BUILT</span></td></tr>
-          <tr><td>Model path</td><td><code>api/route-intake.ts</code> &rarr; <code>generateObject</code></td><td><span class="pill p-planned">SPECIFIED</span> <a class="dnum" href="#d1">&Delta;1</a></td></tr>
+          <tr><td>Model path</td><td><code>api/route-intake.ts</code> &rarr; <code>generateObject</code></td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d1">&Delta;1</a></td></tr>
           <tr><td>Meeting intelligence</td><td>Transcript extraction &mdash; decisions + action items</td><td><span class="pill p-planned">SPECIFIED</span> <a class="dnum" href="#d14">&Delta;14</a></td></tr>
         </tbody>
       </table>
@@ -1943,8 +1943,8 @@ tr[id]{scroll-margin-top:92px;}
       <table>
         <thead><tr><th>Aspect</th><th>Detail</th><th>State</th></tr></thead>
         <tbody>
-          <tr><td>Scoring</td><td><code>src/lib/architectScoring.ts</code></td><td><span class="pill p-partial">BUILT, NOT WIRED</span> <a class="dnum" href="#d2">&Delta;2</a></td></tr>
-          <tr><td>Plan generation</td><td><code>src/lib/architectPlan.ts</code></td><td><span class="pill p-partial">BUILT, NOT WIRED</span> <a class="dnum" href="#d2">&Delta;2</a></td></tr>
+          <tr><td>Scoring</td><td><code>src/agents/architect/scoring.ts</code></td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d8">&Delta;8</a></td></tr>
+          <tr><td>Plan generation</td><td><code>src/agents/architect/plan.ts</code></td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d8">&Delta;8</a></td></tr>
           <tr><td>CSA form</td><td><code>src/components/architect/ArchitectAssessment.tsx</code></td><td><span class="pill p-built">BUILT</span></td></tr>
           <tr><td>Model enrichment</td><td>Charter prose via <code>generateObject</code></td><td><span class="pill p-planned">SPECIFIED</span> <a class="dnum" href="#d2">&Delta;2</a></td></tr>
           <tr><td>HITL tier</td><td><b>No named review gate.</b> A charter and 90-day plan reach a partner without one</td><td><span class="pill p-absent">GAP</span> <a class="dnum" href="#d31">&Delta;31</a></td></tr>
@@ -2146,6 +2146,97 @@ tr[id]{scroll-margin-top:92px;}
       </table>
     </div>
 
+    <figure>
+      <div class="fig-scroll">
+        <svg viewBox="0 0 940 330" role="img" aria-label="Envoy's staff-initiated draft path: a staff request selects one of five occasions, context is assembled from the engagement record, the model drafts, and the draft stops at an L3 approval gate. Nothing fires autonomously and nothing sends — the send path is a gap, and its tier is unresolved between L3 and L4.">
+          <defs>
+            <marker id="ar-envoy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- Trigger -->
+          <text class="svg-band" x="20" y="26">TRIGGER</text>
+          <g color="var(--ink)">
+            <rect x="20" y="38" width="150" height="52" rx="4" fill="var(--surface-alt)" stroke="currentColor" stroke-width="1.1"/>
+            <text class="svg-label" x="95" y="60" text-anchor="middle" style="font-weight:600">Staff request</text>
+            <text class="svg-label" x="95" y="78" text-anchor="middle" opacity=".75">manual, always</text>
+          </g>
+          <g color="var(--absent)">
+            <rect x="20" y="104" width="150" height="52" rx="4" fill="var(--absent-bg)" stroke="currentColor" stroke-width="1.1" stroke-dasharray="4 3"/>
+            <text class="svg-label" x="95" y="126" text-anchor="middle" style="font-weight:600">No auto-fire</text>
+            <text class="svg-label" x="95" y="144" text-anchor="middle" opacity=".75">nothing is scheduled</text>
+          </g>
+
+          <!-- Occasion selection -->
+          <text class="svg-band" x="215" y="26">OCCASION (5)</text>
+          <g color="var(--planned)">
+            <rect x="215" y="38" width="210" height="196" rx="5" fill="var(--planned-bg)" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+            <text class="svg-label" x="232" y="62">Welcome &amp; onboarding</text>
+            <text class="svg-label" x="232" y="88">Kickoff confirmation</text>
+            <text class="svg-label" x="232" y="114">Progress check-in</text>
+            <text class="svg-label" x="232" y="140">Concern escalation <tspan opacity=".7">&rarr; staff</tspan></text>
+            <text class="svg-label" x="232" y="166">Completion &amp; impact</text>
+            <text class="svg-label" x="232" y="200" opacity=".75">Context assembled from</text>
+            <text class="svg-label" x="232" y="218" opacity=".75">the engagement record</text>
+          </g>
+
+          <!-- Draft -->
+          <text class="svg-band" x="470" y="26">DRAFT</text>
+          <g color="var(--planned)">
+            <rect x="470" y="38" width="180" height="70" rx="4" fill="var(--planned-bg)" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+            <text class="svg-label" x="560" y="66" text-anchor="middle" style="font-weight:600">Model-backed draft</text>
+            <text class="svg-label" x="560" y="86" text-anchor="middle" opacity=".75">&Delta;10 &mdash; on branch</text>
+          </g>
+
+          <!-- Approval gate -->
+          <text class="svg-band" x="470" y="146">GATE</text>
+          <g color="var(--partial)">
+            <rect x="470" y="158" width="180" height="76" rx="4" fill="var(--partial-bg)" stroke="currentColor" stroke-width="1.3"/>
+            <text class="svg-label" x="560" y="184" text-anchor="middle" style="font-weight:600">L3 &mdash; staff approves</text>
+            <text class="svg-label" x="560" y="204" text-anchor="middle" opacity=".8">explicit, per message</text>
+            <text class="svg-label" x="560" y="222" text-anchor="middle" opacity=".8">no approval &rarr; no send</text>
+          </g>
+
+          <!-- Send path -->
+          <text class="svg-band" x="700" y="26">SEND PATH</text>
+          <g color="var(--absent)">
+            <rect x="700" y="38" width="220" height="196" rx="5" fill="var(--absent-bg)" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+            <text class="svg-label" x="810" y="66" text-anchor="middle" style="font-weight:600">GAP &mdash; not built</text>
+            <text class="svg-label" x="810" y="94" text-anchor="middle" opacity=".8">render &middot; deliver &middot; retry</text>
+            <text class="svg-label" x="810" y="114" text-anchor="middle" opacity=".8">provider adapters</text>
+            <text class="svg-label" x="810" y="146" text-anchor="middle" style="font-weight:600">Tier unresolved</text>
+            <text class="svg-label" x="810" y="166" text-anchor="middle" opacity=".8">PRD says L4 &mdash; a second</text>
+            <text class="svg-label" x="810" y="184" text-anchor="middle" opacity=".8">reviewer, not just staff</text>
+            <text class="svg-label" x="810" y="212" text-anchor="middle" opacity=".75">deterministic execution</text>
+          </g>
+
+          <!-- Arrows -->
+          <g color="var(--ink-soft)">
+            <path d="M 170 64 L 215 90" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar-envoy)"/>
+            <path d="M 425 110 L 470 73" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#ar-envoy)"/>
+            <path d="M 560 108 L 560 158" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#ar-envoy)"/>
+          </g>
+          <g color="var(--absent)">
+            <path d="M 650 196 L 700 150" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ar-envoy)"/>
+          </g>
+
+          <!-- Note -->
+          <g color="var(--ink-faint)">
+            <rect x="20" y="256" width="900" height="52" rx="5" fill="var(--surface)" stroke="currentColor" stroke-width="1.1" stroke-dasharray="3 3"/>
+            <text class="svg-label" x="470" y="278" text-anchor="middle" style="font-weight:600">Staff-initiated, chosen over auto-send and auto-draft.</text>
+            <text class="svg-label" x="470" y="296" text-anchor="middle" opacity=".75">A partner-facing message from a volunteer program has reputational stakes that exceed the cost of a manual trigger.</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>
+        <b>The gate is the product.</b> Envoy&rsquo;s judgment is which occasion applies and what
+        the message should say; the approval step is what makes that judgment safe to ship. The
+        send path stays a gap deliberately &mdash; until its tier is resolved, nothing Envoy
+        writes can reach a partner.
+      </figcaption>
+    </figure>
+
     <div class="callout warn" style="margin-top:24px;">
       <p>
         <b>L4 tension is flagged.</b> The PRD puts partner-facing communications at L4 (its
@@ -2159,7 +2250,7 @@ tr[id]{scroll-margin-top:92px;}
       <table>
         <thead><tr><th>Aspect</th><th>Detail</th><th>State</th></tr></thead>
         <tbody>
-          <tr><td>Drafting</td><td>Model-backed occasion drafts, context assembled from engagement record</td><td><span class="pill p-absent">GAP</span> <a class="dnum" href="#d10">&Delta;10</a></td></tr>
+          <tr><td>Drafting</td><td><code>src/agents/envoy/draft.ts</code> + <code>api/envoy-draft.ts</code></td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d10">&Delta;10</a></td></tr>
           <tr><td>Send path</td><td>Communications Service &mdash; templates, delivery, retry</td><td><span class="pill p-absent">GAP</span> <a class="dnum" href="#d10">&Delta;10</a></td></tr>
           <tr><td>HITL tier</td><td>L3 (drafting) / L4 (send, <b>unresolved</b>)</td><td><span class="pill p-absent">OPEN</span></td></tr>
         </tbody>
@@ -2284,8 +2375,8 @@ tr[id]{scroll-margin-top:92px;}
       <table>
         <thead><tr><th>Aspect</th><th>Detail</th><th>State</th></tr></thead>
         <tbody>
-          <tr><td>Readiness gate</td><td><code>assessChronicleReadiness()</code></td><td><span class="pill p-absent">GAP</span> <a class="dnum" href="#d11">&Delta;11</a></td></tr>
-          <tr><td>Model synthesis</td><td><code>api/chronicle-draft.ts</code></td><td><span class="pill p-absent">GAP</span> <a class="dnum" href="#d11">&Delta;11</a></td></tr>
+          <tr><td>Readiness gate</td><td><code>assessChronicleReadiness()</code> in <code>src/agents/chronicle/draft.ts</code></td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d11">&Delta;11</a></td></tr>
+          <tr><td>Model synthesis</td><td><code>api/chronicle-draft.ts</code></td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d11">&Delta;11</a></td></tr>
           <tr><td>Feedback edge</td><td>Chronicle &rarr; Scout</td><td><span class="pill p-absent">GAP</span> <a class="dnum" href="#d15">&Delta;15</a></td></tr>
         </tbody>
       </table>
@@ -2311,11 +2402,11 @@ tr[id]{scroll-margin-top:92px;}
       <table>
         <thead><tr><th>Module</th><th>Responsibility</th><th>State</th></tr></thead>
         <tbody>
-          <tr><td><code>src/model/gateway.ts</code></td><td>Model selection, fallback, retry, cost/latency capture</td><td><span class="pill p-planned">SPECIFIED</span> <a class="dnum" href="#d3">&Delta;3</a></td></tr>
-          <tr><td><code>src/model/errors.ts</code></td><td>Failure ladder &mdash; replaces per-route duplication</td><td><span class="pill p-planned">SPECIFIED</span> <a class="dnum" href="#d3">&Delta;3</a></td></tr>
-          <tr><td><code>src/guardrails/hitl.ts</code></td><td><code>deriveHitlTier()</code> &mdash; one switch, whole roster</td><td><span class="pill p-planned">SPECIFIED</span> <a class="dnum" href="#d5">&Delta;5</a></td></tr>
-          <tr><td><code>src/observability/recorder.ts</code></td><td>Writes <code>agent_runs</code> + <code>tool_calls</code></td><td><span class="pill p-planned">SPECIFIED</span> <a class="dnum" href="#d4">&Delta;4</a></td></tr>
-          <tr><td><code>src/schemas/</code></td><td>Versioned wire contracts crossing <code>/api</code></td><td><span class="pill p-absent">GAP</span> <a class="dnum" href="#d6">&Delta;6</a></td></tr>
+          <tr><td><code>src/model/gateway.ts</code></td><td>Model selection, fallback, retry, cost/latency capture</td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d3">&Delta;3</a></td></tr>
+          <tr><td><code>src/model/errors.ts</code></td><td>Failure ladder &mdash; replaces per-route duplication</td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d3">&Delta;3</a></td></tr>
+          <tr><td><code>src/guardrails/hitl.ts</code></td><td><code>deriveHitlTier()</code> &mdash; one switch, whole roster</td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d5">&Delta;5</a></td></tr>
+          <tr><td><code>src/observability/recorder.ts</code></td><td>Writes <code>agent_runs</code> (migration deferred)</td><td><span class="pill p-built">BUILT</span> <a class="dnum" href="#d4">&Delta;4</a></td></tr>
+          <tr><td><code>src/schemas/</code></td><td>Versioned wire contracts crossing <code>/api</code> (scout schema; others pending)</td><td><span class="pill p-partial">BUILT (partial)</span> <a class="dnum" href="#d6">&Delta;6</a></td></tr>
           <tr><td><code>src/evals/</code></td><td>Grading harness &mdash; heuristic + LLM-judge graders</td><td><span class="pill p-planned">SPECIFIED</span> <a class="dnum" href="#d12">&Delta;12</a></td></tr>
         </tbody>
       </table>
@@ -2788,6 +2879,12 @@ tr[id]{scroll-margin-top:92px;}
       itself. A &Delta; row that cannot be traced to a milestone is either mis-scoped or genuinely
       optional &mdash; both worth knowing before it becomes a ticket.
     </p>
+    <p class="plate-sub" style="margin-top:10px;">
+      <b>Agents land in engagement order:</b> Scout (M2) &rarr; Architect (M3) &rarr; Pulse + Envoy
+      (M4) &rarr; Chronicle (M5). That is the order a real engagement encounters them, and it is
+      also dependency order &mdash; Chronicle synthesizes what the earlier four produced, so it
+      cannot be proven before they run.
+    </p>
 
     <div class="table-scroll">
       <table>
@@ -2797,8 +2894,8 @@ tr[id]{scroll-margin-top:92px;}
           <tr><td><b>M1</b></td><td>Data layer</td><td>Deferred migrations applied (tenancy, telemetry, approvals, delivery, documents). Auth shell wired. <code>demoStore</code> retired &rarr; Supabase reads. <b>Unblocks everything downstream.</b></td><td>Karthik + Tony</td><td>WS2 + WS1</td></tr>
           <tr><td><b>M2</b></td><td>Scout end-to-end</td><td>SPA &rarr; <code>/api/route-intake</code> with fallback. Scout review queue. First eval suite green.</td><td>Ramsey + Tony</td><td>WS3 + WS1</td></tr>
           <tr><td><b>M3</b></td><td>Architect + Contract</td><td>Assessment, charter, plan, and in-app contract signing. One named partner completes intake &rarr; signed contract.</td><td>Ramsey + Tony</td><td>WS3 + WS1</td></tr>
-          <tr><td><b>M4</b></td><td>Live engagement</td><td>Lifecycle state machine, Pulse health, Envoy comms, Chronicle feedback loop, engagement dashboard. Staff sees portfolio health; a completed engagement produces a lesson.</td><td>Ramsey + Tony</td><td>WS3 + WS1</td></tr>
-          <tr><td><b>M5</b></td><td>Validation</td><td>Eval suites (Q1&ndash;Q2), adversarial testing (Q3), human acceptance (Q4), production monitoring (Q5). Proves the <code>src/</code> product works end-to-end.</td><td>Ramsey + Karthik &middot; Jian reviews</td><td>All</td></tr>
+          <tr><td><b>M4</b></td><td>Live engagement: Pulse + Envoy</td><td>Lifecycle state machine, Pulse health, Envoy comms, engagement dashboard. Staff sees portfolio health and can send a partner a drafted, approved message.</td><td>Ramsey + Tony</td><td>WS3 + WS1</td></tr>
+          <tr><td><b>M5</b></td><td>Chronicle + Validation</td><td>Chronicle feedback loop and <code>lessons</code> table close the engagement loop &mdash; a completed engagement produces a lesson. Then eval suites (Q1&ndash;Q2), adversarial testing (Q3), human acceptance (Q4), production monitoring (Q5).</td><td>Ramsey + Karthik &middot; Jian reviews</td><td>All</td></tr>
           <tr><td><b>M6</b></td><td>Extensions <span style="font-weight:400;color:var(--ink-faint);">(stretch)</span></td><td>Knowledge base, codemap indexer, MCP server, plugin registry, HubSpot CRM sync. Platform capabilities beyond the core product.</td><td>Ramsey + Karthik</td><td>WS3 + WS2</td></tr>
         </tbody>
       </table>
@@ -2810,6 +2907,15 @@ tr[id]{scroll-margin-top:92px;}
         WS3 = Ramsey (Agentic / Platform Engineering). Jian is tech lead &mdash; reviews
         and supports across all workstreams. M0 captures work already landed on
         <code>ramsey-refactor</code> (not yet merged to <code>main</code>).
+      </p>
+      <p>
+        <b>The database line.</b> Karthik owns the Supabase substrate &mdash; the deferred
+        migrations, tenancy and RLS, <code>demoStore</code> retirement, provenance columns,
+        and the HubSpot sync that writes through it. Ramsey owns the knowledge base
+        (<code>0008_knowledge.sql</code>, <code>src/knowledge/</code>,
+        <code>/api/knowledge-*</code>) even though it is also a migration: it is agent
+        retrieval infrastructure, and it depends on Karthik&rsquo;s tenancy work rather than
+        belonging to it.
       </p>
     </div>
   </section>
@@ -2842,7 +2948,7 @@ tr[id]{scroll-margin-top:92px;}
           <tr id="d8"><td class="dnum">D8</td><td>Move Architect to <code>src/agents/architect/</code></td><td><span class="pill p-built">ON BRANCH</span></td><td>&mdash;</td><td><a href="#c3-architect">C3.2 Architect</a></td></tr>
           <tr id="d9"><td class="dnum">D9</td><td>Contract &amp; Consent gate &mdash; server timestamp, immutable write</td><td><span class="pill p-planned">SPECIFIED</span></td><td>D3</td><td><a href="#c4-consent">C4.G Contract</a></td></tr>
           <tr id="d10"><td class="dnum">D10</td><td>Envoy agent &mdash; draft + delivery, <code>communications</code> table</td><td><span class="pill p-built">ON BRANCH</span></td><td>D3, D5</td><td><a href="#c3-envoy">C3.4 Envoy</a></td></tr>
-          <tr id="d11"><td class="dnum">D11</td><td>Chronicle agent &mdash; readiness gate + model synthesis + eval judge</td><td><span class="pill p-partial">ON BRANCH (partial)</span></td><td>D3, D4</td><td><a href="#c3-chronicle">C3.3 Chronicle</a></td></tr>
+          <tr id="d11"><td class="dnum">D11</td><td>Chronicle agent &mdash; readiness gate + model synthesis + eval judge</td><td><span class="pill p-built">ON BRANCH</span></td><td>D3, D4</td><td><a href="#c3-chronicle">C3.3 Chronicle</a></td></tr>
           <tr id="d12"><td class="dnum">D12</td><td>Eval harness &mdash; turn on <code>targets.yaml</code> thresholds, gate CI</td><td><span class="pill p-built">ON BRANCH</span></td><td>D1</td><td><a href="#platform-layer">C4.P Infra</a></td></tr>
           <tr id="d13"><td class="dnum">D13</td><td>Pulse agent &mdash; <code>computeEngagementHealth()</code></td><td><span class="pill p-built">ON BRANCH</span></td><td>&mdash;</td><td><a href="#c3-pulse">C3.3 Pulse</a></td></tr>
           <tr id="d14"><td class="dnum">D14</td><td>Scout meeting intelligence &mdash; transcript extraction</td><td><span class="pill p-planned">SPECIFIED</span></td><td>D1, D7</td><td><a href="#c3-scout">C3.1 Scout</a></td></tr>
@@ -2861,13 +2967,15 @@ tr[id]{scroll-margin-top:92px;}
           <tr id="d27"><td class="dnum">D27</td><td>In-app contract signature UI &mdash; charter preview + typed name</td><td><span class="pill p-absent">GAP</span></td><td>D9</td><td><a href="#c4-consent">C4.G Contract</a></td></tr>
           <tr id="d28"><td class="dnum">D28</td><td>Eval CI integration &mdash; <code>eval-heuristics</code>, <code>eval-judge</code></td><td><span class="pill p-absent">GAP</span></td><td>D12</td><td><a href="#platform-layer">C4.P Infra</a></td></tr>
           <tr id="d29"><td class="dnum">D29</td><td>Tenancy &mdash; <code>organizations</code> + <code>organization_members</code> + <code>organization_id</code> RLS rewrite</td><td><span class="pill p-partial">ON BRANCH (deferred)</span></td><td>D22</td><td><a href="#datamodel">D1 Data</a></td></tr>
-          <tr id="d30"><td class="dnum">D30</td><td>Codemap Indexer &mdash; GitHub Action cron, <code>code_symbols</code> + <code>code_edges</code> tables, service-role key</td><td><span class="pill p-planned">SPECIFIED</span></td><td>&mdash;</td><td><a href="#codemap">P.2 Codemap</a></td></tr>
+          <tr id="d30"><td class="dnum">D30</td><td>Codemap Indexer &mdash; GitHub Action cron, <code>code_symbols</code> + <code>code_edges</code> tables, service-role key</td><td><span class="pill p-planned">SPECIFIED</span></td><td>D37</td><td><a href="#codemap">P.2 Codemap</a></td></tr>
           <tr id="d31"><td class="dnum">D31</td><td>Architect HITL gate &mdash; charter + 90-day plan reach a partner without a named review gate</td><td><span class="pill p-absent">GAP</span></td><td>D5</td><td><a href="#c3-architect">C3.2 Architect</a></td></tr>
-          <tr id="d32"><td class="dnum">D32</td><td>Knowledge retrieval &mdash; <code>src/knowledge/retrieval.ts</code>, pgvector, <code>/api/knowledge-search</code></td><td><span class="pill p-planned">SPECIFIED</span></td><td>D30</td><td><a href="#knowledge-base">P.1 Knowledge</a></td></tr>
+          <tr id="d37"><td class="dnum">D37</td><td>Knowledge schema &mdash; <code>0008_knowledge.sql</code>: pgvector, <code>document_chunks</code>, <code>code_symbols</code>, <code>code_edges</code>, GIN + ivfflat, org-scoped RLS</td><td><span class="pill p-planned">SPECIFIED</span></td><td>D29</td><td><a href="#knowledge-base">P.1 Knowledge</a></td></tr>
+          <tr id="d32"><td class="dnum">D32</td><td>Knowledge retrieval &mdash; <code>src/knowledge/retrieval.ts</code>, pgvector, <code>/api/knowledge-search</code></td><td><span class="pill p-planned">SPECIFIED</span></td><td>D37</td><td><a href="#knowledge-base">P.1 Knowledge</a></td></tr>
           <tr id="d33"><td class="dnum">D33</td><td>Knowledge ingestion &mdash; <code>/api/knowledge-ingest</code>, Granola webhook, chunk + embed</td><td><span class="pill p-planned">SPECIFIED</span></td><td>D32</td><td><a href="#knowledge-base">P.1 Knowledge</a></td></tr>
           <tr id="d34"><td class="dnum">D34</td><td>MCP server &mdash; <code>/api/mcp</code>, read-only, Supabase Auth</td><td><span class="pill p-planned">SPECIFIED</span></td><td>D32</td><td><a href="#mcp-server">P.3 MCP</a></td></tr>
-          <tr id="d35"><td class="dnum">D35</td><td>HubSpot CRM sync &mdash; plugin registry entry, bidirectional, idempotent</td><td><span class="pill p-absent">GAP</span></td><td>D36</td><td><a href="#crm-integration">P.6 CRM</a></td></tr>
-          <tr id="d36"><td class="dnum">D36</td><td>Plugin registry &mdash; <code>src/plugins/</code>, registration contract, <code>tool_calls</code> audit</td><td><span class="pill p-absent">GAP</span></td><td>D4</td><td><a href="#plugin-registry">P.7 Registry</a></td></tr>
+          <tr id="d35"><td class="dnum">D35</td><td>HubSpot CRM sync &mdash; bidirectional, idempotent. Direct integration first; <a href="#d36">D36</a> generalizes it into the registry later, it is not a prerequisite</td><td><span class="pill p-absent">GAP</span></td><td>D29</td><td><a href="#crm-integration">P.6 CRM</a></td></tr>
+          <tr id="d36"><td class="dnum">D36</td><td>Plugin registry &mdash; <code>src/plugins/</code>, registration contract, <code>tool_calls</code> audit. Generalizes <a href="#d35">D35</a>; earns its abstraction at the second integration</td><td><span class="pill p-absent">GAP</span></td><td>D4, D35</td><td><a href="#plugin-registry">P.7 Registry</a></td></tr>
+          <tr id="d38"><td class="dnum">D38</td><td>Retrieval eval &mdash; recall@10 on a golden set, registered in <code>src/evals/registry.ts</code></td><td><span class="pill p-absent">GAP</span></td><td>D32, D12</td><td><a href="#knowledge-base">P.1 Knowledge</a></td></tr>
         </tbody>
       </table>
     </div>
@@ -2958,6 +3066,11 @@ tr[id]{scroll-margin-top:92px;}
         WS3 = <b>Ramsey</b> (Agentic / Platform Engineering) &middot;
         <b>Jian</b> = Tech Lead (review &amp; support)
       </p>
+      <p style="margin-top:8px;">
+        Karthik owns the Supabase substrate (I-1, I-2, I-13, I-14). Ramsey owns the knowledge
+        base (I-18, I-19) including its own migration &mdash; it depends on Karthik&rsquo;s
+        tenancy work without belonging to his batch.
+      </p>
     </div>
 
     <!-- ── M0 ── -->
@@ -2979,7 +3092,7 @@ tr[id]{scroll-margin-top:92px;}
           <tr><td><a href="#d12">D12</a></td><td>Eval harness &mdash; <code>src/evals/</code> with registry, graders, fixtures, <code>targets.yaml</code></td><td><span class="pill p-built">BUILT</span></td></tr>
           <tr><td><a href="#d13">D13</a></td><td>Pulse &mdash; <code>src/agents/pulse/health.ts</code> + <code>health.test.ts</code> + <code>api/health.ts</code></td><td><span class="pill p-built">BUILT</span></td></tr>
           <tr><td><a href="#d10">D10</a></td><td>Envoy &mdash; <code>src/agents/envoy/draft.ts</code> + <code>draft.test.ts</code> + <code>api/envoy-draft.ts</code></td><td><span class="pill p-built">BUILT</span></td></tr>
-          <tr><td><a href="#d11">D11</a></td><td>Chronicle &mdash; <code>src/agents/chronicle/draft.ts</code> + <code>draft.test.ts</code> + <code>api/chronicle-draft.ts</code></td><td><span class="pill p-partial">PARTIAL</span> (feedback loop + lessons table remain)</td></tr>
+          <tr><td><a href="#d11">D11</a></td><td>Chronicle &mdash; <code>src/agents/chronicle/draft.ts</code> + <code>draft.test.ts</code> + <code>api/chronicle-draft.ts</code></td><td><span class="pill p-built">BUILT</span></td></tr>
           <tr><td><a href="#d1">D1</a></td><td>Server boundary &mdash; <code>api/route-intake.ts</code>, <code>api/_env.ts</code>, <code>api/_http.ts</code></td><td><span class="pill p-built">BUILT</span></td></tr>
         </tbody>
       </table>
@@ -2994,7 +3107,7 @@ tr[id]{scroll-margin-top:92px;}
 
     <div class="table-scroll">
       <table>
-        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th></tr></thead>
+        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th><th>Status</th></tr></thead>
         <tbody>
           <tr>
             <td><b>I-1</b></td>
@@ -3004,25 +3117,25 @@ tr[id]{scroll-margin-top:92px;}
               D4/D5 table creation (code on branch, migrations deferred)<br>
               <code>0006_delivery.sql</code>, <code>0007_documents.sql</code>
             </td>
-            <td>Karthik</td><td>&mdash; (migrations written on branch)</td>
+            <td>Karthik</td><td>&mdash; (migrations written on branch)</td><td><span class="pill p-built">READY</span></td>
           </tr>
           <tr>
             <td><b>I-2</b></td>
             <td><b>Retire <code>demoStore</code> &mdash; Supabase reads on all screens</b></td>
             <td><a href="#d26">D26</a> <code>demoStore</code> &rarr; Supabase retarget per screen</td>
-            <td>Karthik</td><td>I-1</td>
+            <td>Karthik</td><td>I-1</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-3</b></td>
             <td><b>Auth shell + navigation</b></td>
             <td>Supabase Auth UI, role-aware routing, session management</td>
-            <td>Tony</td><td>I-1</td>
+            <td>Tony</td><td>I-1</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-4</b></td>
             <td><b>Dashboard layout</b></td>
             <td>Portfolio overview, engagement cards, staff vs partner views</td>
-            <td>Tony</td><td>I-3</td>
+            <td>Tony</td><td>I-3</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
         </tbody>
       </table>
@@ -3033,7 +3146,7 @@ tr[id]{scroll-margin-top:92px;}
 
     <div class="table-scroll">
       <table>
-        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th></tr></thead>
+        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th><th>Status</th></tr></thead>
         <tbody>
           <tr>
             <td><b>I-5</b></td>
@@ -3042,13 +3155,13 @@ tr[id]{scroll-margin-top:92px;}
               SPA calls <code>api/route-intake</code> (exists) with error boundary<br>
               Deterministic fallback when <code>/api</code> unreachable
             </td>
-            <td>Ramsey</td><td>I-1 (D1,D3,D7 on branch)</td>
+            <td>Ramsey</td><td>I-1 (D1,D3,D7 on branch)</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-6</b></td>
             <td><b>Scout review queue UI</b></td>
             <td>Intake list, confidence display, approve/override controls</td>
-            <td>Tony</td><td>I-3, I-5</td>
+            <td>Tony</td><td>I-3, I-5</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
         </tbody>
       </table>
@@ -3059,7 +3172,7 @@ tr[id]{scroll-margin-top:92px;}
 
     <div class="table-scroll">
       <table>
-        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th></tr></thead>
+        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th><th>Status</th></tr></thead>
         <tbody>
           <tr>
             <td><b>I-7</b></td>
@@ -3068,19 +3181,19 @@ tr[id]{scroll-margin-top:92px;}
               <a href="#d2">D2</a> SPA calls <code>api/architect-assess</code> (endpoint on branch)<br>
               <a href="#d31">D31</a> Architect HITL gate &mdash; charter + plan review step
             </td>
-            <td>Ramsey</td><td>I-5 (D8 on branch)</td>
+            <td>Ramsey</td><td>I-5 (D8 on branch)</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-8</b></td>
             <td><b>Scout meeting intelligence &mdash; transcript extraction</b></td>
             <td><a href="#d14">D14</a> <code>api/meeting-extract</code>, decisions + action items</td>
-            <td>Ramsey</td><td>I-5</td>
+            <td>Ramsey</td><td>I-5</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-9</b></td>
             <td><b>Contract &amp; Consent gate &mdash; server API</b></td>
             <td><a href="#d9">D9</a> Server timestamp, immutable write, <code>api/contract-sign</code></td>
-            <td>Ramsey</td><td>I-7</td>
+            <td>Ramsey</td><td>I-7</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-10</b></td>
@@ -3089,22 +3202,23 @@ tr[id]{scroll-margin-top:92px;}
               CSA form, maturity radar, charter + plan preview<br>
               <a href="#d27">D27</a> In-app signature &mdash; charter preview + typed name
             </td>
-            <td>Tony</td><td>I-7, I-9</td>
+            <td>Tony</td><td>I-7, I-9</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
         </tbody>
       </table>
     </div>
 
     <!-- ── M4 ── -->
-    <h3 style="margin-top:32px;">M4 &mdash; Live engagement <span style="font-weight:400;color:var(--ink-faint);">(WS3 + WS1 &middot; Ramsey + Tony)</span></h3>
+    <h3 style="margin-top:32px;">M4 &mdash; Live engagement: Pulse + Envoy <span style="font-weight:400;color:var(--ink-faint);">(WS3 + WS1 &middot; Ramsey + Tony)</span></h3>
     <p class="plate-sub" style="margin-bottom:12px;">
-      All <code>src/</code> product code: lifecycle, Pulse, Envoy, Chronicle completion, engagement UI.
-      Proves the full engagement loop from intake through lessons learned.
+      Lifecycle, Pulse, Envoy, and the engagement UI &mdash; the running engagement, once Scout
+      and Architect have created it. Chronicle closes the loop in M5, after the migrations its
+      <code>lessons</code> table needs have landed.
     </p>
 
     <div class="table-scroll">
       <table>
-        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th></tr></thead>
+        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th><th>Status</th></tr></thead>
         <tbody>
           <tr>
             <td><b>I-11</b></td>
@@ -3114,7 +3228,7 @@ tr[id]{scroll-margin-top:92px;}
               <a href="#d16">D16</a> <code>engagement_events</code> producer<br>
               <a href="#d22">D22</a> Close partner self-transition hole
             </td>
-            <td>Ramsey</td><td>I-5</td>
+            <td>Ramsey</td><td>I-5</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-12</b></td>
@@ -3123,32 +3237,58 @@ tr[id]{scroll-margin-top:92px;}
               <a href="#d13">D13</a> Pulse health endpoint &rarr; dashboard (agent + API on branch)<br>
               <a href="#d10">D10</a> Envoy draft endpoint &rarr; comms UI (agent + API on branch)
             </td>
-            <td>Ramsey</td><td>I-11 (Pulse needs events)</td>
+            <td>Ramsey</td><td>I-11 (Pulse needs events)</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-13</b></td>
             <td><b>Provenance columns + audit chain</b></td>
             <td><a href="#d20">D20</a> Provenance columns + run&rarr;approval&rarr;transition chain</td>
-            <td>Karthik</td><td>I-11</td>
+            <td>Karthik</td><td>I-11</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-15</b></td>
             <td><b>Engagement detail + health dashboard UI</b></td>
             <td>Timeline, Pulse health reasons, task view</td>
-            <td>Tony</td><td>I-12</td>
+            <td>Tony</td><td>I-12</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-16</b></td>
             <td><b>AI provenance indicators</b></td>
             <td>PRD &sect;4.2 &mdash; visual marker on every model-generated field</td>
-            <td>Tony</td><td>I-13</td>
+            <td>Tony</td><td>I-13</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-14</b></td>
             <td><b>HubSpot CRM sync</b></td>
-            <td><a href="#d35">D35</a> HubSpot sync &mdash; bidirectional, idempotent</td>
-            <td>Karthik</td><td>I-1</td>
+            <td><a href="#d35">D35</a> HubSpot sync &mdash; bidirectional, idempotent. Direct integration; the plugin registry (<a href="#d36">D36</a>, I-24) generalizes it later and does not gate it</td>
+            <td>Karthik</td><td>I-1</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── M5 ── -->
+    <h3 style="margin-top:32px;">M5 &mdash; Chronicle + Validation <span style="font-weight:400;color:var(--ink-faint);">(All &middot; Jian reviews)</span></h3>
+    <p class="plate-sub" style="margin-bottom:12px;">
+      Chronicle closes the loop, then the whole <code>src/</code> product is proven. Eval suites,
+      adversarial testing, human acceptance.
+    </p>
+
+    <div class="callout" style="margin-top:12px;margin-bottom:16px;">
+      <p>
+        <b>Chronicle lands last by dependency, not by priority.</b> The agent order is
+        Scout (M2) &rarr; Architect (M3) &rarr; Envoy (M4) &rarr; Chronicle (M5). Chronicle&rsquo;s
+        remaining work is <a href="#d21">&Delta;21</a>, a <code>lessons</code> table with
+        prediction/outcome &mdash; it cannot be built while migrations are deferred, and
+        <a href="#d15">&Delta;15</a> feeds Scout from lessons that do not exist yet. The
+        drafting half (<a href="#d11">&Delta;11</a>) is already on branch.
+      </p>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th><th>Status</th></tr></thead>
+        <tbody>
           <tr>
             <td><b>I-17</b></td>
             <td><b>Chronicle &mdash; feedback loop + learning artifact</b></td>
@@ -3156,28 +3296,14 @@ tr[id]{scroll-margin-top:92px;}
               <a href="#d15">D15</a> Chronicle &rarr; Scout feedback loop<br>
               <a href="#d21">D21</a> Learning artifact &mdash; <code>lessons</code> table
             </td>
-            <td>Ramsey</td><td>I-12 (D11 partial on branch)</td>
+            <td>Ramsey</td><td>I-11 (needs events + migrations)</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-20</b></td>
             <td><b>Chronicle draft review UI</b></td>
             <td>Impact memo + case study with approve/edit/reject</td>
-            <td>Tony</td><td>I-17</td>
+            <td>Tony</td><td>I-17</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- ── M5 ── -->
-    <h3 style="margin-top:32px;">M5 &mdash; Validation <span style="font-weight:400;color:var(--ink-faint);">(All &middot; Jian reviews)</span></h3>
-    <p class="plate-sub" style="margin-bottom:12px;">
-      Proves the <code>src/</code> product works. Eval suites, adversarial testing, human acceptance.
-    </p>
-
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th></tr></thead>
-        <tbody>
           <tr>
             <td><b>I-21</b></td>
             <td><b>Eval suites &mdash; golden sets + CI gates</b></td>
@@ -3185,21 +3311,22 @@ tr[id]{scroll-margin-top:92px;}
               <a href="#d23">D23</a> Scout eval &mdash; incl. composite boundary cases<br>
               <a href="#d24">D24</a> Architect eval &mdash; scoring edge cases + charter gen<br>
               <a href="#d25">D25</a> Chronicle eval &mdash; readiness fixtures, three judge dims<br>
-              <a href="#d28">D28</a> Eval CI integration &mdash; <code>eval-heuristics</code>, <code>eval-judge</code>
+              <a href="#d28">D28</a> Eval CI integration &mdash; <code>eval-heuristics</code>, <code>eval-judge</code><br>
+              <a href="#d38">D38</a> Retrieval eval &mdash; recall@10 <span style="color:var(--ink-faint);">(only if I-18 lands)</span>
             </td>
-            <td>Ramsey</td><td>I-5, I-7, I-17 (D12 harness on branch)</td>
+            <td>Ramsey</td><td>I-5, I-7, I-17 (D12 harness on branch)</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-22</b></td>
             <td><b>Adversarial &amp; safety testing (Q3)</b></td>
             <td>PRD &sect;15 Q3 &mdash; prompt injection, tool abuse, data leakage</td>
-            <td>Karthik</td><td>I-21</td>
+            <td>Karthik</td><td>I-21</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-23</b></td>
             <td><b>Human acceptance + production monitoring (Q4&ndash;Q5)</b></td>
             <td>PRD &sect;15 Q4 &mdash; pilot user acceptance<br>PRD &sect;15 Q5 &mdash; drift, errors, latency, cost, override rate</td>
-            <td>Tony (Q4) + Ramsey (Q5)</td><td>I-21, I-22</td>
+            <td>Tony (Q4) + Ramsey (Q5)</td><td>I-21, I-22</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
         </tbody>
       </table>
@@ -3214,22 +3341,24 @@ tr[id]{scroll-margin-top:92px;}
 
     <div class="table-scroll">
       <table>
-        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th></tr></thead>
+        <thead><tr><th>#</th><th>Issue title</th><th>Sub-tasks (&Delta;)</th><th>Owner</th><th>Blocked by</th><th>Status</th></tr></thead>
         <tbody>
           <tr>
             <td><b>I-24</b></td>
             <td><b>Plugin registry</b></td>
             <td><a href="#d36">D36</a> <code>src/plugins/</code>, registration contract, <code>tool_calls</code> audit</td>
-            <td>Ramsey</td><td>I-14</td>
+            <td>Ramsey</td><td>I-14</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-18</b></td>
-            <td><b>Knowledge base &mdash; retrieval + ingestion</b></td>
+            <td><b>Knowledge base &mdash; schema + retrieval + ingestion</b></td>
             <td>
+              <a href="#d37">D37</a> <code>0008_knowledge.sql</code> &mdash; pgvector, chunks, symbols, edges, RLS<br>
               <a href="#d32">D32</a> <code>src/knowledge/retrieval.ts</code>, pgvector, <code>/api/knowledge-search</code><br>
-              <a href="#d33">D33</a> <code>/api/knowledge-ingest</code>, Granola webhook, chunk + embed
+              <a href="#d33">D33</a> <code>/api/knowledge-ingest</code>, Granola webhook, chunk + embed<br>
+              <a href="#d38">D38</a> Retrieval eval &mdash; recall@10 on a golden set
             </td>
-            <td>Ramsey</td><td>&mdash;</td>
+            <td>Ramsey</td><td>I-1 (tenancy/RLS in place; <code>0008</code> is Ramsey&rsquo;s, not Karthik&rsquo;s batch)</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
           <tr>
             <td><b>I-19</b></td>
@@ -3238,7 +3367,7 @@ tr[id]{scroll-margin-top:92px;}
               <a href="#d30">D30</a> GitHub Action cron, <code>code_symbols</code> + <code>code_edges</code><br>
               <a href="#d34">D34</a> <code>/api/mcp</code> &mdash; read-only, Supabase Auth
             </td>
-            <td>Ramsey</td><td>&mdash;</td>
+            <td>Ramsey</td><td>I-18 (D37 schema, D32 retrieval core)</td><td><span class="pill p-absent">BLOCKED</span></td>
           </tr>
         </tbody>
       </table>
@@ -3248,8 +3377,9 @@ tr[id]{scroll-margin-top:92px;}
       <p>
         <b>21 issues across M1&ndash;M5 (core product), 3 in M6 (extensions/stretch).</b>
         M0 is the <code>ramsey-refactor</code> PR itself (12 &Delta; items already built).
-        M1&ndash;M4 build the <code>src/</code> product; M5 validates it; M6 is platform
-        infrastructure beyond the core. <code>I-</code> numbers are draft identifiers &mdash;
+        M1&ndash;M4 build the <code>src/</code> product through Envoy; M5 completes Chronicle
+        and validates the whole; M6 is platform infrastructure beyond the core.
+        <code>I-</code> numbers are draft identifiers &mdash;
         GitHub issue numbers replace them on filing.
       </p>
     </div>
@@ -3283,7 +3413,7 @@ tr[id]{scroll-margin-top:92px;}
     contract: 'overview',
     'lifecycle-overview': 'overview'
   };
-  for (var i = 1; i <= 36; i++) TAB_OF['d' + i] = 'roadmap';
+  for (var i = 1; i <= 38; i++) TAB_OF['d' + i] = 'roadmap';
 
   var tabs = document.querySelectorAll('.tabs a[data-tab]');
   var panels = document.querySelectorAll('.tab-panel');

@@ -34,7 +34,7 @@ One adapter: `@ai-sdk/google` (`google(modelId)`) backed by `GOOGLE_GENERATIVE_A
 - **Data:** No direct Supabase access. Telemetry delegated to `recorder.ts`. `agent_runs` and `tool_calls` (`_deferred/0004_telemetry.sql`).
 
 ## Delta rows
-Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
+Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbers.
 
 - **D3** — model gateway: `src/model/gateway.ts`, failure ladder, provider abstraction — SPECIFIED
 

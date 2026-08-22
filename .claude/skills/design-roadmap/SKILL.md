@@ -110,7 +110,7 @@ title — a fabricated due date is worse than none, because it reads as a commit
 `docs/<project>-system-design.html`. This tab owns:
 
 - **Milestones table** — M0–MN with name, "what it proves", lead, workstream
-- **Delta table** — the full build queue from `.claude/specs/delta.md`
+- **Delta table** — the full build queue from `.claude/specs/roadmap.md`
 - **Decision register** — unratified decisions with blockers
 - **PRD coverage table** — every PRD § with coverage state
 - **Issue backlog section** — the draft issues grouped by milestone, with ownership

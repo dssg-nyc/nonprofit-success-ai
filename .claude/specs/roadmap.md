@@ -35,19 +35,19 @@ most complete of the two namespaces and already carried dependency order.
 
 | # | Item | State | Needs first | Plate | Spec |
 |---|------|-------|-------------|-------|------|
-| D1 | Server boundary — `api/route-intake.ts` with model key in server env | SPECIFIED | D3 | C3.1 | `platform/agents/scout.md` |
-| D2 | Architect end-to-end — `api/` endpoint, model enrichment | SPECIFIED | D1, D3 | C3.2 | `platform/agents/architect.md` |
-| D3 | Model gateway — `src/model/gateway.ts`, failure ladder, provider abstraction | SPECIFIED | — | C4.P | `platform/infra/model-gateway.md` |
-| D4 | Observability — `agent_runs` + `tool_calls` tables + recorder | SPECIFIED | D3 | C4.P | `platform/infra/observability.md` |
-| D5 | Approval spine — `approvals` table + `deriveHitlTier()` + approval queue | SPECIFIED | D3 | C4.P | `design-system.md` §2 |
-| D6 | Wire contracts — `src/schemas/` with versioned types crossing `/api` | GAP | D1 | C4.P | `design-system.md` §2 |
-| D7 | Move Scout to `src/agents/scout/` + first test suite | SPECIFIED | — | C3.1 | `platform/agents/scout.md` |
-| D8 | Move Architect to `src/agents/architect/` | SPECIFIED | — | C3.2 | `platform/agents/architect.md` |
+| D1 | Server boundary — `api/route-intake.ts` with model key in server env | **BUILT** 2026-08-22 | D3 | C3.1 | `platform/agents/scout.md` |
+| D2 | Architect end-to-end — `api/architect-plan.ts` endpoint, model enrichment | SPECIFIED | D1, D3 | C3.2 | `platform/agents/architect.md` |
+| D3 | Model gateway — `src/model/gateway.ts`, failure ladder, provider abstraction | **BUILT** 2026-08-22 | — | C4.P | `platform/infra/model-gateway.md` |
+| D4 | Observability — `agent_runs` recorder + `_deferred/0004_telemetry.sql` | **BUILT** 2026-08-22 (migration deferred) | D3 | C4.P | `platform/infra/observability.md` |
+| D5 | Approval spine — `deriveHitlTier()` + `_deferred/0005_approval_spine.sql`; approval queue UI pending | **BUILT** 2026-08-22 (migration deferred) | D3 | C4.P | `design-system.md` §2 |
+| D6 | Wire contracts — `src/schemas/index.ts` (scout schema; other agents pending) | **BUILT** 2026-08-22 (partial) | D1 | C4.P | `design-system.md` §2 |
+| D7 | Move Scout to `src/agents/scout/` + first test suite | **BUILT** 2026-08-22 | — | C3.1 | `platform/agents/scout.md` |
+| D8 | Move Architect to `src/agents/architect/` + tests | **BUILT** 2026-08-22 | — | C3.2 | `platform/agents/architect.md` |
 | D9 | Contract & Consent gate — server timestamp, immutable write | SPECIFIED | D3 | C4.3 | `platform/services/contract-consent.md` |
-| D10 | Envoy agent — draft + delivery, `communications` table | GAP | D3, D5 | C4.2 | `platform/agents/envoy.md` |
-| D11 | Chronicle agent — readiness gate + model synthesis + eval judge | GAP | D3, D4 | C3.3 | `platform/agents/chronicle.md` |
-| D12 | Eval harness — turn on `targets.yaml` thresholds, gate CI | SPECIFIED | D1 | C4.P | `platform/infra/eval-harness.md` |
-| D13 | Pulse agent — `computeEngagementHealth()` | SPECIFIED | — | C4.1 | `platform/agents/pulse.md` |
+| D10 | Envoy agent — `src/agents/envoy/draft.ts` + `api/envoy-draft.ts` + tests | **BUILT** 2026-08-22 | D3, D5 | C4.2 | `platform/agents/envoy.md` |
+| D11 | Chronicle agent — readiness gate + model synthesis + `api/chronicle-draft.ts` + tests | **BUILT** 2026-08-22 | D3, D4 | C3.3 | `platform/agents/chronicle.md` |
+| D12 | Eval harness — graders + pipeline structure built; `targets.yaml` thresholds + CI gate pending | SPECIFIED (partial) | D1 | C4.P | `platform/infra/eval-harness.md` |
+| D13 | Pulse agent — `computePulseSignal()` + `src/agents/pulse/` + tests | **BUILT** 2026-08-22 | — | C4.1 | `platform/agents/pulse.md` |
 | D14 | Scout meeting intelligence — transcript extraction | SPECIFIED | D1, D7 | C3.1 | `platform/agents/scout.md` §2 |
 | D15 | Chronicle → Scout feedback loop | GAP | D11 | C3.3 | `platform/agents/chronicle.md` |
 | D16 | `engagement_events` producer — nothing writes events yet | GAP | D19 | D1 | `crm/lifecycle.md` §2 |
@@ -63,10 +63,28 @@ most complete of the two namespaces and already carried dependency order.
 | D26 | `demoStore` → Supabase retarget — intake form, review queue, CSA form, engagement detail | SPECIFIED | — | C4.P | `platform/agents/scout.md`, `architect.md` |
 | D27 | In-app contract signature UI — charter preview + typed-name form | GAP | D9 | C4.3 | `platform/services/contract-consent.md` |
 | D28 | Eval CI integration — `eval-heuristics` job in `ci.yml`, `eval-judge` in `cd.yml` | GAP | D12 | C4.P | `platform/infra/eval-harness.md` |
+| D29 | Tenancy — `organizations` + `organization_members` + `organization_id` RLS rewrite | SPECIFIED (deferred) | D22 | D1 | `crm/data-model.md` |
+| D30 | Codemap Indexer — GitHub Action cron, `code_symbols` + `code_edges` tables, service-role key | SPECIFIED | D37 | P.2 | `platform/knowledge.md` |
+| D31 | Architect HITL gate — charter + 90-day plan currently reach a partner without a named review gate | GAP | D5 | C3.2 | `platform/agents/architect.md` |
+| D32 | Knowledge retrieval — `src/knowledge/retrieval.ts`, pgvector, `/api/knowledge-search` | SPECIFIED | D37 | P.1 | `platform/knowledge.md` |
+| D33 | Knowledge ingestion — `/api/knowledge-ingest`, Granola webhook, chunk + embed | SPECIFIED | D32 | P.1 | `platform/knowledge.md` |
+| D34 | MCP server — `/api/mcp`, read-only, Supabase Auth | SPECIFIED | D32 | P.3 | `platform/knowledge.md` |
+| D35 | HubSpot CRM sync — bidirectional, idempotent | GAP | D29 | P.6 | `crm/hubspot-mcp.md` |
+| D36 | Plugin registry — `src/plugins/`, registration contract, `tool_calls` audit | GAP | D4, D35 | P.7 | `platform/knowledge.md` |
+| D37 | Knowledge schema — `0008_knowledge.sql`: pgvector, `document_chunks`, `code_symbols`, `code_edges`, GIN + ivfflat, org-scoped RLS | SPECIFIED | D29, D40 | P.1 | `platform/knowledge.md` |
+| D38 | Retrieval eval — recall@10 on a golden set, registered in `src/evals/registry.ts` | GAP | D32, D12 | P.1 | `platform/knowledge.md` |
+| D39 | Redaction log — per-chunk rule id, span offsets, timestamp; makes ingestion-time redaction auditable | GAP | D33 | P.1 | `platform/knowledge.md` §5 |
+| D40 | Code-embedding storage decision — symbol vectors in `document_chunks` vs beside `code_symbols`; one retrieval path or two | OPEN — decide, don't build | — | P.1 | `platform/knowledge.md` §8 |
+| D41 | Degraded-arm retrieval eval — gate recall@10 with FTS unavailable, not only nominal | GAP | D38 | P.1 | `platform/knowledge.md` §7 |
 
 **D17 and D18 are resolved, not built.** They were decisions, and `crm/lifecycle.md`
 answered them. The *work* they implied is D19. They keep their numbers because prior
 documents cite them.
+
+**D40 is a decision, not a build — and it blocks D37.** It sits in the D range rather
+than C because it shapes a platform migration, not the CRM data model. Deciding it after
+`0008_knowledge.sql` ships means a second migration; §4's "one retrieval core" claim
+depends on the answer. Added 2026-08-22 from the semantica/librarian parity read.
 
 **D22 is a live authorization gap, not a future feature.** A partner org can currently
 write its own lifecycle state from the browser — marking itself `hackathon_ready` on day

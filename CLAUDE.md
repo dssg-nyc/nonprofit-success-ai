@@ -143,7 +143,7 @@ Repo-local (`.claude/specs/`):
 
 | Path | What it covers |
 |------|----------------|
-| `delta.md` | **The delta registry** — owns every `D{n}`/`C{n}`. Specs and the design record cite it; neither mints |
+| `roadmap.md` | **The delta registry** — owns every `D{n}`/`C{n}`. Specs and the design record cite it; neither mints |
 | `design-system.md` | Scope, direction decision, container model, execution semantics (§8) — the root doc |
 | `environments.md` | Deployment config (local / staging / prod) |
 | `design-scope.md` | Initiative framing — what we're building and why |

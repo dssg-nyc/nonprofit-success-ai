@@ -31,7 +31,7 @@ No DocuSign or external e-signature provider — the typed-name capture is the l
 - **Data:** `engagement_contracts` table (deferred `supabase/migrations/0005_contracts.sql`); `engagements` table (stage FK update); `architect_assessments` (charter source, read-only at signing time)
 
 ## Delta rows
-Cited from [`delta.md`](../../../delta.md) — this spec does not mint numbers.
+Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbers.
 
 - **D9** — Contract & Consent gate: `/api/contract-sign`, server timestamp, immutable write — GAP
 - **D27** — in-app signature UI: charter preview + typed-name form — GAP

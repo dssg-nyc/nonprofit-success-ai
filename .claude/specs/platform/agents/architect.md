@@ -159,7 +159,7 @@ gap, not fixed here (see §4 Open items).
 
 ## Delta rows
 
-Cited from [`delta.md`](../../delta.md) — this spec does not mint numbers.
+Cited from [`roadmap.md`](../../roadmap.md) — this spec does not mint numbers.
 
 - **D2** — Architect end-to-end: `/api/architect-assess`, model enrichment — SPECIFIED
 - **D8** — move Architect to `src/agents/architect/` — SPECIFIED
