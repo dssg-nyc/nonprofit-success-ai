@@ -1,0 +1,12 @@
+# Code owners are auto-requested as reviewers when a PR touches their paths.
+# Requests only fire for people with write access to this repo.
+# Handles must be exact — a misspelled handle is silently ignored by GitHub.
+
+# Default owners for everything
+*                       @ramseywise @jyr-ai @tonyamodeo @karthikChakravartula
+
+# Repo infrastructure — templates, CI/CD, dependency policy
+/.github/               @ramseywise @jyr-ai
+
+# Database schema and row-level security — a bad migration is hard to reverse
+/supabase/migrations/   @ramseywise @jyr-ai

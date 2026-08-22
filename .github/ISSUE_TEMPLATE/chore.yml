@@ -1,0 +1,57 @@
+name: 🧹 Chore
+description: Tooling, docs, CI, dependencies, or ledger upkeep
+labels: ["chore", "backlog"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues for this
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - tooling
+        - docs
+        - ci
+        - dependencies
+        - evals
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs doing
+    validations:
+      required: true
+
+  - type: textarea
+    id: done_when
+    attributes:
+      label: Done when
+      description: >
+        The stopping condition. Chores route to a plan with a scope boundary and a
+        done-when condition — chores without one expand until someone notices.
+      placeholder: "`npm run lint` passes on `src/lib/` with no eslint-disable comments remaining."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: routing
+    attributes:
+      label: Is the work mechanical?
+      description: >
+        Routes triage. "Mechanical" plans directly; "needs a decision" adds a research stage. Pick "unsure" freely — it is
+        a signal, not a failure, and triage will make the call.
+      options:
+        - Mechanical — the steps are obvious
+        - Needs a decision on how first
+        - Unsure
+    validations:
+      required: true

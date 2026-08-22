@@ -1,14 +1,7 @@
 import React, { useState } from 'react';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signInWithPopup, 
-  GoogleAuthProvider 
-} from 'firebase/auth';
-import { auth, db } from '../../lib/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../../lib/supabase';
 import { motion } from 'motion/react';
-import { Mail, Lock, LogIn, UserPlus, Globe, Eye } from 'lucide-react';
+import { Mail, Lock, Globe, Eye } from 'lucide-react';
 
 interface LoginProps {
   onDemoMode: () => void;
@@ -27,22 +20,16 @@ export default function Login({ onDemoMode }: LoginProps) {
     setLoading(true);
 
     try {
-      if (isRegistering) {
-        const { user } = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, 'users', user.uid), {
-          email: user.email,
-          role: 'client',
-          createdAt: serverTimestamp(),
-        });
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-    } catch (err: any) {
-      if (err.code === 'auth/operation-not-allowed') {
-        setError('Email/Password sign-in is disabled. Please use Google Login or Demo Mode.');
-      } else {
-        setError(err.message);
-      }
+      // No profile write here. The public.users row is created by the on_auth_user_created
+      // trigger (0008_user_provisioning.sql), so it cannot be skipped by a signup path that
+      // forgets it — which is exactly how the Google flow used to miss it.
+      const { error: authError } = isRegistering
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
+
+      if (authError) throw authError;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Sign-in failed.');
     } finally {
       setLoading(false);
     }
@@ -52,18 +39,28 @@ export default function Login({ onDemoMode }: LoginProps) {
     setError('');
     setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
+      // Redirect flow, not a popup: Supabase OAuth is redirect-based, and the destination
+      // must be on the project's allow-list (config.toml additional_redirect_urls locally;
+      // Authentication -> URL Configuration on a hosted project).
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin },
+      });
+      if (oauthError) throw oauthError;
+      // On success the browser navigates away, so `loading` is never cleared here.
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Google sign-in failed. It must be enabled in the Supabase project (Authentication -> Providers).',
+      );
       setLoading(false);
     }
   };
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)] p-4 bg-slate-50">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200"
@@ -81,15 +78,15 @@ export default function Login({ onDemoMode }: LoginProps) {
         </div>
 
         <div className="space-y-4">
-          <button 
+          <button
             onClick={handleGoogleLogin}
             className="w-full py-3 px-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 shadow-sm"
           >
             <Globe className="text-dssg-blue" size={18} />
             Continue with Google
           </button>
-          
-          <button 
+
+          <button
             onClick={onDemoMode}
             className="w-full py-3 px-4 bg-dssg-blue text-white rounded-xl font-bold hover:bg-dssg-blue-light transition-all flex items-center justify-center gap-3 shadow-lg shadow-blue-900/10"
           >
@@ -111,8 +108,8 @@ export default function Login({ onDemoMode }: LoginProps) {
               <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Email Address</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -126,8 +123,8 @@ export default function Login({ onDemoMode }: LoginProps) {
               <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -138,7 +135,7 @@ export default function Login({ onDemoMode }: LoginProps) {
             </div>
 
             {error && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="text-red-600 text-[11px] font-bold bg-red-50 p-4 rounded-xl border border-red-100 leading-relaxed"
@@ -147,8 +144,8 @@ export default function Login({ onDemoMode }: LoginProps) {
               </motion.div>
             )}
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="w-full py-4 bg-dssg-orange text-white rounded-xl font-bold shadow-lg shadow-orange-900/10 hover:bg-dssg-orange-light active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
@@ -162,7 +159,7 @@ export default function Login({ onDemoMode }: LoginProps) {
         </div>
 
         <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-          <button 
+          <button
             onClick={() => setIsRegistering(!isRegistering)}
             className="text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-blue-600 transition-colors"
           >

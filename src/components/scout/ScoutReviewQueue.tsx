@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
+import {
+  supabase, liveQuery, toColumns, handleSupabaseError, OperationType,
+} from '../../lib/supabase';
 import { ScoutIntake, ScoutBucket, SCOUT_BUCKETS } from '../../types';
-import { routeScoutIntake, getOnboardingKitName } from '../../lib/scoutRouting';
+import { routeScoutIntake, getOnboardingKitName } from '../../agents/scout/routing';
 import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -131,19 +132,36 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
       return;
     }
 
-    const unsubscribe = onSnapshot(collection(db, 'scoutIntakes'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ScoutIntake));
-      setIntakes(data);
-      setLoading(false);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'scoutIntakes');
-    });
+    // Both reads are admin-only at the database: scout_intakes_select_admin and the
+    // assessments policies check is_admin(). A non-admin reaching this route sees an empty
+    // queue rather than an error, which is the same outcome the Firestore rules produced.
+    const unsubscribe = liveQuery<ScoutIntake>(
+      'scout_intakes',
+      () => supabase.from('scout_intakes').select('*'),
+      (rows) => {
+        setIntakes(rows);
+        setLoading(false);
+      },
+      (err) => {
+        setLoading(false);
+        try {
+          handleSupabaseError(err, OperationType.LIST, 'scout_intakes');
+        } catch { /* logged */ }
+      },
+      ['submittedAt', 'reviewedAt'],
+    );
 
-    const unsubAssessments = onSnapshot(collection(db, 'architectAssessments'), (snapshot) => {
-      setAssessedIds(new Set(snapshot.docs.map(d => d.id)));
-    }, (err) => {
-      try { handleFirestoreError(err, OperationType.LIST, 'architectAssessments'); } catch { /* logged */ }
-    });
+    const unsubAssessments = liveQuery<{ id: string }>(
+      'architect_assessments',
+      // Only the id is needed — this drives an "assessed" badge, not a detail view.
+      () => supabase.from('architect_assessments').select('id'),
+      (rows) => setAssessedIds(new Set(rows.map(r => r.id))),
+      (err) => {
+        try {
+          handleSupabaseError(err, OperationType.LIST, 'architect_assessments');
+        } catch { /* logged */ }
+      },
+    );
 
     return () => { unsubscribe(); unsubAssessments(); };
   }, [isDemo]);
@@ -153,13 +171,21 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
     .sort((a, b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0));
 
   const applyDecision = async (intake: ScoutIntake, finalBucket: ScoutBucket, reviewAction: 'approved' | 'edited' | 'redirected', reviewNotes?: string) => {
+    const { data: { user } } = isDemo
+      ? { data: { user: null } }
+      : await supabase.auth.getUser();
+
     const patch = {
       reviewStatus: 'reviewed' as const,
       reviewAction,
       finalBucket,
       onboardingKit: getOnboardingKitName(finalBucket),
-      reviewedBy: isDemo ? DEMO_USER.uid : auth.currentUser?.uid,
-      reviewedByEmail: isDemo ? DEMO_USER.email : auth.currentUser?.email,
+      reviewedBy: isDemo ? DEMO_USER.uid : user?.id,
+      // `?? undefined` rather than the raw value: Supabase types email as `string | null`,
+      // while ScoutIntake declares `string | undefined`. Without this the assignment is a
+      // type error under strictNullChecks — the same mismatch flagged at ScoutReviewQueue
+      // :167 before the migration.
+      reviewedByEmail: isDemo ? DEMO_USER.email : user?.email ?? undefined,
       ...(reviewNotes ? { reviewNotes } : {}),
     };
 
@@ -172,9 +198,18 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
 
     setSaving(true);
     try {
-      await updateDoc(doc(db, 'scoutIntakes', intake.id), { ...patch, reviewedAt: serverTimestamp() });
+      // reviewed_at has no column default (0001_init.sql:218), so it is sent explicitly —
+      // unlike scout_intakes.submitted_at, which does default and is left to the server.
+      const { error } = await supabase
+        .from('scout_intakes')
+        .update(toColumns({ ...patch, reviewedAt: new Date().toISOString() }))
+        .eq('id', intake.id);
+
+      if (error) handleSupabaseError(error, OperationType.UPDATE, `scout_intakes/${intake.id}`);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `scoutIntakes/${intake.id}`);
+      try {
+        handleSupabaseError(err, OperationType.UPDATE, `scout_intakes/${intake.id}`);
+      } catch { /* logged */ }
     } finally {
       setSaving(false);
     }

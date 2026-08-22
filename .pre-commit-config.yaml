@@ -1,0 +1,55 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=10000"]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: detect-private-key
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.3
+    hooks:
+      - id: gitleaks
+        name: detect secrets (gitleaks)
+
+  - repo: local
+    hooks:
+      # eslint runs from the repo's own node_modules, not a pinned pre-commit rev:
+      # the config (eslint.config.mjs) and the plugins must be the same ones CI uses,
+      # and a second pinned copy would drift from package.json.
+      #
+      # No --fix. Autofix mid-commit rewrites staged files, so the diff reviewed is not
+      # the diff committed -- the same reason Makefile's `ship` uses lint-check.
+      - id: eslint
+        name: eslint (staged ts/tsx)
+        language: system
+        entry: npx eslint
+        files: \.(ts|tsx)$
+
+      - id: no-dotenv-staged
+        name: .env not staged
+        language: fail
+        entry: ".env file must not be committed -- only .env.example is tracked"
+        files: ^\.env$
+
+      # .env.example IS tracked and must stay placeholders-only. A real value pasted
+      # here reaches the remote like any other committed secret, and gitleaks only
+      # catches shapes it recognises -- a Supabase anon key is just a long JWT.
+      - id: no-vite-secret-prefix
+        name: no server-only key behind VITE_
+        language: pygrep
+        entry: "VITE_.*(SERVICE_ROLE|SECRET|PRIVATE_KEY|GEMINI_API_KEY)"
+        files: ^\.env\.example$
+
+      # .claude/docs/ is git-ignored globally (plans, research, archive). `git add -f`
+      # beats .gitignore silently, so this is the belt to that brace.
+      - id: no-claude-docs-staged
+        name: .claude/docs/ not staged
+        language: fail
+        entry: ".claude/docs/ is local-only -- shared docs belong under docs/"
+        files: ^\.claude/docs/
