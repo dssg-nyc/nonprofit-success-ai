@@ -15,9 +15,9 @@
   "dependencies": {
     "@ai-sdk/google": "^4.0.37",
     "@supabase/supabase-js": "^2.112.3",
-    "ai": "^7.0.56",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
+    "ai": "^7.0.56",
     "dotenv": "^17.2.3",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
@@ -28,13 +28,13 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@eslint/js": "^9.14.0",
+    "@eslint/js": "^10.0.0",
     "@types/node": "^22.14.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "autoprefixer": "^10.4.21",
-    "eslint": "^9.14.0",
-    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint": "^10.9.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.12.0",
     "supabase": "^2.111.0",
