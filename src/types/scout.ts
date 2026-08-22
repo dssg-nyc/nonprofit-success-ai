@@ -32,6 +32,28 @@ export type ScoutHitlTier = 'L2' | 'L3';
 export type ScoutReviewStatus = 'pending' | 'reviewed';
 export type ScoutReviewAction = 'approved' | 'edited' | 'redirected';
 
+export interface ScoutRoutingInput {
+  scale: string;
+  primary_need: PrimaryNeed;
+  primary_need_other?: string;
+  problem_description: string;
+  current_systems: string;
+  contact_name_role: string;
+  timeline: string;
+}
+
+export interface ScoutResult {
+  bucket: ScoutBucket | null;
+  confidence: ScoutConfidence;
+  rationale: string;
+  poc_score: 1 | 2 | 3;
+  clarity_score: 1 | 2 | 3;
+  foothold_score: 1 | 2 | 3;
+  composite_signal: ScoutCompositeSignal;
+  flags: string[];
+  hitlTier: ScoutHitlTier;
+}
+
 export interface ScoutIntake {
   id: string;
   // intake fields (Tally-equivalent, public write-once)

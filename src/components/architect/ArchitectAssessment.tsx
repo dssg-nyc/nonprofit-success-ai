@@ -7,8 +7,8 @@ import {
   ScoutIntake, ArchitectAssessment as ArchitectAssessmentDoc,
   CSA_OPTIONS, CSA_TOOL_OPTIONS, CsaTool, ScoutBucket,
 } from '../../types';
-import { scoreAssessment } from '../../lib/architectScoring';
-import { generateCharter, generateNinetyDayPlan } from '../../lib/architectPlan';
+import { scoreAssessment } from '../../agents/architect/scoring';
+import { generateCharter, generateNinetyDayPlan } from '../../agents/architect/plan';
 import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
 import { motion } from 'motion/react';
 import { DraftingCompass, ChevronLeft, ArrowRight } from 'lucide-react';

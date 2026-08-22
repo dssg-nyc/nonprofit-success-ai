@@ -32,6 +32,8 @@ export interface Engagement {
   id: string;
   businessId: string;
   ownerId: string;
+  organizationId?: string;
+  assessmentId?: string;
   stage: EngagementStage;
   status: EngagementStatus;
   notes?: string;

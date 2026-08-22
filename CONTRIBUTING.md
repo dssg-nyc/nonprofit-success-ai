@@ -76,7 +76,7 @@ useful information; a checked box that was not run costs a reviewer their aftern
 - **No secrets in client code.** Only `VITE_`-prefixed variables reach the browser, which
   means the prefix *is* the security boundary. Never add `VITE_` to a model API key or a
   Supabase service-role key — that publishes it to every visitor. Client-side config is
-  declared in `src/vite-env.d.ts`; everything in that interface is public by definition.
+  declared in `src/app/vite-env.d.ts`; everything in that interface is public by definition.
 - **Migrations are append-only.** Once a migration has been applied anywhere beyond your
   laptop, do not edit it — add a new one. Say in the PR whether it is reversible and what
   RLS policies changed.

@@ -7,8 +7,11 @@ coverage/
 .env*
 !.env.example
 
-#
+# local dev
 data/
+api/
+evals/
+
 
 # Written by `vercel link` / `vercel pull`. Holds orgId and projectId, and `vercel pull`
 # also writes fetched environment variables here — including secrets. Local only.

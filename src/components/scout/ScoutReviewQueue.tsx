@@ -4,7 +4,7 @@ import {
   supabase, liveQuery, toColumns, handleSupabaseError, OperationType,
 } from '../../lib/supabase';
 import { ScoutIntake, ScoutBucket, SCOUT_BUCKETS } from '../../types';
-import { routeScoutIntake, getOnboardingKitName } from '../../lib/scoutRouting';
+import { routeScoutIntake, getOnboardingKitName } from '../../agents/scout/routing';
 import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
 import { motion, AnimatePresence } from 'motion/react';
 import {

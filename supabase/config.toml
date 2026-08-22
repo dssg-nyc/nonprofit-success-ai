@@ -2,6 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
+
 project_id = "nonprofit-success-ai"
 
 # studio / storage / analytics are disabled locally (2026-08-21). Their containers failed
@@ -119,7 +120,7 @@ port = 54324
 # sender_name = "Admin"
 
 [storage]
-enabled = false
+enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 

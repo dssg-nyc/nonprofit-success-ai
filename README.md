@@ -18,7 +18,7 @@ Client organizations register their business/nonprofit profile, then move it thr
 
 ## Architecture
 
-### Routing & Pages (`src/App.tsx`)
+### Routing & Pages (`src/app/App.tsx`)
 
 `App.tsx` owns the top-level router, navbar, footer, and auth-state listener (`onAuthChange`). It also implements a client-side **Demo Mode** that fakes a signed-in user and routes all database reads/writes in child components to static mock data, so the product can be explored without a real account or live database writes.
 

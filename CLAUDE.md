@@ -32,7 +32,7 @@ until that audit is no longer needed. See `supabase/reference/README.md`.
 ## Conventions
 
 - **No secrets reach the client.** The `VITE_` prefix is the boundary — only prefixed vars
-  reach the browser, and everything in `src/vite-env.d.ts` is public by definition. Adding
+  reach the browser, and everything in `src/app/vite-env.d.ts` is public by definition. Adding
   `VITE_` to a model key or a Supabase service-role key publishes it. `vite.config.ts` must
   never `define:` an API key into the bundle (it inlined `GEMINI_API_KEY` until 2026-08-21;
   that block is gone and must not return). Model keys live in server-only env.
@@ -62,9 +62,10 @@ until that audit is no longer needed. See `supabase/reference/README.md`.
 
 ## Local layout
 
-**Target layout, not current.** Today `src/` is `app/`, `components/` (with `architect/`,
-`auth/`, `business/`, `dashboard/`, `scout/` subdirs), `lib/`, and a root `types.ts` —
-with `App.tsx`/`main.tsx`/`index.css` still at `src/` root. Each gap closes in its own
+**Target layout, partially reached.** Today `src/` is `app/` (holding `App.tsx`,
+`main.tsx`, `index.css`, `vite-env.d.ts`), `components/` (with `architect/`, `auth/`,
+`business/`, `dashboard/`, `scout/` subdirs), `lib/`, and `types/`. The remaining gap is
+the flat-`components/` rule below. Each gap closes in its own
 issue. Follow these rules for new code; migrate existing code only in a refactor issue.
 
 Concept layers are **flat under `src/`** per `~/.claude/refs/naming.md` §1 — no

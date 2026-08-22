@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase, handleSupabaseError, rowToDomain, OperationType } from '../../lib/supabase';
 import { ArchitectAssessment } from '../../types';
-import { DIMENSION_LABELS, LEVEL_NAMES } from '../../lib/architectScoring';
+import { DIMENSION_LABELS, LEVEL_NAMES } from '../../agents/architect/scoring';
 import { demoAssessments } from '../../lib/demoStore';
 import { motion } from 'motion/react';
 import {

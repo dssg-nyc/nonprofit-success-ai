@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase, toColumns, handleSupabaseError, OperationType } from '../../lib/supabase';
 import { PrimaryNeed, PRIMARY_NEED_OPTIONS } from '../../types';
-import { routeScoutIntake } from '../../lib/scoutRouting';
+import { routeScoutIntake } from '../../agents/scout/routing';
 import { motion } from 'motion/react';
 import { CheckCircle2, Compass } from 'lucide-react';
 
