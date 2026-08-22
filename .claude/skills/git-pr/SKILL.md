@@ -45,17 +45,18 @@ Read `.github/PULL_REQUEST_TEMPLATE.md` and populate every section:
 
 - **Summary** — from the plan doc's `### Goal`, one or two sentences. If no plan doc
   exists (bug/spike branch), summarize from the commit messages.
-- **Changes Made** — group the diff by area, not file-by-file.
+- **Priority** — read from the linked issue's labels or the plan doc if either states
+  one; otherwise ask. Do not guess a priority silently — it drives reviewer attention.
 - **Type of Change** — infer from the branch name / plan doc's job-type classification
   if `/workflow-triage` ran (`debug` → Bug fix, `refactor` → Refactor, etc.); ask if
   ambiguous.
-- **Priority** — read from the linked issue's labels or the plan doc if either states
-  one; otherwise ask. Do not guess a priority silently — it drives reviewer attention.
-- **Testing** — check off only what you can verify actually ran: `make ship`'s four
-  gates if the session ran it, plus whatever the plan doc's `### Test Plan` specifies.
-  Leave "Manual testing performed" for the user to confirm, don't check it for them.
-- **Documentation** — walk the diff for `.claude/specs/`, `.claude/refs/` (global,
-  read-only from here), `CLAUDE.md`, and `.claude/skills|agents/` changes:
+- **Changes Made** — group the diff by area, not file-by-file. Keep documentation
+  changes (specs, skills, `docs/`, `CLAUDE.md`) in the Documentation section, not here.
+- **Testing** — `make ship` (lint-check + type-check + test + build, no autofix) is the
+  gate that matches CI; `make gate` is the dev equivalent with autofix. Check whichever
+  actually ran. Leave the smoke-test box for the user to confirm.
+- **Documentation** — walk the diff for `CLAUDE.md`, `.claude/specs/`, `docs/`, and
+  `.claude/skills|agents/` changes:
   - Any spec-relevant code changed with no matching `.claude/specs/` update in this
     diff → leave unchecked, note which spec is now stale.
   - Any `.claude/` tooling file changed → check that box and describe what changed

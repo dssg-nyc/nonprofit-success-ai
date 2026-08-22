@@ -2,11 +2,12 @@
 
 <!-- What this PR does and why. One or two sentences. -->
 
-## Changes Made
+## Priority
 
-<!-- The notable changes, grouped by area. Skip the file-by-file tour — the diff has that. -->
-
--
+- [ ] Critical
+- [ ] High
+- [ ] Medium
+- [ ] Low
 
 ## Type of Change
 
@@ -15,30 +16,35 @@
 - [ ] Refactor — structure only, no behavior change
 - [ ] Docs / chore — tooling, CI, dependencies, documentation
 
-## Priority
+## Changes Made
 
-- [ ] Critical
-- [ ] High
-- [ ] Medium
-- [ ] Low
+<!-- The notable changes, grouped by area. Skip the file-by-file tour — the diff has that.
+     Keep documentation changes (specs, skills, docs/) in the Documentation section below. -->
+
+-
 
 ## Testing
 
-- [ ] `npm run lint` passes
+<!-- make ship = npm run lint-check + type-check + test + build (no autofix — same as CI)
+     make gate = same four steps with lint --fix (dev variant)
+     Individual steps: npm run lint | npm run type-check | npm run test | npm run build -->
+
+- [ ] `npm run lint` passes — or `make ship` for all four at once (note which)
 - [ ] `npm run type-check` passes
 - [ ] `npm run test` passes
-- [ ] Manual testing performed
+- [ ] `npm run build` passes
+- [ ] `npm run dev` / `npx vercel dev` smoke-tested
 
 ## Documentation
 
-<!-- What changed, and is it reflected outside the code? -->
+<!-- Specs, skills, docs/, CLAUDE.md — anything that explains or governs the code. -->
 
+- [ ] `CLAUDE.md` updated (or N/A)
 - [ ] `.claude/specs/` updated to match (or N/A — no spec covers this change)
-- [ ] `.claude/refs/` or repo `CLAUDE.md` updated (or N/A)
-- [ ] `.claude/` tooling itself changed (skills/agents/README) — describe below, or N/A
+- [ ] `.claude/` tooling changed (skills/agents/README) — describe below, or N/A
+- [ ] `docs/` updated (or N/A)
 
-<!-- If any box above is unchecked and isn't N/A, say why — e.g. "spec update deferred to #123" -->
-
+<!-- If any box is unchecked and isn't N/A, say why — e.g. "spec update deferred to #123" -->
 
 ## Screenshots
 
