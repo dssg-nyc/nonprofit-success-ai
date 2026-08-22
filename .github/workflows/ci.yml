@@ -1,19 +1,12 @@
 name: CI
 
-# Bespoke workflow — no reusable TypeScript workflow to inherit from yet. Job shape is
-# lint/typecheck/test/build, kept conventional so extracting a shared typescript-ci.yml
-# later is mechanical.
-#
-# No eval gate yet: the harness (src/evals/, targets.yaml) has not been ported to this
-# repo. Add the heuristics-only gate job back alongside the harness, not before it.
-
 on:
   push:
     branches: [main]
   pull_request:
 
 jobs:
-  lint:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -23,36 +16,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
       - run: npm run type-check
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
       - run: npm run test
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
       - run: npm run build
