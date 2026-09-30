@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { supabase, toColumns, handleSupabaseError, OperationType } from '../../lib/supabase';
 import { PrimaryNeed, PRIMARY_NEED_OPTIONS } from '../../types';
-import { routeScoutIntake } from '../../lib/scoutRouting';
+import { routeScoutIntake } from '../../agents/scout/routing';
 import { motion } from 'motion/react';
 import { CheckCircle2, Compass } from 'lucide-react';
 
@@ -54,16 +53,25 @@ export default function ScoutIntakeForm({ isDemo }: ScoutIntakeFormProps) {
     }
 
     try {
-      await addDoc(collection(db, 'scoutIntakes'), {
-        ...form,
-        primary_need_other: form.primary_need === 'something_else' ? form.primary_need_other : '',
-        submittedAt: serverTimestamp(),
-        ...result,
-        reviewStatus: 'pending',
-      });
+      // Insert runs as `anon` when nobody is signed in — scout_intakes_insert_public allows
+      // that, but only for a row that is genuinely new: review_status 'pending' with the
+      // review fields unset. A submitter cannot pre-approve their own intake.
+      //
+      // `submitted_at` is left to the column default rather than sent from the browser, so
+      // the timestamp is the server's, not whatever the client's clock says.
+      const { error } = await supabase.from('scout_intakes').insert(
+        toColumns({
+          ...form,
+          primary_need_other: form.primary_need === 'something_else' ? form.primary_need_other : '',
+          ...result,
+          reviewStatus: 'pending',
+        }),
+      );
+
+      if (error) handleSupabaseError(error, OperationType.CREATE, 'scout_intakes');
       setSubmitted(true);
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'scoutIntakes');
+      handleSupabaseError(err, OperationType.CREATE, 'scout_intakes');
     } finally {
       setSubmitting(false);
     }

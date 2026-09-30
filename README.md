@@ -13,14 +13,14 @@ Client organizations register their business/nonprofit profile, then move it thr
 | Styling | Tailwind CSS 4 (via `@tailwindcss/vite`) — see [design.md](design.md) for the full design system |
 | Animation | Motion (Framer Motion successor) |
 | Icons | lucide-react |
-| Auth & Database | Firebase Auth (Email/Password + Google) and Cloud Firestore |
-| Hosting target | Google AI Studio / Cloud Run applet |
+| Auth & Database | Supabase — Postgres, Auth (Email/Password + Google), RLS, Realtime |
+| Hosting | Vercel — https://nonprofit-success-ai-chi.vercel.app (deployed by `.github/workflows/cd.yml`) |
 
 ## Architecture
 
-### Routing & Pages (`src/App.tsx`)
+### Routing & Pages (`src/app/App.tsx`)
 
-`App.tsx` owns the top-level router, navbar, footer, and auth-state listener (`onAuthStateChanged`). It also implements a client-side **Demo Mode** that fakes a signed-in user and routes all Firestore reads/writes in child components to static mock data, so the product can be explored without a real account or live database writes.
+`App.tsx` owns the top-level router, navbar, footer, and auth-state listener (`onAuthChange`). It also implements a client-side **Demo Mode** that fakes a signed-in user and routes all database reads/writes in child components to static mock data, so the product can be explored without a real account or live database writes.
 
 | Route | Component | Guard |
 |---|---|---|
@@ -33,21 +33,26 @@ Client organizations register their business/nonprofit profile, then move it thr
 | `/architect/plan/:intakeId` | [ArchitectPlan](src/components/architect/ArchitectPlan.tsx) | requires `user` and `role === 'admin'` |
 | `/` | — | redirects to `/dashboard` or `/login` |
 
-`App.tsx` fetches the signed-in user's `role` from `users/{uid}` on auth-state change to gate the admin-only route (Demo Mode grants `admin` automatically so the review queue is explorable without a real Firebase project).
+`App.tsx` fetches the signed-in user's `role` from `public.users` on auth-state change to gate the admin-only route. The read goes through RLS, so it returns the caller's own row and nothing else; a null role fails closed. Demo Mode grants `admin` locally so the review queue is explorable without a database.
 
 ### Components (`src/components`)
 
-- **`auth/Login.tsx`** — email/password sign-in and registration, Google OAuth popup sign-in, and a "Demo Mode" entry point. New registrations write a `users/{uid}` profile document with `role: 'client'`.
-- **`dashboard/Dashboard.tsx`** — lists the signed-in user's registered businesses/nonprofits (live Firestore `onSnapshot` query filtered by `ownerId`), shows portfolio stats, and lets the user register a new business via a modal form.
-- **`business/BusinessPortal.tsx`** — the per-business workspace. Renders a bento-grid layout showing the business profile, a 6-stage engagement roadmap (`initial_meeting → budget_check → data_ethics_committee → scoping → hackathon_ready → membership`), a live activity feed of engagement records, and stage-management controls (status toggle + notes) that upsert an `engagements/{businessId}_{stage}` document per stage.
-- **`scout/ScoutIntakeForm.tsx`** — a public, unauthenticated 10-question intake form for prospective nonprofits/small businesses (org info, mission, primary need, problem description, systems, timeline). On submit it runs [`routeScoutIntake`](src/lib/scoutRouting.ts) and writes one `scoutIntakes/{id}` document with both the raw answers and the computed routing result; the applicant only ever sees a generic confirmation screen.
+- **`auth/Login.tsx`** — email/password sign-in and registration, Google OAuth popup sign-in, and a "Demo Mode" entry point. Registration does **not** write a profile row — the `on_auth_user_created` trigger (`supabase/migrations/0008_user_provisioning.sql`) creates it with `role: 'client'`, so no signup path can skip it.
+- **`dashboard/Dashboard.tsx`** — lists the signed-in user's registered businesses/nonprofits (live query via `liveQuery`; scoping to the owner is enforced by RLS, not by a client-side filter), shows portfolio stats, and lets the user register a new business via a modal form.
+- **`business/BusinessPortal.tsx`** — the per-business workspace. Renders a bento-grid layout showing the business profile, a 6-stage engagement roadmap (`initial_meeting → budget_check → data_ethics_committee → scoping → hackathon_ready → membership`), a live activity feed of engagement records, and stage-management controls (status toggle + notes) that upsert one `engagements` row per stage, deduped by the `unique (business_id, stage)` constraint.
+- **`scout/ScoutIntakeForm.tsx`** — a public, unauthenticated 10-question intake form for prospective nonprofits/small businesses (org info, mission, primary need, problem description, systems, timeline). On submit it runs [`routeScoutIntake`](src/lib/scoutRouting.ts) and inserts one `scout_intakes` row with both the raw answers and the computed routing result; the applicant only ever sees a generic confirmation screen.
 - **`scout/ScoutReviewQueue.tsx`** — admin-only queue (Pending/Reviewed tabs) showing each intake's assigned bucket, confidence, rationale, readiness scores, and flags, with **Approve / Edit / Reject & Redirect** actions that finalize a bucket and mark the intake reviewed. Reviewed cards hand off to Architect: "Architect Assessment →" (no assessment yet) or "View 90-Day Plan" (assessment exists).
-- **`architect/ArchitectAssessment.tsx`** — admin-only, staff-conducted 18-question Current-State Assessment for an approved intake (recorded during the kickoff call). On submit it scores the maturity model, generates the charter + 90-day plan, and writes one `architectAssessments/{intakeId}` document. Re-opening an assessed org pre-fills the form for re-conducting.
+- **`architect/ArchitectAssessment.tsx`** — admin-only, staff-conducted 18-question Current-State Assessment for an approved intake (recorded during the kickoff call). On submit it scores the maturity model, generates the charter + 90-day plan, and upserts one `architect_assessments` row keyed by the intake id. Re-opening an assessed org pre-fills the form for re-conducting.
 - **`architect/ArchitectPlan.tsx`** — the engagement blueprint view: 5-dimension maturity scorecard (with override/flag/remediation/cross-check warning banners), then tabbed documents — **90-Day Plan** (phase timeline + workstreams), **Charter**, and labeled placeholders for MOU and Kickoff Deck (their templates are open items in the spec).
 
-### Data Access (`src/lib/firebase.ts`)
+### Data Access (`src/lib/supabase.ts`)
 
-Initializes the Firebase app from [firebase-applet-config.json](firebase-applet-config.json) and exports `auth` and `db` (Firestore) singletons. Also exposes `handleFirestoreError`, a shared error handler that enriches thrown Firestore errors with the operation type, document path, and current auth context before logging/re-throwing — used by every read/write call site in the dashboard and business portal.
+Initializes the Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (see [.env.example](.env.example)); startup fails with a named error listing every missing variable. Also exports:
+
+- `onAuthChange` / `fetchRole` / `signOut` — the auth surface `App.tsx` consumes.
+- `liveQuery` — the `onSnapshot` replacement. Realtime streams only *changes*, so it fetches once then subscribes, and re-runs the query on any change rather than splicing individual events.
+- `toColumns` / `fromColumns` / `rowToDomain` — camelCase↔snake_case mapping at the query edge, plus conversion of Postgres timestamps into the `{ seconds }` shape the domain types already use.
+- `handleSupabaseError` — structured error logging, the port of the former `handleFirestoreError`.
 
 ### Domain Model (`src/types.ts`)
 
@@ -57,7 +62,7 @@ Initializes the Firebase app from [firebase-applet-config.json](firebase-applet-
 - **`ScoutIntake`** — intake answers + Scout's routing output + review decision in one document; see the Scout section below for the full shape
 - **`ArchitectAssessment`** — Scout handoff + 18 CSA answers + maturity scores + generated charter/90-day plan in one document; see the Architect section below
 
-The same shapes are mirrored as JSON Schema for the Firebase applet in [firebase-blueprint.json](firebase-blueprint.json).
+These shapes live as Postgres tables in [supabase/migrations/0001_init.sql](supabase/migrations/0001_init.sql). The superseded Firestore JSON Schema is kept as port provenance in [supabase/reference/](supabase/reference/).
 
 ### Scout — intake & routing agent (`src/lib/scoutRouting.ts`, `src/components/scout/`)
 
@@ -65,7 +70,7 @@ Scout is a triage agent: prospective nonprofits/small businesses apply via a pub
 
 `routeScoutIntake()` in [`src/lib/scoutRouting.ts`](src/lib/scoutRouting.ts) is a **deterministic stand-in** for the real Claude call the spec describes (no Anthropic API key is wired up yet) — it implements the same Q6-default → Q7-cross-check → Q5/Q8-tiebreaker bucketing logic and the same 8-field output shape (`bucket`, `confidence`, `rationale`, `poc_score`, `clarity_score`, `foothold_score`, `composite_signal`, `flags`), plus one derived routing field, `hitlTier: 'L2' | 'L3'` (high confidence + Ready → `L2`, everything else → `L3`). Swapping in a real API call later is meant to be a drop-in replacement behind this same function signature — and should move server-side (a Cloud Function) at that point, since a client bundle can't hold a secret API key.
 
-Everything (raw answers + Scout's output + the eventual human review decision) lives in one Firestore collection, `scoutIntakes/{id}` — see [`ScoutIntake`](src/types.ts) for the full field list. This intentionally does not create a `Business`/`Engagement` record automatically; converting an approved application into an onboarded client account would need an invite/claim flow, which isn't built here.
+Everything (raw answers + Scout's output + the eventual human review decision) lives in one table, `scout_intakes` — see [`ScoutIntake`](src/types.ts) for the full field list. This intentionally does not create a `Business`/`Engagement` record automatically; converting an approved application into an onboarded client account would need an invite/claim flow, which isn't built here.
 
 ### Architect — assessment & 90-day plan agent (`src/lib/architectScoring.ts`, `src/lib/architectPlan.ts`, `src/components/architect/`)
 
@@ -81,9 +86,12 @@ The CSA feeds a **5-dimension maturity model** — Data Infrastructure (×2), Go
 
 Unlike Scout's routing, this scoring is *not* an LLM stand-in — the spec defines it as a mechanical rubric, so the deterministic implementation is the real thing. [`src/lib/architectPlan.ts`](src/lib/architectPlan.ts) then generates the **project charter** and **90-day engagement plan** (four plan shapes by composite level: build-basics / ship-one-deliverable / remediation-only / accelerate, each with Days 1–30/31–60/61–90 phases and milestones) from deterministic templates — that narrative layer is what a future Claude call would enrich. MOU and kickoff deck render as placeholders (templates were open items in the spec).
 
-Everything lives in one admin-only Firestore collection, `architectAssessments/{id}`, where the **doc ID equals the source `scoutIntakes` doc ID** (1:1). The spec's four validated edge-case profiles (including the override and remediation-only cases) are the verification vectors for the scoring engine.
+Everything lives in one admin-only table, `architect_assessments`, where the **primary key IS the source `scout_intakes` id** (1:1). The spec's four validated edge-case profiles (including the override and remediation-only cases) are the verification vectors for the scoring engine.
 
-### Firestore Security (`firestore.rules`)
+### Access control — RLS (`supabase/migrations/0001_init.sql`)
+
+Enforced by Postgres row-level security. The rules below describe the model, translated
+from the superseded `firestore.rules` (kept in `supabase/reference/` as provenance):
 
 Default-deny rules scoped per collection:
 
@@ -104,7 +112,7 @@ The threat model behind these rules (identity spoofing, privilege escalation, or
 │   ├── index.css                      # Tailwind entry + design tokens
 │   ├── types.ts                       # Business / Engagement / UserProfile / Scout / Architect types
 │   ├── lib/
-│   │   ├── firebase.ts                # Firebase app/auth/db init + error handling
+│   │   ├── supabase.ts                # Supabase client, auth surface, liveQuery, mapping, errors
 │   │   ├── scoutRouting.ts            # Scout's stub bucket/readiness routing algorithm
 │   │   ├── architectScoring.ts        # Architect's maturity model (rubric, override, flags)
 │   │   ├── architectPlan.ts           # Charter + 90-day plan template generators
@@ -119,9 +127,13 @@ The threat model behind these rules (identity spoofing, privilege escalation, or
 │       └── architect/
 │           ├── ArchitectAssessment.tsx# Staff-conducted CSA form (/architect/assess/:id)
 │           └── ArchitectPlan.tsx      # Maturity scorecard + charter + 90-day plan (/architect/plan/:id)
-├── firestore.rules                    # Firestore security rules
-├── firebase-applet-config.json        # Firebase project config (consumed by lib/firebase.ts)
-├── firebase-blueprint.json            # JSON Schema for Business/Engagement/User entities
+├── supabase/
+│   ├── config.toml                    # Supabase CLI config (local stack)
+│   ├── migrations/                    # Postgres schema + RLS, ported from firestore.rules
+│   ├── tests/rls.test.sql             # pgTAP RLS suite
+│   └── reference/                     # Firebase port sources (CLI does not read this)
+│       ├── firestore.rules            # Superseded — port provenance, cited 98x by 0001_init.sql
+│       └── firebase-blueprint.json    # Superseded — original Firestore entity schema
 ├── security_spec.md                   # Data invariants + attack-vector checklist
 ├── design.md                          # Portable design system spec (colors, type, components)
 ├── scout-design.md                    # Scout agent design spec (original Tally/n8n/Airtable plan)
@@ -135,11 +147,26 @@ The threat model behind these rules (identity spoofing, privilege escalation, or
 
 **Prerequisites:** Node.js
 
-1. Install dependencies:
+1. Install dependencies and the git hooks:
    ```
    npm install
+   make hooks      # one-time; requires `brew install pre-commit`
    ```
-2. Copy [.env.example](.env.example) to `.env.local` and set `GEMINI_API_KEY` (only needed if you extend the app with Gemini API calls — the current UI does not call it). Firebase credentials are read from the committed [firebase-applet-config.json](firebase-applet-config.json), not from env vars.
+
+   `make hooks` wires up [.pre-commit-config.yaml](.pre-commit-config.yaml) — secret
+   detection (gitleaks), an eslint pass over staged `.ts`/`.tsx`, and guards against
+   committing `.env` or a server-only key behind a `VITE_` prefix. Nothing autofixes, so
+   the hooks never rewrite what you staged. The full gate (`type-check lint test build`)
+   runs at push via `make ship`, and again in CI on every PR.
+2. Start the database and copy its credentials into `.env`:
+
+   ```bash
+   make db-start   # requires Docker; prints API_URL and ANON_KEY
+   ```
+
+   Copy [.env.example](.env.example) to `.env` and set `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_ANON_KEY` from that output. Both are required — the app throws on startup
+   naming whichever is missing. No model API key is needed: nothing here calls an LLM yet.
 3. Run the app:
    ```
    npm run dev

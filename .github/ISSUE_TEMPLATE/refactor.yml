@@ -1,0 +1,55 @@
+name: ♻️ Refactor
+description: Restructure existing code with no behavior change
+labels: ["refactor", "backlog"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues for this
+          required: true
+        - label: This changes structure only — no observable behavior change
+          required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current shape
+      description: What the code looks like now, and why that is a problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: target
+    attributes:
+      label: Target shape
+      description: >
+        What it should look like instead. Refactors route to a plan with a
+        before/after contract, so state the contract that must hold across the change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: regression
+    attributes:
+      label: How we know nothing broke
+      description: >
+        The no-regression test. Which existing tests cover this, or what must be added
+        before the refactor starts — a refactor with no covering test is a rewrite.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: routing
+    attributes:
+      label: Is the target shape settled?
+      description: >
+        Routes triage. "Settled" plans directly; "exploring" researches the target first. Pick "unsure" freely — it is
+        a signal, not a failure, and triage will make the call.
+      options:
+        - Settled — the target shape is agreed
+        - Exploring — the target needs investigation
+        - Unsure
+    validations:
+      required: true

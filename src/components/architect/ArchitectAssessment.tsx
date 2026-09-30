@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
+import {
+  supabase, toColumns, rowToDomain, handleSupabaseError, OperationType,
+} from '../../lib/supabase';
 import {
   ScoutIntake, ArchitectAssessment as ArchitectAssessmentDoc,
   CSA_OPTIONS, CSA_TOOL_OPTIONS, CsaTool, ScoutBucket,
 } from '../../types';
-import { scoreAssessment } from '../../lib/architectScoring';
-import { generateCharter, generateNinetyDayPlan } from '../../lib/architectPlan';
+import { scoreAssessment } from '../../agents/architect/scoring';
+import { generateCharter, generateNinetyDayPlan } from '../../agents/architect/plan';
 import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
 import { motion } from 'motion/react';
 import { DraftingCompass, ChevronLeft, ArrowRight } from 'lucide-react';
@@ -52,17 +53,41 @@ export default function ArchitectAssessment({ isDemo }: Props) {
       }
 
       try {
-        const snap = await getDoc(doc(db, 'scoutIntakes', intakeId));
-        if (!snap.exists() || snap.data().reviewStatus !== 'reviewed' || !snap.data().finalBucket) {
+        const { data: intakeRow, error: intakeErr } = await supabase
+          .from('scout_intakes')
+          .select('*')
+          .eq('id', intakeId)
+          .maybeSingle();
+
+        if (intakeErr) throw intakeErr;
+
+        const loaded = intakeRow
+          ? rowToDomain<ScoutIntake>(intakeRow, ['submittedAt', 'reviewedAt'])
+          : null;
+
+        // An assessment may only be built on an intake a reviewer has already approved and
+        // bucketed — the same precondition the Firestore version enforced, and what
+        // architect_assessments' insert policy checks server-side.
+        if (!loaded || loaded.reviewStatus !== 'reviewed' || !loaded.finalBucket) {
           setNotFound(true); setLoading(false); return;
         }
-        setIntake({ id: snap.id, ...snap.data() } as ScoutIntake);
-        const existingSnap = await getDoc(doc(db, 'architectAssessments', intakeId));
-        if (existingSnap.exists()) {
-          setAnswers({ ...emptyAnswers, ...pickAnswers(existingSnap.data() as ArchitectAssessmentDoc) });
+        setIntake(loaded);
+
+        // architect_assessments.id IS the intake id (1:1), so this is a PK lookup.
+        const { data: existing } = await supabase
+          .from('architect_assessments')
+          .select('*')
+          .eq('id', intakeId)
+          .maybeSingle();
+
+        if (existing) {
+          setAnswers({
+            ...emptyAnswers,
+            ...pickAnswers(rowToDomain<ArchitectAssessmentDoc>(existing, [])),
+          });
         }
       } catch (err) {
-        try { handleFirestoreError(err, OperationType.GET, `architectAssessments/${intakeId}`); } catch { /* logged */ }
+        try { handleSupabaseError(err, OperationType.GET, `architect_assessments/${intakeId}`); } catch { /* logged */ }
         setNotFound(true);
       } finally {
         setLoading(false);
@@ -88,6 +113,8 @@ export default function ArchitectAssessment({ isDemo }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!intake || !intakeId) return;
+
+    const currentUser = isDemo ? null : (await supabase.auth.getUser()).data.user;
 
     const bucket = intake.finalBucket as ScoutBucket;
     const scored = {
@@ -127,8 +154,8 @@ export default function ArchitectAssessment({ isDemo }: Props) {
       ...maturity,
       charter,
       ninetyDayPlan,
-      createdBy: isDemo ? DEMO_USER.uid : auth.currentUser?.uid,
-      createdByEmail: isDemo ? DEMO_USER.email : auth.currentUser?.email,
+      createdBy: isDemo ? DEMO_USER.uid : currentUser?.id,
+      createdByEmail: isDemo ? DEMO_USER.email : currentUser?.email ?? undefined,
     };
 
     if (isDemo) {
@@ -144,14 +171,20 @@ export default function ArchitectAssessment({ isDemo }: Props) {
 
     setSaving(true);
     try {
-      await setDoc(doc(db, 'architectAssessments', intakeId), {
-        ...docBody,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      // upsert, not insert: setDoc with a fixed id overwrote an existing document, and the
+      // form is reachable again for an already-assessed intake (it pre-loads the previous
+      // answers above). `id` is the conflict target because it IS the intake id.
+      const { error } = await supabase
+        .from('architect_assessments')
+        .upsert(toColumns({ ...docBody, id: intakeId }), { onConflict: 'id' });
+
+      if (error) handleSupabaseError(error, OperationType.WRITE, `architect_assessments/${intakeId}`);
+
       navigate(`/architect/plan/${intakeId}`);
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `architectAssessments/${intakeId}`);
+      try {
+        handleSupabaseError(err, OperationType.WRITE, `architect_assessments/${intakeId}`);
+      } catch { /* logged */ }
     } finally {
       setSaving(false);
     }
