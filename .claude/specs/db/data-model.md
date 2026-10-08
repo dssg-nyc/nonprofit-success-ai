@@ -4,7 +4,7 @@
 **Lane:** crm (PRD Workstream 2)
 **Satisfies:** PRD §5.2 canonical entities, §5.3 data engineering requirements
 
-This is the gap between the eighteen tables that exist (migrations 0001–0019) and the
+This is the gap between the eighteen tables that exist (the six squashed migrations, 0001_core–0006_views) and the
 nineteen entities the PRD names, plus the order to close it in. The live ER diagram for what exists today is in
 [design-system.md](../design-system.md) §4; this doc does not repeat it.
 
@@ -12,12 +12,12 @@ nineteen entities the PRD names, plus the order to close it in. The live ER diag
 
 ## 1. The blocking decision: tenancy
 
-**Superseded.** This section recorded the owner-vs-org choice; `0003_tenancy.sql` took the
+**Superseded.** This section recorded the owner-vs-org choice; the org scoping now in `0001_core.sql` took the
 recommendation and org-scoped every policy. The target has since moved again:
 [access-model.md](access-model.md) decides project-scoped roles (client / diplomat / admin),
 migration pending — roadmap D29, C1. Kept for the reasoning.
 
-Before 0003 the repo was **owner-scoped**. Every RLS policy keyed off the row's `owner_id`:
+Before org scoping (now in 0001_core) the repo was **owner-scoped**. Every RLS policy keyed off the row's `owner_id`:
 
 ```sql
 using (owner_id = auth.uid())
@@ -36,7 +36,7 @@ migrated after it**, and each migration has to be re-verified against the pgTAP 
 Three reasons, in order of weight:
 
 1. **It is where the product is going.** DSSG staff work a portfolio, not a personal list.
-   Migration 0002 already had to bolt on admin `SELECT` across all engagements to make
+   0001_core already had to bolt on admin `SELECT` across all engagements to make
    Pulse work — that is org-scoping arriving through the back door, one grant at a time.
 2. **It is cheapest at six tables.** The rewrite is bounded today and grows with every
    table added.
@@ -48,17 +48,17 @@ references `auth.users(id)`, and every policy resolves the actor through `auth.u
 That is the expensive half of the contract, and translating `firestore.rules` faithfully
 got it for free.
 
-### What the migration touched (0003, done)
+### What the migration touched (now in 0001_core, done)
 
 - Add `organizations`, `organization_members`.
 - Add `organization_id` to `businesses`, `engagements`, `scout_intakes`,
   `architect_assessments`, `engagement_events`.
 - Rewrite the `using` clause of every policy from `owner_id = auth.uid()` to membership in
   the row's organization.
-- Keep [`is_admin()`](../../supabase/migrations/0001_init.sql) as the **single indirection**
+- Keep [`is_admin()`](../../supabase/migrations/0001_core.sql) as the **single indirection**
   for role checks — never inline `role = 'admin'` into a policy. Re-pointing one function at
   `organization_members` later beats rewriting seventeen policies.
-- Re-run `supabase/tests/rls.test.sql` — the pgTAP assertions are the regression net for
+- Re-run the pgTAP suite (`supabase/tests/`) — its assertions are the regression net for
   exactly this class of change.
 
 ---
@@ -72,17 +72,17 @@ got it for free.
 | `engagements` | Translated from `firestore.rules` |
 | `scout_intakes` | Translated from `firestore.rules` |
 | `architect_assessments` | Translated from `firestore.rules` |
-| `engagement_events` | New in migration 0002 — Pulse's activity signal. 0013 adds `idempotency_key` (partial unique) and an admin INSERT policy; `businesses` gains `scout_intake_id` (0013) |
-| `organizations`, `organization_members` | 0003 — tenancy; `is_admin()` re-pointed at membership |
-| `agent_runs`, `tool_calls` | 0004 — telemetry |
-| `approvals`, `audit_events` | 0005 — approval spine |
-| `milestones`, `tasks` | 0006 — delivery |
-| `documents` | 0007 — provenance-first ingestion |
-| `communications`, `chronicle_drafts` | 0012 — Envoy and Chronicle drafts |
-| `lessons` | 0015 — Chronicle's lesson candidates |
+| `engagement_events` | 0003_delivery — Pulse's activity signal, with `idempotency_key` (partial unique) and an admin INSERT policy; `businesses.scout_intake_id` is in 0001_core |
+| `organizations`, `organization_members` | 0001_core — tenancy; `is_admin()` re-pointed at membership |
+| `agent_runs`, `tool_calls` | 0001_core — telemetry |
+| `approvals`, `audit_events` | 0002_approvals — approval spine |
+| `milestones`, `tasks` | 0003_delivery — delivery |
+| `documents` | 0003_delivery — provenance-first ingestion |
+| `communications`, `chronicle_drafts` | 0004_drafts — Envoy and Chronicle drafts |
+| `lessons` | 0004_drafts — Chronicle's lesson candidates |
 
 Authorization semantics currently in force are documented in
-[design-system.md](../design-system.md) §4 and verified by `supabase/tests/rls.test.sql`.
+[design-system.md](../design-system.md) §4 and verified by the pgTAP suite (`supabase/tests/`).
 
 ---
 
@@ -95,25 +95,25 @@ should converge on the PRD's vocabulary rather than carry two names for one thin
 |---|---|---|
 | `auth.users` | ✅ Exists | Supabase-managed. Canonical identity. |
 | `profiles` | 🟡 Rename | Our `users` table *is* this. PRD reserves `users` for `auth.users`. |
-| `organizations` | ✅ 0003 | Org-scoped tenancy. To be reshaped by the project-scoped model (D29, [access-model.md](access-model.md)). |
-| `organization_members` | ✅ 0003 | Roles `owner`/`admin`/`member`; `is_admin()` reads it. Replaced by project assignments under D29. |
+| `organizations` | ✅ 0001_core | Org-scoped tenancy. To be reshaped by the project-scoped model (D29, [access-model.md](access-model.md)). |
+| `organization_members` | ✅ 0001_core | Roles `owner`/`admin`/`member`; `is_admin()` reads it. Replaced by project assignments under D29. |
 | `intakes` | 🟡 Rename | `scout_intakes` → `intakes`. |
 | `scout_reviews` | ❌ Missing | Qualification evidence, model/version, reviewer decision. Today the routing result is denormalized onto the intake row, so re-running Scout overwrites history. |
 | `assessments` | 🟡 Rename | `architect_assessments` → `assessments`. Needs a human-edit column: PRD says "Architect outputs **and human edits**". |
 | `engagements` | ✅ Exists | Six-stage enum ratified — [lifecycle.md](lifecycle.md) §1. One row *per stage* (`unique (business_id, stage)`), not a cursor. |
-| `tasks` | ✅ 0006 | Table exists; no app code writes it yet — Architect still emits milestones as prose. |
-| `milestones` | ✅ 0006 | Table exists; no app code writes it yet. Until it holds rows, "behind schedule" is not computable, Pulse has nothing to measure, and two lifecycle guards stay staff-attested rather than verified ([lifecycle.md](lifecycle.md) §6). |
+| `tasks` | ✅ 0003_delivery | Table exists; no app code writes it yet — Architect still emits milestones as prose. |
+| `milestones` | ✅ 0003_delivery | Table exists; no app code writes it yet. Until it holds rows, "behind schedule" is not computable, Pulse has nothing to measure, and two lifecycle guards stay staff-attested rather than verified ([lifecycle.md](lifecycle.md) §6). |
 | `contracts` | ❌ Missing | Backlog — gates Stage 1→2 (PRD §8). |
 | `signatures` | ❌ Missing | Backlog. Immutable — same append-only pattern as `engagement_events`. |
-| `documents` | ✅ 0007 | Ingestion with provenance columns, no retrieval — see §5. No app code writes it yet. |
-| `communications` | ✅ 0012 | Envoy drafts: status draft/approved/sent/rejected, supersedes_id chain, §7 provenance columns, write-once content (trigger), select-only for org admins; rows arrive only via submit_envoy_draft() |
-| `chronicle_drafts` | ✅ 0012 | Chronicle drafts: status draft/approved/rejected, readiness thin/ready (`provisional` generated), supersedes_id chain, §7 provenance columns, write-once content (trigger), select-only for org admins, no delete; rows arrive only via submit_chronicle_draft() |
-| `lessons` | ✅ 0015 | Chronicle's lesson candidates: one per engagement, prediction (`predicted_bucket`, `predicted_readiness`, from the business's `scout_intake_id`) beside outcome, `prediction_correct` GENERATED, model-proposed success/failure factors, human promotion (`promoted_by`/`promoted_at`/`promotion_approval_id`). Staff-select only, no API-role writes: rows arrive via submit_chronicle_draft() and promote_lesson(); the `promoted_lessons` view (`security_invoker`) is the only Scout-side surface. Rules in `platform/agents/chronicle.md` §6 |
+| `documents` | ✅ 0003_delivery | Ingestion with provenance columns, no retrieval — see §5. No app code writes it yet. |
+| `communications` | ✅ 0004_drafts | Envoy drafts: status draft/approved/sent/rejected, supersedes_id chain, §7 provenance columns, write-once content (trigger), select-only for org admins; rows arrive only via submit_envoy_draft() |
+| `chronicle_drafts` | ✅ 0004_drafts | Chronicle drafts: status draft/approved/rejected, readiness thin/ready (`provisional` generated), supersedes_id chain, §7 provenance columns, write-once content (trigger), select-only for org admins, no delete; rows arrive only via submit_chronicle_draft() |
+| `lessons` | ✅ 0004_drafts | Chronicle's lesson candidates: one per engagement, prediction (`predicted_bucket`, `predicted_readiness`, from the business's `scout_intake_id`) beside outcome, `prediction_correct` GENERATED, model-proposed success/failure factors, human promotion (`promoted_by`/`promoted_at`/`promotion_approval_id`). Staff-select only, no API-role writes: rows arrive via submit_chronicle_draft() and promote_lesson(); the `promoted_lessons` view (`security_invoker`) is the only Scout-side surface. Rules in `platform/agents/chronicle.md` §6 |
 | `calendar_events` | ❌ Missing | Scout's meeting-intelligence extension needs this. |
-| `agent_runs` | ✅ 0004 | Highest-leverage table in the system. Written by `src/observability/recorder.ts` (service role) for every gateway call; `agent_run_metrics` view in 0016. |
-| `tool_calls` | ✅ 0004 | Pairs with `agent_runs`. No writer yet — no agent uses tools. |
-| `approvals` | ✅ Built locally (`0005_approval_spine.sql`, extended in `0009_architect_draft.sql`), not on a hosted project | **MVP.** One row per item awaiting a human: `entity_type` ∈ `intake`, `assessment`, `communication`, `story`, `transition` (0013 — an L3 stage transition, `entity_id` = the engagement; `agent = 'system'` added to the agent check in the same migration), `charter` (`charter` added in 0009 — an Architect draft, `entity_id` = the `architect_assessments` id), `hitl_tier`, `status` (`pending`/`approved`/`rejected`/`expired`), `agent_run_id`. `idempotency_key` (0009; text, 8–200 chars, unique where not null) makes a replayed submit return the original approval (design-system.md §8.1); at most one `pending` `charter` approval per assessment (partial unique index), older ones are `expired` by `submit_architect_draft()`. The approval queue UI is still pending. |
-| `audit_events` | ✅ 0005 | Immutable — the `engagement_events` append-only pattern generalizes. |
+| `agent_runs` | ✅ 0001_core | Highest-leverage table in the system. Written by `src/observability/recorder.ts` (service role) for every gateway call; `agent_run_metrics` view in 0006_views. |
+| `tool_calls` | ✅ 0001_core | Pairs with `agent_runs`. No writer yet — no agent uses tools. |
+| `approvals` | ✅ Built locally (`0002_approvals.sql`; RPCs in `0004_drafts.sql`), not on a hosted project | **MVP.** One row per item awaiting a human: `entity_type` ∈ `intake`, `assessment`, `communication`, `story`, `transition` (an L3 stage transition, `entity_id` = the engagement; `agent = 'system'` passes the agent check), `charter` (an Architect draft, `entity_id` = the `architect_assessments` id), `hitl_tier`, `status` (`pending`/`approved`/`rejected`/`expired`), `agent_run_id`. `idempotency_key` (0002_approvals; text, 8–200 chars, unique where not null) makes a replayed submit return the original approval (design-system.md §8.1); at most one `pending` `charter` approval per assessment (partial unique index), older ones are `expired` by `submit_architect_draft()`. The approval queue UI is still pending. |
+| `audit_events` | ✅ 0002_approvals | Immutable — the `engagement_events` append-only pattern generalizes. |
 
 `engagement_events` has no PRD counterpart. It is a real concept (episodic memory, PRD §6.4)
 and should stay; it is arguably a scoped view of `audit_events`, which is worth resolving
@@ -123,20 +123,20 @@ when `audit_events` lands rather than now.
 
 ## 4. Sequencing
 
-Each step is a migration that leaves the suite green. Steps 1–5 are done (0003–0007);
+Each step is a migration that leaves the suite green. Steps 1–5 are done (now 0001_core–0003_delivery);
 step 1 is to be redone as the project-scoped model (D29).
 
 | # | Migration | Contents | Why here |
 |---|---|---|---|
-| 1 | **Tenancy** ✅ 0003 | `organizations`, `organization_members`, `organization_id` columns, policy rewrite | Blocked everything. §1. |
-| 2 | **Telemetry** ✅ 0004 | `agent_runs`, `tool_calls` | Ships with the model gateway — the gateway is what writes these. Building them apart means building the gateway twice. |
-| 3 | **Approval spine** ✅ 0005 | `approvals`, `audit_events` | Gives L3/L4 a place to land. One surface, all five agents. |
-| 4 | **Delivery** ✅ 0006 | `tasks`, `milestones` | Makes engagement health computable, which is what Pulse is for. |
-| 5 | **Provenance** ✅ 0007 | `documents` | §5. Cheap now, expensive later. |
+| 1 | **Tenancy** ✅ 0001_core | `organizations`, `organization_members`, `organization_id` columns, policy rewrite | Blocked everything. §1. |
+| 2 | **Telemetry** ✅ 0001_core | `agent_runs`, `tool_calls` | Ships with the model gateway — the gateway is what writes these. Building them apart means building the gateway twice. |
+| 3 | **Approval spine** ✅ 0002_approvals | `approvals`, `audit_events` | Gives L3/L4 a place to land. One surface, all five agents. |
+| 4 | **Delivery** ✅ 0003_delivery | `tasks`, `milestones` | Makes engagement health computable, which is what Pulse is for. |
+| 5 | **Provenance** ✅ 0003_delivery | `documents` | §5. Cheap now, expensive later. |
 | 6 | **Renames** | `users`→`profiles`, `scout_intakes`→`intakes`, `architect_assessments`→`assessments` | Deliberately last — pure churn with no capability gain, and it touches application code. Do it once the shape is stable. |
 
 Backlog, ordered by when their feature starts: `calendar_events`, `scout_reviews`,
-`contracts`, `signatures`. (`communications` shipped in 0012.)
+`contracts`, `signatures`. (`communications` shipped in 0004_drafts.)
 
 ---
 
@@ -216,11 +216,11 @@ approved_by      uuid          -- FK to users; set when a human accepts it
 approved_at      timestamptz
 ```
 
-`source_type` is the Postgres enum `provenance_source` (0012). The columns now exist on
-`architect_assessments`, `communications` and `chronicle_drafts` (0012), and, as
+`source_type` is the Postgres enum `provenance_source` (0004_drafts). The columns now exist on
+`architect_assessments`, `communications` and `chronicle_drafts` (0004_drafts), and, as
 `routing_source` / `routing_run_id` / `routing_model` / `routing_prompt_version`, on `scout_intakes`
-(0018: `derived` or `ai`, and `ai` exactly when a run is named; no writer fills them until T2). A draft's approval points
-at it through `approvals.draft_id` (0012; `entity_id` stays the engagement). A model draft
+(0001_core: `derived` or `ai`, and `ai` exactly when a run is named; no writer fills them until T2). A draft's approval points
+at it through `approvals.draft_id` (0002_approvals; `entity_id` stays the engagement). A model draft
 whose run the recorder failed to write is stored as `ai` with `model` set and `run_id`
 null; the audit event carries `run_unrecorded: true`. `agent_runs` already records `model` and `prompt_version`
 per run — these columns let a *stored artifact* point back at the run that produced it,
@@ -239,7 +239,7 @@ this answers: which model wrote it, on what prompt version, from what input, who
 it, who approved it, and which lifecycle transition it accompanied. Break any link and the
 system can no longer explain itself.
 
-Since 0018 it is one query: the `provenance_chain` view (`security_invoker`, one row per
+It is one query: the `provenance_chain` view (0006_views; `security_invoker`, one row per
 approval, hops as columns: draft, run, reviewer, transition event, audit event). The last hop
 is a column, `engagement_events.approval_id` (the detail JSON still carries it too).
 
@@ -251,7 +251,7 @@ Architect rows join the latest `architect_assessments` row only (it is upserted,
 `engagement_id` is null for `charter`, `assessment` and `intake` approvals (their entity is
 the intake, which precedes the engagement); find them with
 `where entity_type in ('charter','assessment') and draft_id = $intake_id`. Public intake inserts
-cannot assert `routing_source = 'ai'` (0018 policy); only a definer RPC may (T2).
+cannot assert `routing_source = 'ai'` (0001_core policy); only a definer RPC may (T2).
 
 Two consequences worth stating, because they are easy to violate:
 
@@ -275,6 +275,6 @@ runs that produced the content are gone.
 - **`engagement_events` vs. `audit_events`** — resolve when the latter lands (§3).
 - **Shared Supabase project with GrantPilot** (PRD §9b) — blocked on tenancy. Two cheap
   preparations meanwhile: namespace tables out of `public` into a `portal` schema (one
-  migration, larger with each of today's eighteen tables; the `search_path` pins in `0001_init.sql` become
+  migration, larger with each of today's eighteen tables; the `search_path` pins in `0001_core.sql` become
   `portal, public, pg_temp`), and keep `is_admin()` as the sole role indirection.
 - **Retention and deletion policy** — unowned (§6).

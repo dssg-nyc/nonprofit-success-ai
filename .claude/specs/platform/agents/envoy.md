@@ -60,7 +60,7 @@ decides whether the situation warrants contacting the partner at all.
 
 Staff selects an occasion in the engagement UI → POST `/api/envoy-draft` → the model
 drafts (or the template in `src/agents/envoy/draft.ts` does, on failure) →
-`submit_envoy_draft()` (0012) writes one `communications` row, one pending L3 approval and
+`submit_envoy_draft()` (0004_drafts) writes one `communications` row, one pending L3 approval and
 one audit event in one transaction → staff reviews the approval.
 
 **The draft step does not send.** The send step (C3) is not built; nothing leaves the
@@ -111,17 +111,17 @@ secrets reach the client" constraint (`CLAUDE.md` Conventions).
 - Templates live in `src/agents/envoy/draft.ts` — not stored in the database. A template change requires a deploy, not a database edit, so changes are version-controlled.
 - Model failure: gateway throws → the template is saved, `source = 'fallback'`, 200. A fallback draft still routes through the pending approval — it is never auto-sent.
 - Replay: the same `idempotencyKey` returns the original result; an edit is a new row with `supersedes_id`, and `communications` content is write-once (trigger).
-- No new Firebase surface area. `communications` is a Supabase table (0012), admin-readable through RLS, written only by `submit_envoy_draft()`.
+- No new Firebase surface area. `communications` is a Supabase table (0004_drafts), admin-readable through RLS, written only by `submit_envoy_draft()`.
 - Staff-initiated only. Pulse detecting `at_risk` must not auto-trigger a communication draft.
 - `occasion` is stamped server-side — a draft cannot be attributed to a different occasion than the one requested.
-- The `at_risk_follow_up` template raises concerns as questions, not accusations. When no concerns are supplied, it owns the gap as possibly DSSG's own.
+- The `at_risk_follow_up` template raises concerns as questions, not accusations. When no concerns are supplied, it asks an open question ("Is there anything you need from us right now?") and proposes no cause — not the partner's, and not DSSG's own (prompt `envoy-draft-0.04`; R17: "we may have missed an update on our end" was an invented reason). Every draft signs off exactly `Best regards, The DSSG team`, never an agent's or a person's name (`envoyGrounding`).
 - No optional field (`cadence`, `concerns`) is fabricated — if no cadence was agreed, the draft proposes agreeing one rather than naming a rhythm the partner never consented to.
 
 ## Dependencies
 
 - **Imports:** `src/types/` (`EnvoyDraftRequest`, `EnvoyDraftResponse`); `src/model/gateway.ts`; the caller's user-scoped client for the RPC (no service-role client in `api/`). Email service for C3 is TBD — same provider as contract-consent
 - **Imported by:** Engagement detail screen (communications panel, staff-facing)
-- **Data:** `communications` table (0012); `engagements` table (occasion context, RLS-checked lookup); `architect_assessments` (cadence field for template variant selection)
+- **Data:** `communications` table (0004_drafts); `engagements` table (occasion context, RLS-checked lookup); `architect_assessments` (cadence field for template variant selection)
 
 ## Delta rows
 
@@ -138,7 +138,7 @@ Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbe
 - Expired approval on replay → 409 `draft_superseded`; mismatched payload → 400 `invalid_draft`.
 - Authority: non-admin or other-org caller → 42501, mapped by the route.
 - No send on draft: the draft endpoint sends nothing (C3 not built).
-- `at_risk_follow_up` with no staffNotes: draft body does not manufacture a reason; framing owns the gap.
+- `at_risk_follow_up` with no staffNotes: draft body does not manufacture a reason; it asks an open question and names no cause.
 - `at_risk_follow_up` with staffNotes: concerns appear as questions, not accusations.
 
 ## Open questions

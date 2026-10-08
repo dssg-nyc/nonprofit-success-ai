@@ -137,7 +137,7 @@ non-2xx when the model call fails: it saves `buildTemplate()` as the draft and r
 200 with `source: 'fallback'`. The draft is a write — an L3 approval staff will act on —
 and a draft that exists only in a browser tab is lost on refresh, so the server persists
 the deterministic one rather than make the client do it (the client cannot: writes are
-revoked, 0010). The failure is still *signalled*, never simulated: `source` is in the
+revoked, 0001_core). The failure is still *signalled*, never simulated: `source` is in the
 response, the audit event (`architect.draft_submitted.detail.source`) and the plan
 page's badge, and the gateway records the failed call as one `fallback` `agent_runs` row
 linked from the approval. What rule 2 forbids — a half-enriched draft passed off as the
@@ -201,7 +201,7 @@ model keys and making LLM calls.
 
 Six tables. Five are translated from `supabase/reference/firestore.rules` (207 lines of
 validation and authorization — still the live access control until `src/` reads Supabase)
-into Postgres constraints and RLS policies; `engagement_events` is new in migration 0002,
+into Postgres constraints and RLS policies; `engagement_events` is new in 0003_delivery,
 added to give Pulse an activity signal to read.
 
 ```mermaid
@@ -262,7 +262,7 @@ Authorization semantics to preserve:
 - **Public intake** — anonymous `INSERT` into `scout_intakes` is allowed, but only with
   `review_status = 'pending'`. Anonymous `SELECT` is not allowed.
 - **Admin-only** — reading and updating intakes, and all access to `architect_assessments`.
-  Migration 0002 also grants admins `SELECT` on **all** `engagements`, so staff can see the
+  0001_core also grants admins `SELECT` on **all** `engagements`, so staff can see the
   portfolio Pulse reports on. Admins read; ownership still governs writes.
 - **Terminal-status lock** — a completed engagement cannot be reopened.
 - **Append-only history** — `engagement_events` rows can be inserted and read by the owning
@@ -270,7 +270,7 @@ Authorization semantics to preserve:
   `UPDATE`/`DELETE` policy exists, *and* neither privilege is granted. The privilege is the
   outer gate, so an attempted edit raises `42501` rather than silently matching zero rows —
   a stronger guarantee than a policy alone, since it cannot be reopened by adding a policy.
-  Pinned by `throws_ok` assertions in `supabase/tests/rls.test.sql`.
+  Pinned by `throws_ok` assertions in the pgTAP suite (`supabase/tests/`).
 
 **Realtime under RLS:** `postgres_changes` respects row-level security, so admin-only tables emit
 events only to admin sessions. A non-admin subscriber sees silence, not an error — that silent drop
@@ -334,13 +334,13 @@ These are decided-to-be-undecided. Each is tracked; none blocks the platform wor
   also records that `stage` is not a cursor: `unique (business_id, stage)` makes it one row
   *per* stage, so a transition inserts rather than updates. Pulse still only reads
   `stage` and `daysInStage`; that boundary is unchanged.
-- **`engagement_events` producer.** Migration 0002 creates the table, its RLS, and its
+- **`engagement_events` producer.** 0003_delivery creates the table, its RLS, and its
   append-only guarantee, and Pulse reads it — but nothing writes to it yet. Until a producer
   lands, every engagement reads as `at_risk` with "no recorded activity". New with this work,
   not inherited.
 - **Stage enum ratification (U7) — resolved 2026-08-21 at six stages.**
   (`initial_meeting`, `budget_check`, `data_ethics_committee`, `scoping`, `hackathon_ready`,
-  `membership`) — the enum at `0001_init.sql:66-73`, matching `src/types.ts:15`,
+  `membership`) — the enum at `0001_core.sql`, matching `src/types.ts:15`,
   `firestore.rules:62`, and the portal's `STAGES` array. Earlier docs describing five predate
   the schema and are superseded. Rationale and per-stage exit conditions:
   [crm/lifecycle.md](crm/lifecycle.md) §1. Team confirmation of stage *names* is still welcome,

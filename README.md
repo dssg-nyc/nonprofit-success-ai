@@ -39,12 +39,12 @@ Client organizations register their business/nonprofit profile, then move it thr
 
 ### Components (`src/components`)
 
-- **`auth/Login.tsx`** — email/password sign-in and registration, Google OAuth sign-in (a redirect, via `signInWithOAuth`), and a "Demo Mode" entry point. Registration does **not** write a profile row — the `on_auth_user_created` trigger (`supabase/migrations/0008_user_provisioning.sql`) creates it with `role: 'client'`, so no signup path can skip it.
+- **`auth/Login.tsx`** — email/password sign-in and registration, Google OAuth sign-in (a redirect, via `signInWithOAuth`), and a "Demo Mode" entry point. Registration does **not** write a profile row — the `on_auth_user_created` trigger (`supabase/migrations/0001_core.sql`) creates it with `role: 'client'`, so no signup path can skip it.
 - **`dashboard/Dashboard.tsx`** — lists the signed-in user's registered businesses/nonprofits (live query via `liveQuery`; scoping to the owner is enforced by RLS, not by a client-side filter), shows portfolio stats, and lets the user register a new business via a modal form.
-- **`business/BusinessPortal.tsx`** — the per-business workspace. Renders a bento-grid layout showing the business profile, a 6-stage engagement roadmap (`initial_meeting → budget_check → data_ethics_committee → scoping → hackathon_ready → membership`), a live activity feed of engagement records, and a notes box. Partners cannot write `engagements` (revoked in `0014`): a note is an append-only `note_added` row in `engagement_events`, and stages move only through `/api/engagement-transition` → `transition_engagement()` (`0013`).
+- **`business/BusinessPortal.tsx`** — the per-business workspace. Renders a bento-grid layout showing the business profile, a 6-stage engagement roadmap (`initial_meeting → budget_check → data_ethics_committee → scoping → hackathon_ready → membership`), a live activity feed of engagement records, and a notes box. Partners cannot write `engagements` (`0001_core`): a note is an append-only `note_added` row in `engagement_events`, and stages move only through `/api/engagement-transition` → `transition_engagement()` (`0005_lifecycle`).
 - **`scout/ScoutIntakeForm.tsx`** — a public, unauthenticated 10-question intake form for prospective nonprofits/small businesses (org info, mission, primary need, problem description, systems, timeline). On submit it posts to `/api/route-intake` (signing the visitor in anonymously for a bearer token), falls back to [`routeScoutIntake`](src/agents/scout/routing.ts) through `withFallback` if the route fails, and inserts one `scout_intakes` row with both the raw answers and the computed routing result; the applicant only ever sees a generic confirmation screen.
 - **`scout/ScoutReviewQueue.tsx`** — admin-only queue (Pending/Reviewed tabs) showing each intake's assigned bucket, confidence, rationale, readiness scores, and flags, with **Approve / Edit / Reject & Redirect** actions that finalize a bucket and mark the intake reviewed. Reviewed cards hand off to Architect: "Architect Assessment →" (no assessment yet) or "View 90-Day Plan" (assessment exists).
-- **`architect/ArchitectAssessment.tsx`** — admin-only, staff-conducted 18-question Current-State Assessment for an approved intake (recorded during the kickoff call). On submit it POSTs `/api/architect-plan`, which scores the maturity model, drafts the charter + 90-day plan, and saves them through `submit_architect_draft()` (`0009`) beside a pending L3 `charter` approval — direct writes to `architect_assessments` are revoked (`0010`). Re-opening an assessed org pre-fills the form for re-conducting.
+- **`architect/ArchitectAssessment.tsx`** — admin-only, staff-conducted 18-question Current-State Assessment for an approved intake (recorded during the kickoff call). On submit it POSTs `/api/architect-plan`, which scores the maturity model, drafts the charter + 90-day plan, and saves them through `submit_architect_draft()` (`0004_drafts`) beside a pending L3 `charter` approval — direct writes to `architect_assessments` are revoked (`0001_core`). Re-opening an assessed org pre-fills the form for re-conducting.
 - **`architect/ArchitectPlan.tsx`** — the engagement blueprint view: 5-dimension maturity scorecard (with override/flag/remediation/cross-check warning banners), then tabbed documents — **90-Day Plan** (phase timeline + workstreams), **Charter**, and labeled placeholders for MOU and Kickoff Deck (their templates are open items in the spec).
 
 ### Data Access (`src/lib/supabase.ts`)
@@ -94,8 +94,8 @@ Everything lives in one admin-only table, `architect_assessments`, where the **p
 
 Three more agents have logic in `src/agents/` and a route in `api/`, but no screens yet:
 
-- **Envoy** (`/api/envoy-draft`) — drafts a partner-facing message, saved through `submit_envoy_draft()` (`0012`) beside a pending L3 approval. Nothing is sent.
-- **Chronicle** (`/api/chronicle-draft`) — drafts an impact story, saved through `submit_chronicle_draft()` (`0012`) beside a pending L3 approval, plus the engagement's lesson candidate (`0015`).
+- **Envoy** (`/api/envoy-draft`) — drafts a partner-facing message, saved through `submit_envoy_draft()` (`0004_drafts`) beside a pending L3 approval. Nothing is sent.
+- **Chronicle** (`/api/chronicle-draft`) — drafts an impact story, saved through `submit_chronicle_draft()` (`0004_drafts`) beside a pending L3 approval, plus the engagement's lesson candidate (also `0004_drafts`).
 - **Pulse** (`/api/pulse-health`) — a read-only, model-free engagement health signal.
 
 Envoy and Chronicle fall back to a deterministic draft when the model fails. Each agent's contract is in [.claude/specs/platform/agents/](.claude/specs/platform/agents/), and each has at least one eval metric in [src/evals/](src/evals/README.md).
@@ -124,9 +124,9 @@ Access control is Postgres row-level security, enabled and forced on every table
 │   └── types/                         # Shared types, re-exported from index.ts
 ├── supabase/
 │   ├── config.toml                    # Supabase CLI config (local stack)
-│   ├── migrations/                    # 0001–0019: schema, RLS, agent write functions
+│   ├── migrations/                    # 0001_core … 0006_views (squashed) + 0007: schema, RLS, agent write functions
 │   │   └── reference/                 # Firebase port sources (firestore.rules, firebase-blueprint.json)
-│   └── tests/rls.test.sql             # pgTAP RLS suite
+│   └── tests/                         # pgTAP suite: core / spine / rpcs + _shared/fixtures.psql
 ├── docs/                              # PRD + system-design exports
 ├── vite.config.ts
 └── tsconfig.json

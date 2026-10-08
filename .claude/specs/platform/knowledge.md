@@ -38,9 +38,9 @@ three are already satisfied here:
 
 | The prior design required | Already exists here |
 |---|---|
-| Supabase Postgres as substrate | `supabase/migrations/` — 8 migrations, live |
-| RLS for multi-tenancy (gap 2) | `0003_tenancy.sql` — org-scoped, `user_org_ids()`, `force row level security` |
-| A documents table with provenance | `0007_documents.sql` — source, classification, version, status, provenance |
+| Supabase Postgres as substrate | `supabase/migrations/` — the six squashed migrations (0001_core–0006_views) plus 0007, live |
+| RLS for multi-tenancy (gap 2) | `0001_core.sql` — org-scoped, `user_org_ids()`, `force row level security` |
+| A documents table with provenance | `0003_delivery.sql` — source, classification, version, status, provenance |
 | Auth on the retrieval API (gap 4) | Supabase Auth + Vercel Functions; `api/_env.ts`, `api/_http.ts` |
 
 That design scoped a system that had to *build* all four. This repo has them.
@@ -157,7 +157,7 @@ Four rules, all non-optional:
    artifact for free from a tool DSSG already pays for, with no LLM extraction cost and
    none of the multi-writer consolidation problem that made OQ-1 a NO.
 3. **`source='external'`, `provenance` carries the Granola meeting id and timestamp.**
-   `0007_documents.sql` already has both columns. Retrieval must be able to answer "where
+   `0003_delivery.sql` already has both columns. Retrieval must be able to answer "where
    did this come from" without a second lookup.
 4. **Redact before embedding, not after.** Client names and contact details are restricted
    material under the inherited data-classification rules. Once they are in an embedding they are not
@@ -197,7 +197,7 @@ Pulse and Chronicle are push consumers. They run on a schedule against a known s
 and search for something whose shape they already know is slower, lossier, and costs an
 embedding call to rediscover a fact a `WHERE` clause knows exactly.
 
-`0007_documents.sql` already does `alter publication supabase_realtime add table
+`0003_delivery.sql` already does `alter publication supabase_realtime add table
 documents`, and design-system.md §4 notes Realtime respects RLS. The push path is mostly
 already built.
 
@@ -256,7 +256,7 @@ Ordered. Items 1–2 are the whole substrate delta.
 
 | # | Item | Notes |
 |---|---|---|
-| 1 | Migration `0008_knowledge.sql` — D37 | `pgvector` extension; `document_chunks`; `code_symbols`; `code_edges`; RLS mirroring `0007`'s org-scoping; `tsvector` generated column + GIN index; ivfflat index on the embedding. **Settle D40 first** — where symbol vectors live is a column in this migration, not a later tuning knob |
+| 1 | Knowledge migration at the next free number (0008 at the time of writing) — D37 | `pgvector` extension; `document_chunks`; `code_symbols`; `code_edges`; RLS mirroring `documents`' org-scoping (0003_delivery); `tsvector` generated column + GIN index; ivfflat index on the embedding. **Settle D40 first** — where symbol vectors live is a column in this migration, not a later tuning knob |
 | 2 | `src/knowledge/` | `retrieval.ts` (hybrid + RRF), `chunk.ts`, `embed.ts`, `ingest.ts`. Obeys §7's boundary rule — imports nothing from `agents/`, `services/`, `app/` |
 | 3 | `/api/knowledge-search` | Session-authed; RLS carries tenancy |
 | 4 | `/api/knowledge-ingest` | Service-role; shared-secret verified; the §5 rules |

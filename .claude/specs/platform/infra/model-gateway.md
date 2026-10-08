@@ -34,7 +34,7 @@ Two adapters, picked by model id (`providerOf()`): `@ai-sdk/google` (`google(mod
 ## Dependencies
 - **Imports:** `ai` (Vercel AI SDK core); `@ai-sdk/google`; `@ai-sdk/openai`; `zod`; `src/observability/recorder.ts`; `src/types/` (`GatewayRequest`, `GatewayResponse`, `GatewayError`)
 - **Imported by:** `src/agents/scout/`, `src/agents/architect/`, `src/agents/chronicle/`; `api/route-intake`, `api/architect-assess`, `api/chronicle-draft`; `src/evals/pipelines/judge/` (eval judge calls)
-- **Data:** No direct Supabase access. Telemetry delegated to `recorder.ts`. `agent_runs` and `tool_calls` (`0004_telemetry.sql`).
+- **Data:** No direct Supabase access. Telemetry delegated to `recorder.ts`. `agent_runs` and `tool_calls` (`0001_core.sql`).
 
 ## Delta rows
 Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbers.

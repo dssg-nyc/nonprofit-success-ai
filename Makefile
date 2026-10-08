@@ -37,9 +37,11 @@ gate: type-check lint test build
 # calling shell, the agents' model paths only when GOOGLE_GENERATIVE_AI_API_KEY is (never
 # read from a file here); without its key each prints `skipped`, not 0. Output: src/evals/reports/output/
 # (git-ignored): runs/<id>/ per run (never overwritten), copied up as the latest summary.json,
-# graded.jsonl, calls.jsonl; report.html. Keyed runs also append to the tracked
+# graded.jsonl, calls.jsonl, calibration.jsonl; report.html is written beside its run too
+# (EVAL_RUN=<id> make eval-report renders an older one). Keyed runs also append to the tracked
 # src/evals/experiments/log.jsonl. A run is labelled with the prompt versions it measured
-# (scout 0.03, architect 0.02, …); EVAL_LABEL="what changed" make eval overrides that.
+# (scout 0.05, architect 0.04, …, read from the *_PROMPT_VERSION constants, so a bumped
+# prompt relabels the next run by itself); EVAL_LABEL="what changed" make eval overrides that.
 #
 # `eval` and `eval-gate` depend on `gate`: a keyed run spends real model calls, and a
 # run over code that does not type-check, lint, test or build measures nothing worth
@@ -54,7 +56,7 @@ eval-gate: gate  ## Gate, then grade and exit non-zero on any targets.yaml miss 
 	npm run eval:grade -- --gate
 	npm run eval:report
 
-eval-report: ## Render reports/output/report.html from the last grade run
+eval-report: ## Render report.html (scoreboard, trend across runs, judge calibration) from the last grade run, or EVAL_RUN=<id>
 	npm run eval:report
 
 # The review notebook is git-ignored and built from build_review.py; it needs pandas,
@@ -141,7 +143,7 @@ db-types:  ## Regenerate src/lib/database.types.ts from the local stack's schema
 db-status:  ## Show local stack status and connection details
 	$(SUPABASE) status
 
-# Q5 production metrics (observability.md): the agent_run_metrics view (0016) read straight
+# Q5 production metrics (observability.md): the agent_run_metrics view (0006_views) read straight
 # from the local stack with psql as the local superuser, so RLS is bypassed -- local only.
 metrics:  ## Q5 metrics from the local stack: agent_run_metrics, newest day first (local superuser, RLS bypassed)
 	@command -v psql >/dev/null 2>&1 || { \

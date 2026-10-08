@@ -17,10 +17,10 @@ data models, and open items (U4, U5, U7).
 | Concern | Choice |
 |---|---|
 | UI | React 19 + Vite 6 + TypeScript + Tailwind 4 (SPA — **not** Next.js) |
-| Server | Vercel Functions under `/api` — 7 routes (`health`, `route-intake`, `architect-plan`, `envoy-draft`, `chronicle-draft`, `pulse-health`, `engagement-transition`) + `_env.ts`/`_http.ts`/`_auth.ts` helpers; tests in `api/__tests__/`. Every route but `health` requires a Supabase bearer token (`_auth.ts`); the public intake form gets one by anonymous sign-in (`src/lib/session.ts`, migration 0011) |
+| Server | Vercel Functions under `/api` — 7 routes (`health`, `route-intake`, `architect-plan`, `envoy-draft`, `chronicle-draft`, `pulse-health`, `engagement-transition`) + `_env.ts`/`_http.ts`/`_auth.ts`/`_request.ts`/`_budget.ts` helpers; tests in `api/__tests__/`. Every route but `health` requires a Supabase bearer token (`_auth.ts`); the public intake form gets one by anonymous sign-in (`src/lib/session.ts`, 0001_core) and the route files the intake via `submit_scout_intake()` (0007) — the browser never writes `scout_intakes`. Every handler is wrapped by `handler()` (`_request.ts`): request id in every log line + `x-request-id`; model routes check the caller's hourly budget (`_budget.ts`) first. See `api/README.md` |
 | Agents | Vercel AI SDK (`ai` + `@ai-sdk/google`), called only through `src/model/gateway.ts` |
-| Data / auth | Supabase — Postgres, Auth, RLS, Realtime *(live — `src/lib/supabase.ts`)*. Stage changes go only through `transition_engagement()` (0013; partner writes to `engagements` revoked in 0014) |
-| Tests | Vitest (`src/**/*.test.ts` + `api/**/*.test.ts`, node) — 47 files in `__tests__/` dirs; pgTAP RLS suite in `supabase/tests/` (363 assertions, `make db-test`, runs in CI as the `db-test` job; first green local run 2026-10-08 — it found that 0001–0007 never revoked Supabase's default table grants, fixed in 0019; `make metrics` prints the 0016 `agent_run_metrics` view, needs `psql` — `brew install libpq`) |
+| Data / auth | Supabase — Postgres, Auth, RLS, Realtime *(live — `src/lib/supabase.ts`)*. Stage changes go only through `transition_engagement()` (0005_lifecycle; partners hold no write on `engagements`). Migrations were squashed 2026-10-08 into `0001_core`–`0006_views`; `0007` onward is post-squash |
+| Tests | Vitest (`src/**/*.test.ts` + `api/**/*.test.ts`, node) — 47 files in `__tests__/` dirs; pgTAP suite in `supabase/tests/` (`core` / `spine` / `rpcs.test.sql` + `_shared/fixtures.psql`, one transaction per file, counts scoped to fixture ids; `make db-test`, runs in CI as the `db-test` job; `make metrics` prints the `agent_run_metrics` view (0006_views), needs `psql` — `brew install libpq`) |
 | Evals | `src/evals/` + `targets.yaml` — heuristic + LLM-judge graders. `npm run eval:grade -- --gate` gates `scoutRouting`, `architectScoring`, `architectPlanStructure`, `pulseHealth`, `envoyDraftStructure`, `chronicleReadiness` at 1.0; judges stay `UNGATED` until a keyed run measures them; not yet a CI job |
 
 The Firebase-to-Supabase migration is **complete**: `firebase` is out of `package.json`,
@@ -49,9 +49,9 @@ until that audit is no longer needed. See `supabase/migrations/reference/README.
 - **HITL tiering is a contract.** `L2` = high confidence + ready signal, agent acts
   (reversible). `L3` = everything else, agent drafts and a human approves. The tier is
   derived **server-side** so a model cannot grant itself `L2` — Scout through
-  `deriveHitlTier()`, Architect as fixed `L3` via `submit_architect_draft()` (0009), which writes
+  `deriveHitlTier()`, Architect as fixed `L3` via `submit_architect_draft()` (0004_drafts), which writes
   the draft beside a pending `charter` approval; Envoy and Chronicle the same way through
-  `submit_envoy_draft()` / `submit_chronicle_draft()` (0012), each beside a pending L3 approval.
+  `submit_envoy_draft()` / `submit_chronicle_draft()` (0004_drafts), each beside a pending L3 approval.
 - Path alias `@` resolves to `src/`, in `tsconfig.json`, `vite.config.ts` and `vitest.config.ts`.
   `tsconfig.json` is `strict`.
 - Import ordering, naming, and type-strictness follow `~/.claude/refs/typescript.md`.
@@ -120,7 +120,7 @@ UI → `model/`/`observability/`/agent `model.ts`, and `lib/` → agents/UI.)*
 - `src/lib/` — cross-cutting infrastructure (`supabase.ts`, `demoStore.ts`, `api.ts`, `lessons.ts`), not agent
   logic. `supabase.ts` is the browser (anon, `VITE_`) client. `api.ts` is the SPA's `/api` caller:
   `postJson` (bearer token attached) and `withFallback`, which runs the agent's local
-  heuristic when the route fails. The only service-role client lives inside
+  heuristic when the route fails (Pulse; Scout's fallback now runs inside the route). The only service-role client lives inside
   `src/observability/recorder.ts` and is never exported; `api/` routes act as the caller
   (anon key + the user's JWT, `api/_auth.ts`).
   The former `scoutRouting.ts`, `architectPlan.ts` and `architectScoring.ts` now

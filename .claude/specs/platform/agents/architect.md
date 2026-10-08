@@ -140,7 +140,7 @@ gap, not fixed here (see §4 Open items).
   Foundational — so the two never co-occur. Correct by construction today, but the order
   is load-bearing and not stated anywhere but the code.
 - **A re-submit after approval leaves the approval in place.** `submit_architect_draft()`
-  (0009) expires only *pending* approvals for the assessment. Re-conducting an assessment
+  (0004_drafts) expires only *pending* approvals for the assessment. Re-conducting an assessment
   whose charter was already approved writes a new pending approval beside the approved
   one; the approved row is not expired or reopened, so the plan page shows the new
   pending draft while an approval for the old content still exists.
@@ -155,9 +155,9 @@ gap, not fixed here (see §4 Open items).
 
 **Decided — human review.** Architect's output is **L3**: the model drafts, a staff
 member approves. `POST /api/architect-plan` never sets the tier from model output;
-`submit_architect_draft()` (0009) writes the assessment, a pending `charter` approval and
+`submit_architect_draft()` (0004_drafts) writes the assessment, a pending `charter` approval and
 the `architect.draft_submitted` audit event in one transaction, and `ArchitectPlan` shows
-the approval's state. Direct client writes to `architect_assessments` are revoked (0010).
+the approval's state. Direct client writes to `architect_assessments` are revoked (0001_core).
 
 ## Contract
 
@@ -184,21 +184,22 @@ the approval's state. Direct client writes to `architect_assessments` are revoke
 
 - Assessment requires a matching `scout_intakes` row (`scoutIntakeId` FK). Cannot assess an org that has not been intake-reviewed.
 - No delete on `architect_assessments` — rows are permanent audit trail. Org admins read;
-  only `submit_architect_draft()` writes (INSERT/UPDATE revoked from `authenticated`, 0010).
+  only `submit_architect_draft()` writes (INSERT/UPDATE revoked from `authenticated`, 0001_core).
 - HITL is **L3**, always: the draft is pending staff approval, and a model cannot raise it.
 - Every path saves a draft: a model failure saves `buildTemplate()` (`source: 'fallback'`).
 - Plan shape is derived: `compositeLevel === 'Foundational'` → `build_basics`; `remediationOnly` → `remediation_only`; `compositeLevel === 'Developing'` (and not remediationOnly) → `ship_deliverable`; `compositeLevel === 'Established'` → `accelerate`. Model must not generate `shape`.
 - DI override: `di_score === 1 && compositeLevel === 'Established'` → cap to `Developing`, set `overrideApplied = true`.
 - Remediation-only: `flaggedDimensions.length >= 2` (both DI and Governance at Foundational).
 - Cross-check flag: `compositeLevel === 'Foundational' && scoutBucket === 'ML / Predictive'` → redirect signal, do not charter. (The code still drafts a `build_basics` charter that leads with the redirect — §4 open item.)
-- DI and Governance Foundational scores become named required workstreams in the charter and the plan, at every composite level — never generic "areas to improve" language.
+- DI and Governance Foundational scores become named required workstreams in the charter and the plan, at every composite level — never generic "areas to improve" language. A `build_basics` plan with nothing flagged carries one required workstream, Data Foundations ("Stand up the collection, storage and first summary the plan describes"), so `workstreams` is never empty.
+- Every deliverable and success criterion traces to a flagged dimension, the bucket, or a sentence in the assessment (prompt `architect-plan-0.04`). The templates promise no funder-facing improvement and no maturity level ("Developing level"); the dashboard deliverable is for "the workflow the assessment names as most manual", and the model names that workflow from the assessment text. Gated by `architectGrounding` (R17, 2026-10-08).
 - Tooling's Developing tier covers either-direction pairing (CRM without reporting tool, or reporting tool without CRM) — this is a documented, intentional extension of the original rubric.
 
 ## Dependencies
 
 - **Imports:** `src/types/` (barrel: ArchitectAssessment, MaturityResult, ArchitectCharter, NinetyDayPlan, CompositeLevel, FlaggedDimension, ScoutBucket, ArchitectPlanRequest/Response); `src/schemas/`; `src/model/gateway.ts` (which records `agent_runs` through `src/observability/recorder.ts`); `src/guardrails/hitl.ts`
 - **Imported by:** `api/architect-plan.ts`; `ArchitectAssessment.tsx` (via `draft.ts` and `/api/architect-plan` — never `model.ts`); `ArchitectPlan.tsx` (`approvalBadge`); `src/evals/`
-- **Data:** `architect_assessments` table (`supabase/migrations/0001_init.sql`; writes revoked in `0010_architect_assessments_revoke.sql`); `scout_intakes` (FK); `approvals` + `audit_events` (`submit_architect_draft()`, `0009_architect_draft.sql`); `agent_runs` (`0004_telemetry.sql`)
+- **Data:** `architect_assessments` table (`supabase/migrations/0001_core.sql`, which also revokes client writes); `scout_intakes` (FK); `approvals` + `audit_events` (`submit_architect_draft()`, `0004_drafts.sql`); `agent_runs` (`0001_core.sql`)
 
 ## Delta rows
 

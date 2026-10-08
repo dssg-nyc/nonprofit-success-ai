@@ -50,33 +50,34 @@ fixtures; the `targets.yaml` threshold set at the measured rate; `make gate` and
 ### Built — M0–M5, Ramsey (#26)
 
 Everything here is on `agent-validation`, migrations applied locally and covered by the pgTAP
-suite (363 assertions, green 2026-10-08). "Hosted" means nothing until #27 and #28 land.
+suite (green 2026-10-08). "Hosted" means nothing until #27 and #28 land.
 
 | # | Item | Landed | Spec |
 |---|---|---|---|
-| D1 | Server boundary — `api/route-intake.ts`, model key server-side, bearer auth (`api/_auth.ts`), anonymous sign-in for the public form (0011); SPA posts via `src/lib/api.ts` `withFallback` | R1 2026-08-22, SPA wired R4 2026-10-06 | `platform/agents/scout.md` |
+| D1 | Server boundary — `api/route-intake.ts`, model key server-side, bearer auth (`api/_auth.ts`), anonymous sign-in for the public form (0001_core); the route files the intake through `submit_scout_intake()` (0007) and the browser never writes `scout_intakes` | R1 2026-08-22, SPA wired R4 2026-10-06, server-side write 2026-10-08 | `platform/agents/scout.md` |
 | D2 | Architect end-to-end — `api/architect-plan.ts`, idempotent replay, model enrichment over the `buildTemplate()` fallback | R5 2026-10-06 | `platform/agents/architect.md` |
 | D3 | Model gateway — `src/model/gateway.ts`, failure ladder, provider abstraction | R1 2026-08-22, hardened R2/R3 | `platform/infra/model-gateway.md` |
-| D4 | Observability — `agent_runs` recorder, `0004_telemetry.sql` | R2 2026-08-22 | `platform/infra/observability.md` |
-| D5 | Approval spine — `deriveHitlTier()`, `0005_approval_spine.sql` (queue UI is D26 / #29) | R2 2026-08-22 | `design-system.md` §2 |
+| D4 | Observability — `agent_runs` recorder, `0001_core.sql` | R2 2026-08-22 | `platform/infra/observability.md` |
+| D47 | API hardening — request id on every log line and `x-request-id` (`api/_request.ts`), uncaught throws → logged 500, `cost_cents` from `src/model/pricing.ts`, per-user hourly model budget (`check_model_budget()`, 0007, 429), `health` probes Supabase (503 when unreachable); drain/alerts/dashboard stay D44 | 2026-10-08 | `stack/vercel-functions.md`, `platform/infra/observability.md` |
+| D5 | Approval spine — `deriveHitlTier()`, `0002_approvals.sql` (queue UI is D26 / #29) | R2 2026-08-22 | `design-system.md` §2 |
 | D6 | Wire contracts — `src/schemas/`, `z.infer` types for Scout, Architect, Envoy, Chronicle, Pulse | R2–R8, complete 2026-10-07 | `design-system.md` §2 |
 | D7 | Scout to `src/agents/scout/` + first test suite | R1 2026-08-22 | `platform/agents/scout.md` |
 | D8 | Architect to `src/agents/architect/` + tests | R1 2026-08-22 | `platform/agents/architect.md` |
-| D10 | Envoy agent — `src/agents/envoy/draft.ts`, `api/envoy-draft.ts`; drafts persisted L3-gated via `submit_envoy_draft()` (0012) | R1 2026-08-22, persistence R8 2026-10-07 | `platform/agents/envoy.md` |
-| D11 | Chronicle agent — readiness gate, model synthesis, `api/chronicle-draft.ts`; drafts via `submit_chronicle_draft()` (0012) | R1 2026-08-22, persistence R8 2026-10-07 | `platform/agents/chronicle.md` |
+| D10 | Envoy agent — `src/agents/envoy/draft.ts`, `api/envoy-draft.ts`; drafts persisted L3-gated via `submit_envoy_draft()` (0004_drafts) | R1 2026-08-22, persistence R8 2026-10-07 | `platform/agents/envoy.md` |
+| D11 | Chronicle agent — readiness gate, model synthesis, `api/chronicle-draft.ts`; drafts via `submit_chronicle_draft()` (0004_drafts) | R1 2026-08-22, persistence R8 2026-10-07 | `platform/agents/chronicle.md` |
 | D12 | Eval harness — graders + judges, six heuristic metrics gated at 1.0, `eval-heuristics` job in `ci.yml` | R3 2026-08-22, CI R11 2026-10-07 | `platform/infra/eval-harness.md` |
 | D13 | Pulse agent — `computePulseSignal()`, `api/pulse-health.ts`, deterministic only | R2 2026-08-22, API R6 2026-10-07 | `platform/agents/pulse.md` |
-| D15 | Chronicle → Scout feedback — `promoted_lessons` + `src/lib/lessons.ts` at review time (UI is #29) | R9 2026-10-07 (0015) | `platform/agents/chronicle.md` |
-| D16 | `engagement_events` producer — `transition_engagement()` appends one event per transition | R7 2026-10-07 (0013) | `crm/lifecycle.md` §2 |
+| D15 | Chronicle → Scout feedback — `promoted_lessons` + `src/lib/lessons.ts` at review time (UI is #29) | R9 2026-10-07 (0004_drafts) | `platform/agents/chronicle.md` |
+| D16 | `engagement_events` producer — `transition_engagement()` appends one event per transition | R7 2026-10-07 (0005_lifecycle) | `crm/lifecycle.md` §2 |
 | D17 | Stage enum ratification — six stages | Resolved 2026-08-21 | `crm/lifecycle.md` §1 |
-| D18 | `engagements.stage` writer — the transition command owns it | Resolved 2026-08-21, true since 0014 | `crm/lifecycle.md` §2 |
-| D19 | `POST /api/engagement-transition` — guards, events, idempotency, L3 approval row | R7 2026-10-07 (0013) | `crm/lifecycle.md` §2 |
-| D20 | Provenance — `provenance_source` columns on AI content (0012), `engagement_events.approval_id`, `scout_intakes` routing provenance, `provenance_chain` view (0018) | R8 + R12 2026-10-07 | `crm/data-model.md` §7 |
-| D21 | Chronicle learning artifact — `lessons` with prediction/outcome, `promote_lesson()` | R9 2026-10-07 (0015) | `platform/agents/chronicle.md` |
-| D22 | Trust boundary — partner writes to `engagements` revoked; the self-transition hole found 2026-08-21 is closed | R7 2026-10-07 (0014) | `crm/security.md` §2a |
+| D18 | `engagements.stage` writer — the transition command owns it | Resolved 2026-08-21, enforced in 0001_core | `crm/lifecycle.md` §2 |
+| D19 | `POST /api/engagement-transition` — guards, events, idempotency, L3 approval row | R7 2026-10-07 (0005_lifecycle) | `crm/lifecycle.md` §2 |
+| D20 | Provenance — `provenance_source` columns on AI content (0004_drafts), `engagement_events.approval_id` (0003_delivery), `scout_intakes` routing provenance (0001_core), `provenance_chain` view (0006_views) | R8 + R12 2026-10-07 | `crm/data-model.md` §7 |
+| D21 | Chronicle learning artifact — `lessons` with prediction/outcome, `promote_lesson()` | R9 2026-10-07 (0004_drafts) | `platform/agents/chronicle.md` |
+| D22 | Trust boundary — partner writes to `engagements` revoked; the self-transition hole found 2026-08-21 is closed | R7 2026-10-07 (0001_core) | `crm/security.md` §2a |
 | D23 | Scout eval suite — `scoutRouting` 21 cases gated at 1.0; `scoutRationale` judge UNGATED | R4 2026-10-06 | `platform/agents/scout.md` |
 | D24 | Architect eval suite — `architectScoring` 25, `architectPlanStructure` 23 gated at 1.0; `architectCharter` judge UNGATED | R5 2026-10-06 | `platform/agents/architect.md` |
-| D31 | Architect HITL gate — `submit_architect_draft()` (0009), direct writes revoked (0010), approval badge | R5 2026-10-06 | `platform/agents/architect.md` |
+| D31 | Architect HITL gate — `submit_architect_draft()` (0004_drafts), direct writes revoked (0001_core), approval badge | R5 2026-10-06 | `platform/agents/architect.md` |
 
 ### Open — Ramsey
 
@@ -84,8 +85,9 @@ suite (363 assertions, green 2026-10-08). "Hosted" means nothing until #27 and #
 |---|---|---|---|---|
 | D25 | Chronicle eval suite — readiness fixtures gated (`chronicleReadiness`); the three judge dimensions and the κ protocol need a keyed run and two blind raters | PARTIAL · κ protocol spec'd R10 | D28, #29 raters | `platform/agents/chronicle.md` |
 | D28 | Eval CI — `eval-heuristics` and `db-test` live in `ci.yml`; the judge job (`eval-judge`, R14) and measured judge thresholds remain | PARTIAL | #27 secrets | `platform/infra/eval-harness.md` |
-| D42 | Anonymous-to-member conversion — an intake visitor who later signs up keeps the `auth.users` row but `handle_new_user` never fires; needs an on-update trigger or first-sign-in provisioning before sign-up from the intake flow ships | GAP · accepted 2026-10-07 | — | `platform/agents/scout.md` Rules; 0011 |
+| D42 | Anonymous-to-member conversion — an intake visitor who later signs up keeps the `auth.users` row but `handle_new_user` never fires; needs an on-update trigger or first-sign-in provisioning before sign-up from the intake flow ships | GAP · accepted 2026-10-07 | — | `platform/agents/scout.md` Rules; 0001_core |
 | D45 | `POST /api/send-communication` — the Envoy send step: provider, `sent_at`, the L4 question | GAP (R16) | #28 provider decision, D10 | `platform/agents/envoy.md` |
+| D46 | `achievedOutcomes?: string[]` on `ChronicleInput` — Chronicle reads achieved outcomes from `engagement_events`; until then the template's `outcomes` stays empty and a success criterion is quoted as the definition of success, never promoted to an outcome | GAP (R17, 2026-10-08) | — | `platform/agents/chronicle.md` |
 
 ### Open — Tony (#29), logic wiring by Ramsey (R15)
 
@@ -99,7 +101,7 @@ suite (363 assertions, green 2026-10-08). "Hosted" means nothing until #27 and #
 | # | Item | State | Blocked by | Spec |
 |---|---|---|---|---|
 | D9 | Contract & Consent gate — `engagement_contracts`, server timestamp, immutable write, PDF + email provider | SPECIFIED | #28 provider decision | `platform/services/contract-consent.md` |
-| D29 | Tenancy — three roles, project-scoped; replaces 0003's org model (the pgTAP assertion labelled `KNOWN WRONG` flips when it lands) | SPECIFIED, deferred | C1, C2 | `crm/access-model.md`, `crm/data-model.md` |
+| D29 | Tenancy — three roles, project-scoped; replaces 0001_core's org model (the pgTAP assertion labelled `KNOWN WRONG` flips when it lands) | SPECIFIED, deferred | C1, C2 | `crm/access-model.md`, `crm/data-model.md` |
 | D35 | HubSpot CRM sync — bidirectional, idempotent | PARKED · placeholder in `.claude/docs/research/hubspot-mcp.md`; re-spec here before building | D29 | — |
 
 ### Open — Jian
@@ -117,7 +119,7 @@ The three build issues may be redefined by that answer.
 | # | Item | Package | Blocked by | Spec |
 |---|---|---|---|---|
 | D40 | Code-embedding storage decision — symbol vectors in `document_chunks` or beside `code_symbols` | KB-1 (decide in the migration) | #30 | `platform/knowledge.md` §8 |
-| D37 | Knowledge schema — pgvector, `document_chunks`, org-scoped RLS mirroring 0007 | KB-1 | #30, D29 | `platform/knowledge.md` |
+| D37 | Knowledge schema — pgvector, `document_chunks`, org-scoped RLS mirroring `documents` (0003_delivery) | KB-1 | #30, D29 | `platform/knowledge.md` |
 | D32 | Retrieval — `src/knowledge/`, hybrid search, `/api/knowledge-search` | KB-1 | D37 | `platform/knowledge.md` |
 | D38 | Retrieval eval — recall@10 on a golden set, registered in `src/evals/registry.ts` | KB-1 | D32 | `platform/knowledge.md` |
 | D41 | Degraded-arm retrieval eval — recall@10 with FTS unavailable | KB-1 | D38 | `platform/knowledge.md` §7 |
@@ -148,7 +150,7 @@ All four land as comments on #28 before any migration is written.
 
 ## Adding an entry
 
-1. Append a row with the next free number (next: **D46**, **C5**). Never reuse, never renumber.
+1. Append a row with the next free number (next: **D48**, **C5**). Never reuse, never renumber.
 2. Put it in the section for its owner and milestone; move it to **Built** when it lands, keeping
    the number.
 3. Cite it from the spec as `D19` — do not restate the description.

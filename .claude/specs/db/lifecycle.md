@@ -1,8 +1,8 @@
 # Engagement Lifecycle — the state machine
 
 **Status:** Decided 2026-08-21. Resolves **D17** (stage enum ratification, U7) and
-**D18** (who writes `engagements.stage`, U5). Implemented: `transition_engagement()` (0013)
-is the only stage writer, partner writes revoked (0014); §9 rungs 1–5 done, rung 6 open.
+**D18** (who writes `engagements.stage`, U5). Implemented: `transition_engagement()` (0005_lifecycle)
+is the only stage writer, partner writes revoked (0001_core); §9 rungs 1–5 done, rung 6 open.
 **Plate:** C2.1 in `docs/nonprofit-success-system-design.html`
 **Lane:** crm (PRD Workstream 2)
 **Satisfies:** PRD §5.4 stage transitions; closes the lifecycle gap
@@ -17,7 +17,7 @@ split: *no component owns lifecycle writes.* One does now.
 
 **`engagements` is not one row that moves through six stages. It is one row *per* stage.**
 
-`0001_init.sql:176-177` constrains `unique (business_id, stage)`, and
+`0001_core.sql` constrains `unique (business_id, stage)`, and
 `src/components/business/BusinessPortal.tsx:197` upserts onto exactly that conflict target.
 A business at Scoping has up to four `engagements` rows — `initial_meeting`,
 `budget_check`, `data_ethics_committee`, `scoping` — each carrying its own
@@ -25,7 +25,7 @@ A business at Scoping has up to four `engagements` rows — `initial_meeting`,
 
 This was inherited, not chosen: the Firestore portal wrote engagements to the deterministic
 document id `{businessId}_{stage}`, so the shape is a translation artifact of a document
-store, faithfully preserved into Postgres (`0001_init.sql:168-175` says so explicitly).
+store, faithfully preserved into Postgres (`0001_core.sql` says so explicitly).
 
 Every prior discussion of "who writes `engagements.stage`" assumed a cursor. It is not one,
 and the distinction changes the answer:
@@ -35,7 +35,7 @@ and the distinction changes the answer:
   either collide with the unique constraint or silently relabel history.
 - **The engagement's position in the pipeline is derived, not stored.** No column holds it.
 - **`engagements.status` is the mutable field**, and it is already terminal-locked:
-  `engagements_enforce_transitions` (`0001_init.sql:407-410`) refuses any move out of
+  `engagements_enforce_transitions` (`0001_core.sql`) refuses any move out of
   `completed`.
 
 **Decision: keep the row-per-stage shape.** It is append-structured, which is the right
@@ -50,7 +50,7 @@ names the derived value so nobody has to infer it.
 
 ## 1. D17 — Ratified: six stages
 
-The `engagement_stage` enum stands as written at `0001_init.sql:66-73`. Six values, in
+The `engagement_stage` enum stands as written at `0001_core.sql`. Six values, in
 pipeline order:
 
 | # | Stage | What it means | Exit condition | Window |
@@ -69,7 +69,7 @@ lifecycle reads in one place. They are advisory: an overrun makes Pulse report
 `stalled`, it never blocks a transition.
 
 **Why six over the five in earlier docs.** Six is what every artifact that has ever
-executed implements — `firestore.rules:62`, `0001_init.sql:66`, `src/types.ts:15`, and the
+executed implements — `firestore.rules:62`, `0001_core.sql`, `src/types.ts:15`, and the
 portal's `STAGES` array at `BusinessPortal.tsx:24-31`. Five appears only in prose that
 predates the schema. Ratifying six costs one meeting confirmation; ratifying five costs an
 enum migration, a data backfill, a rewrite of `STAGE_WINDOW_DAYS`, and a UI change, in
@@ -103,7 +103,7 @@ it belongs to deterministic code, not to an agent.
 **Today the partner org owner writes their own lifecycle state, from the browser, with no
 guard.** `BusinessPortal.tsx:155-218` calls `updateStage()`, which upserts an `engagements`
 row directly through the Supabase client, and `engagements_insert_own` /
-`engagements_update_own` (`0001_init.sql:557-577`) permit it because the row is theirs.
+`engagements_update_own` (`0001_core.sql`) permit it because the row is theirs.
 A partner can mark themselves `hackathon_ready` on day one.
 
 That is not an abuse to defend against so much as an unfinished portal: the partner-facing
@@ -116,7 +116,7 @@ new one — the roll-out has to account for the portal losing a write it current
 | Candidate | Rejected because |
 |---|---|
 | **The partner org (status quo)** | The subject of a decision cannot be its own approver. Budget check and ethics committee are DSSG-internal gates by definition. |
-| **Staff, via a direct admin RLS policy** | Ships stage-writing as a *grant* rather than a *transition*: an admin UPDATE policy authorizes writing any value from any state, so guards, approvals, and events all become optional. `0002` refuses this explicitly (`0002:23-25`) and it was right to. |
+| **Staff, via a direct admin RLS policy** | Ships stage-writing as a *grant* rather than a *transition*: an admin UPDATE policy authorizes writing any value from any state, so guards, approvals, and events all become optional. `0001_core` refuses this explicitly and it was right to. |
 | **Pulse** | It reads `stage` to judge overrun. Making the observer the writer means health signals become self-fulfilling. [pulse.md](../platform/agents/pulse.md) §7 already rules this out. |
 | **An agent (Scout / Architect / Chronicle)** | Agents reason over ambiguous input; a transition is a guard evaluation over structured state. An agent may *propose* one (§6), never commit it. |
 | **A HubSpot webhook** | PRD §8 — Supabase owns the state machine; a stage never advances because an external system said so. |
@@ -129,7 +129,7 @@ POST /api/engagement-transition
 → 201 { engagementId, fromStage, toStage, transitionedAt, eventId }
 ```
 
-Executed by `transition_engagement()` (0013), a `SECURITY DEFINER` function called with the
+Executed by `transition_engagement()` (0005_lifecycle), a `SECURITY DEFINER` function called with the
 caller's JWT through `api/engagement-transition.ts` — `api/` holds no service-role client by
 design. The function re-derives role (`is_admin()`) and org membership itself; the handler
 only pre-checks so a 422 names the unmet guard. Its obligations, in order, in one
@@ -143,12 +143,12 @@ transaction:
 4. **Evaluate the guard**. A failed guard is `422` with the unmet condition named — never a
    silent no-op.
 5. **Check the approval**, where the transition requires one: an `approvals` row for this
-   engagement with `status = 'approved'` (deferred migration `0005_approval_spine.sql`).
+   engagement with `status = 'approved'` (`0002_approvals`).
 6. **Write**, atomically:
    - `UPDATE` the current stage's row to `status = 'completed'`
    - `INSERT` the target stage's row at `status = 'in_progress'`
    - `INSERT` an `engagement_events` row
-   - `INSERT` an `audit_events` row (once `0005_approval_spine.sql` lands)
+   - `INSERT` an `audit_events` row (`0002_approvals`)
 7. **Fire side effects after commit**, never inside the transaction (§7).
 
 **Idempotency.** `idempotencyKey` is required and unique per transition attempt; a replay
@@ -181,12 +181,12 @@ The single most confusing thing about this model, stated once:
 | `daysSinceLastEvent` | **Derived** | Max `created_at` from `engagement_events`. |
 | **Health status** | **Derived** | Computed on read by Pulse. Never stored — see [pulse.md](../platform/agents/pulse.md) §1. |
 | **Engagement complete** | **Derived** | §5. |
-| `assessment_id` | **Persisted** | Nullable FK to the Architect plan (`0002`). |
+| `assessment_id` | **Persisted** | Nullable FK to the Architect plan (`0001_core`). |
 
 The derivation of "current stage" already exists in the client:
 `BusinessPortal.tsx:134` does `data.find(e => e.status === 'in_progress')`. **That belongs
 server-side**, as one shared function, because two implementations of "where is this
-engagement" will disagree. `0001_init.sql:172-174` records the same class of bug biting
+engagement" will disagree. `0001_core.sql` records the same class of bug biting
 once already — a `find()` returning whichever row it hit first.
 
 **Rule: nothing is persisted that can be derived from the rows plus the event log.** No
@@ -203,9 +203,9 @@ Actors: **Partner** (org owner, `owner_id = auth.uid()`), **Staff** (`users.role
 diplomat tier lands, see [access-model.md](access-model.md)), **System** (the transition
 command, acting on a verified server-side precondition).
 
-Every row writes an `engagement_events` row and, once `0005_approval_spine.sql` lands, an
-`audit_events` row. "Event written" names the `engagement_event_kind`; the enum
-(`0002:62-67`) currently has `milestone_completed | session_held | blocker_raised |
+Every row writes an `engagement_events` row and an `audit_events` row
+(`0002_approvals`). "Event written" names the `engagement_event_kind`; the enum
+(0001_core) originally had `milestone_completed | session_held | blocker_raised |
 note_added`, so §8 adds `stage_advanced` and `stage_reverted`.
 
 ### Forward transitions
@@ -248,7 +248,7 @@ exactly the engagement most in trouble.
 | Skipping a stage forward (`initial_meeting` → `scoping`) | `422`. Each gate exists to be passed. Advancing two stages is two transitions, each with its own guard and record. |
 | A partner writing any transition | `403`. Partners trigger transitions by *doing things* (signing a charter, accepting a plan); they never write the stage. |
 | Any transition out of `membership` | `409`. Terminal (§5). |
-| A stage change on a `completed` engagement row | Refused by `engagements_enforce_transitions` (`0001_init.sql:407-410`) — the terminal-status lock, already in force. |
+| A stage change on a `completed` engagement row | Refused by `engagements_enforce_transitions` (`0001_core.sql`) — the terminal-status lock, already in force. |
 | A transition triggered by an inbound HubSpot webhook | Rejected at the integration boundary — PRD §8. |
 | A transition whose guard has no evidence | `422` with the unmet condition named. Never a silent success. |
 
@@ -270,7 +270,7 @@ signal in the health rubric.
 ### Terminal status: `status = 'completed'`
 
 Per stage row, and already enforced in the database: once a stage row is `completed` it
-cannot leave that state (`0001_init.sql:407-410`). This is the lock that makes a passed
+cannot leave that state (`0001_core.sql`). This is the lock that makes a passed
 gate a fact.
 
 **A reversal (§4) does not violate this lock**, and the distinction matters for
@@ -340,7 +340,7 @@ records that a human asserted the condition, and the `audit_events` detail says 
 (`guard_deferred`) rather than *verified*. This is a deliberate, dated weakening — not an oversight — and it
 is the strongest reason to wire `0006_delivery` early.
 
-`engagement_events.kind = 'milestone_completed'` (`0002:62-67`) already anticipates this
+`engagement_events.kind = 'milestone_completed'` (`0001_core`) already anticipates this
 edge and predates the `milestones` table. Once the table lands, that event should carry the
 milestone id in `detail`.
 
@@ -369,7 +369,7 @@ Failure semantics, extending the four-rung ladder in [stack/vercel-functions.md]
 | Approval service unavailable | `503`. The transition does not proceed unapproved |
 
 **Realtime is UI synchronization, not the trigger.** `engagements` is in the realtime
-publication (`0001_init.sql:665`), so subscribed clients see the transition. That is a
+publication (`0001_core.sql`), so subscribed clients see the transition. That is a
 *consequence* of the write, never a step in it. No side effect may depend on a browser
 having received an event — the failure mode is an engagement that only advances while
 someone has the tab open.
@@ -378,18 +378,17 @@ someone has the tab open.
 
 ## 8. Schema work this spec implies
 
-Status column added: items 1, 2, 3 and 6 are applied in `0013_engagement_transition.sql`; item 4 is
-applied in `0014_engagements_revoke.sql`. Both migrations are written but not yet run against a
-local stack (see the R7 plan's `Outstanding:` line).
+Status column added: items 1, 3 and 4 are applied in `0001_core.sql`, item 2 in `0005_lifecycle.sql`
+and item 6 in `0003_delivery.sql`.
 
 | # | Change | Why |
 |---|---|---|
-| 1 | **Applied 0013.** Add `stage_advanced` and `stage_reverted` to `engagement_event_kind` | §4 writes both; neither value exists (`0002:62-67`) |
-| 2 | **Applied 0013** (`detail`, a JSON string carrying reason and evidence). Add `reason text` to `engagement_events`, or use `detail` by convention | A reversal's reason is mandatory (§4). `detail` suffices; pick one and document it |
-| 3 | **Applied 0013** — the exception is a transaction-local GUC set inside `transition_engagement()`, not the service role (the GUC alone is reachable by a partner until 0014 revokes the privilege). Amend `engagements_enforce_transitions` to allow `completed → in_progress` **only** for the service role | Reversal (§5) needs it; the client-facing lock must stay absolute |
-| 4 | **Applied 0014.** Revoke `INSERT`/`UPDATE` on `engagements` from `authenticated`; drop `engagements_insert_own` / `engagements_update_own` | Makes the transition command the *only* writer. The privilege is the outer gate — §2 is unenforceable while the portal can upsert directly |
+| 1 | **Applied (0001_core).** Add `stage_advanced` and `stage_reverted` to `engagement_event_kind` | §4 writes both; neither value existed before |
+| 2 | **Applied (0005_lifecycle)** — `detail` is jsonb (a check constraint requires a JSON object or null); transitions write `{from, to, reason, guard_deferred, approval_id, evidence}`, notes `{"text": ...}`. Add `reason text` to `engagement_events`, or use `detail` by convention | A reversal's reason is mandatory (§4). `detail` suffices; pick one and document it |
+| 3 | **Applied (0001_core)** — no GUC: the terminal lock keys on the session role, refused for `anon`/`authenticated`/`service_role` and allowed for the superuser and `SECURITY DEFINER` functions (which run as their owner, `postgres`), so `transition_engagement()` passes with no setting. Amend `engagements_enforce_transitions` to allow `completed → in_progress` **only** for the service role | Reversal (§5) needs it; the client-facing lock must stay absolute |
+| 4 | **Applied (0001_core).** Revoke `INSERT`/`UPDATE` on `engagements` from `authenticated`; drop `engagements_insert_own` / `engagements_update_own` | Makes the transition command the *only* writer. The privilege is the outer gate — §2 is unenforceable while the portal can upsert directly |
 | 5 | Keep `engagements_select_own` and `engagements_select_admin` unchanged | Reads are settled; this spec changes writes only |
-| 6 | **Applied 0013** — `engagement_events.idempotency_key` with a partial unique index (no separate table). Add an `idempotency_keys` table, or a unique index on `(engagement_id, to_stage, idempotency_key)` | §2 requires replay safety |
+| 6 | **Applied (0003_delivery)** — `engagement_events.idempotency_key` with a partial unique index (no separate table). Add an `idempotency_keys` table, or a unique index on `(engagement_id, to_stage, idempotency_key)` | §2 requires replay safety |
 
 **Change 4 breaks the partner portal**, which writes stage today (§2). Sequence it with the
 portal work that replaces `updateStage()` with a call to the transition endpoint, or the
@@ -406,7 +405,7 @@ Ordered so each rung leaves the pgTAP suite green and delivers something usable.
 | 1 ✅ | Derive current stage server-side, one shared function | Kills the duplicate `find()` logic (§3) and fixes Chronicle's gate (§5) | Nothing |
 | 2 ✅ | `POST /api/engagement-transition` with guards, events, and idempotency — additive, portal untouched | The state machine exists and is used by staff | Rung 1 |
 | 3 ✅ | Enum values + trigger amendment (§8 items 1–3) | Reversal and correct event kinds | Rung 2 |
-| 4 ✅ | Approval spine (`0005_approval_spine.sql`) wired to the three L3 transitions | Approvals recorded rather than implied | Rung 3 |
+| 4 ✅ | Approval spine (`0002_approvals.sql`) wired to the three L3 transitions | Approvals recorded rather than implied | Rung 3 |
 | 5 ✅ | Revoke direct write privileges (§8 item 4) + port the portal | Single-writer invariant becomes true, not just intended | Rung 4 |
 | 6 | Delivery tables (`0006_delivery`) | The two milestone guards become verifiable rather than attested (§6) | Rung 5 |
 

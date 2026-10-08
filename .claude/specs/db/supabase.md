@@ -9,7 +9,7 @@ to work with it day to day*.
 
 ## Schema
 
-Five core tables, defined in [`supabase/migrations/0001_init.sql`](../../../supabase/migrations/0001_init.sql),
+Five core tables, defined in [`supabase/migrations/0001_core.sql`](../../../supabase/migrations/0001_core.sql),
 translated from the forked portal's `firestore.rules`. See
 [design-system.md](../design-system.md) §4 for the full ER diagram and authorization
 semantics summary (self-scoping, owner-scoping, public intake, admin-only, terminal-status
@@ -23,20 +23,22 @@ lock).
 | `scout_intakes` | Public-insertable intake form rows; admin-only read. |
 | `architect_assessments` | Shares its primary key with the `scout_intakes` row it assesses; admin-only. |
 
-Later migrations add `engagement_events` (staff access), `agent_runs` + `tool_calls`
-(telemetry: append-only for every API role, service-role included; no raw model I/O) and
-`approvals` + `audit_events` (approval spine), then `milestones` + `tasks` (0006),
-`documents` (0007), `communications` + `chronicle_drafts` (0012) and `lessons` (0015) —
-18 tables through 0019. `organization_id` on `agent_runs`, `approvals` and `audit_events`
-is a nullable FK to `organizations` (0004:28, 0005:16, 0005:34); the access-model rewrite
+0001_core also holds `organizations` + `organization_members` and `agent_runs` + `tool_calls`
+(telemetry: append-only for every API role, service-role included; no raw model I/O);
+0002_approvals adds `approvals` + `audit_events` (approval spine); 0003_delivery adds
+`engagement_events`, `milestones` + `tasks` and `documents`; 0004_drafts adds
+`communications`, `chronicle_drafts` and `lessons`; 0005_lifecycle and 0006_views add
+functions and views; 0007 adds `submit_scout_intake()` and `check_model_budget()` —
+18 tables. `organization_id` on `agent_runs`, `approvals` and `audit_events`
+is a nullable FK to `organizations` (0001_core, 0002_approvals); the access-model rewrite
 (C1) re-scopes it. See [`supabase/README.md`](../../../supabase/README.md) for the full list.
 
 ## Migrations
 
 - Source of truth: [`supabase/migrations/`](../../../supabase/migrations/), numbered
   `NNNN_<name>.sql` and applied in numeric order
-  (`0001_init.sql`, ...). The pgTAP extension and `tests` schema are created inside
-  `supabase/tests/rls.test.sql`'s transaction, not in a migration. Create one by hand with the next free
+  (`0001_core.sql`, ...). The pgTAP extension and `tests` schema are created inside
+  the pgTAP suite's transactions (`supabase/tests/_shared/fixtures.psql`), not in a migration. Create one by hand with the next free
   number (`supabase migration new` would produce a timestamp name).
 - Local dev and CI apply migrations against a local Supabase instance via the Supabase
   CLI (`supabase/config.toml` holds local ports/auth-provider config — no remote project
@@ -69,7 +71,7 @@ other `createClient` call is the service-role client in `src/observability/recor
 ## Local dev and testing
 
 - `make db-test` (wrapping `supabase test db`) runs
-  [`supabase/tests/rls.test.sql`](../../../supabase/tests/rls.test.sql) — pgTAP tests
+  [`supabase/tests/`](../../../supabase/tests/) (`core`, `spine` and `rpcs` `.test.sql`, shared fixtures in `_shared/fixtures.psql`) — pgTAP tests
   exercising the policies and triggers directly against Postgres, not an emulator. It
   fails when no `*.test.sql` file exists or zero assertions ran.
 - Local dev requires a running local Supabase stack (`supabase start`); ports and auth

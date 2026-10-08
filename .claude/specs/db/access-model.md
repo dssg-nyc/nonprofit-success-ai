@@ -2,7 +2,7 @@
 
 **Status:** Decided 2026-08-21. Not yet implemented — no applied migration writes
 this. Supersedes the two-role model inherited from `firestore.rules` and the
-organization-scoped design in `0003_tenancy.sql`.
+organization-scoped design now in `0001_core.sql`.
 
 ## What a project is
 
@@ -53,27 +53,27 @@ specified. When it is:
 
 ## Why the current schema cannot express this
 
-`0001_init.sql` defines `user_role as enum ('client', 'admin')` — a faithful port of
+`0001_core.sql` defines `user_role as enum ('client', 'admin')` — a faithful port of
 `firestore.rules`, which never modeled volunteers. RLS policies branch on `is_admin()`,
-which since `0003_tenancy.sql` reads `organization_members` (`role in ('admin', 'owner')`
+which (`0001_core.sql`) reads `organization_members` (`role in ('admin', 'owner')`
 in any organization), not that enum. Neither knows a volunteer.
 
 The diplomat tier is the expensive part: a volunteer is neither the **owner** of a record
 (the client is) nor a **global admin**. Their access is a per-project, time-bounded grant,
 requiring a membership relation no applied migration provides.
 
-## Why `0003_tenancy.sql` is the wrong shape
+## Why `0001_core.sql`'s org model is the wrong shape
 
 Worth stating plainly, because at a glance it looks like it solves this.
 
-| | 0003 as written | What this model needs |
+| | 0001_core as written | What this model needs |
 |---|---|---|
 | Scope unit | organization | **project** |
 | Roles | `owner` / `admin` / `member` | `client` / `diplomat` / `admin` |
 | Grants | every row in your org | only assigned projects |
 | Time bound | none | **cohort window** |
 
-Under 0003 a volunteer added to the DSSG organization would see **every client
+Under 0001_core a volunteer added to the DSSG organization would see **every client
 engagement** — the opposite of the intent. It needs rewriting, not unblocking.
 
 Worth salvaging: the `SECURITY DEFINER` helper pattern (`user_org_ids()`). A policy that
@@ -100,5 +100,5 @@ Roles must be settled **before** pushing to a hosted project. Postgres enums are
 alter once data exists, and every RLS policy branches on the role.
 
 **Do not write the tenancy migration yet unless necessary.** The app already runs on
-Supabase over 0003's org model; the role and project migration lands after #28's decision
+Supabase over 0001_core's org model; the role and project migration lands after #28's decision
 (roadmap D29, C1), as its own piece of work.

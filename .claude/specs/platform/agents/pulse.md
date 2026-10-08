@@ -28,7 +28,7 @@ here forecloses it.
 `engagementId` (string, FK to `engagements`), from which the service reads:
 
 - `stage`, `daysInStage` — lifecycle position and how long it has held.
-- `daysSinceLastEvent` — recency, from `engagement_events` (migration 0002). **Nullable:**
+- `daysSinceLastEvent` — recency, from `engagement_events` (0003_delivery). **Nullable:**
   an engagement with no recorded events is the normal launch-day state, not an error.
 - `lastEventWasBlocker` — whether the most recent event was `blocker_raised`.
 - `hasPlan` — whether `engagements.assessment_id` links an Architect assessment.
@@ -156,7 +156,7 @@ signal to staff, who then decide to initiate via Envoy.
 
 - **Imports:** Supabase client (`src/lib/supabase.ts`); `src/types/` (`PulseSignal`, `PulseInput`); `src/schemas/pulse.ts`
 - **Imported by:** Dashboard component (engagement list health badges); engagement detail screen (health panel); any `api/` handler that needs to gate on engagement health
-- **Data:** `engagement_events` table (`0002_staff_engagement_access.sql`; `kind` enum includes `blocker_raised`); `engagements` table (`0001_init.sql`)
+- **Data:** `engagement_events` table (`0003_delivery.sql`; `kind` enum includes `blocker_raised`); `engagements` table (`0001_core.sql`)
 
 ## Delta rows
 
@@ -194,7 +194,7 @@ Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbe
 
 ## Open questions
 
-1. ~~What columns does `engagement_events` expose for blocker flags?~~ **Resolved — an event-type enum value:** `kind = blocker_raised` (`0002_staff_engagement_access.sql`).
+1. ~~What columns does `engagement_events` expose for blocker flags?~~ **Resolved — an event-type enum value:** `kind = blocker_raised` (`0001_core.sql` enum, `0003_delivery.sql` table).
 2. Should health history be tracked (a `health_snapshots` table written periodically) for trend reporting, or is always-current sufficient for the MVP dashboard?
 3. ~~Are the thresholds uniform across stages, or per-stage?~~ **Resolved 2026-08-21 — both.** The silence thresholds (`STALLED_SILENCE_DAYS`, `AT_RISK_SILENCE_DAYS`) are uniform; stage overrun is per-stage via `STAGE_WINDOW_DAYS`. Still open: whether the six window values are right, which needs data from a producer for `engagement_events` (question 4).
 4. Who writes `engagement_events` — the table and its RLS exist; no producer does. The transition command becomes the first ([crm/lifecycle.md](../../crm/lifecycle.md) §4 writes an event on every transition), but it does not cover `session_held` or `note_added`. Until a fuller producer lands, engagements with no events read as `at_risk` with "no recorded activity".
@@ -213,6 +213,6 @@ Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbe
 | Health service does not write `engagements.stage` (Q2 resolution) | 2026-08-06 meeting, via `design-system.md` §5 U5 | §7 / Rules | Carried — U5 resolved elsewhere 2026-08-21 ([crm/lifecycle.md](../../crm/lifecycle.md) §2); this service stays read-only |
 | Health-signal handoff to DSSG staff | `design-system.md:79` (handoff diagram) | §Responsibility, §3 Outputs | Carried |
 | Health taxonomy undesigned | prior Pulse spec §Outputs | §3 Health taxonomy | Closed — `on_track`/`at_risk`/`stalled` |
-| "Activity signal" undefined | prior Pulse spec §Inputs | §2 Inputs | Closed — `engagement_events`, migration 0002 |
+| "Activity signal" undefined | prior Pulse spec §Inputs | §2 Inputs | Closed — `engagement_events`, 0003_delivery |
 | HITL tier unassigned | prior Pulse spec §HITL tier | §5 HITL tier | Closed — L2; read-only |
 | Deterministic fallback undesigned | prior Pulse spec §Deterministic fallback | §6 No model call | Closed — no model path exists |

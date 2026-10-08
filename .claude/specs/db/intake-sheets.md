@@ -17,7 +17,7 @@ Both are private — their column structure has not been mapped against
 nobody should assume the schema matches what the forms collect.
 
 There is also a third path: the in-app `ScoutIntakeForm` inserts directly into Supabase
-`scout_intakes`, under an anonymous session (migration 0011). So intake currently has two
+`scout_intakes`, under an anonymous session (0001_core). So intake currently has two
 unrelated destinations, and the sync has to account for both without double-creating records.
 
 ## Decision

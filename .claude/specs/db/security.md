@@ -17,14 +17,13 @@ layer; Postgres constraints are the correctness layer. Both, never either.
 ## Mechanism
 
 Source of truth for the implementation is
-[`0001_init.sql`](../../supabase/migrations/0001_init.sql), extended by
-[`0002_staff_engagement_access.sql`](../../supabase/migrations/0002_staff_engagement_access.sql)
-(staff read access to engagements, and the append-only `engagement_events` history) and
-[`0008_user_provisioning.sql`](../../supabase/migrations/0008_user_provisioning.sql)
-(server-side profile provisioning on signup).
+[`0001_core.sql`](../../supabase/migrations/0001_core.sql) (which also carries staff read
+access to engagements, organization scoping and server-side profile provisioning on signup)
+and [`0003_delivery.sql`](../../supabase/migrations/0003_delivery.sql) (the append-only
+`engagement_events` history).
 
-**All migrations now apply (0001–0017).** 0017 (R11) makes `approvals_update_admin` require `reviewer_id = auth.uid()` and `reviewed_at is not null`, so every approval decision names its reviewer, and revokes client EXECUTE on `handle_new_user()` and the other trigger-only functions. Originally written for 0000–0008 (2026-10-06): This spec describes the owner-scoped
-model of 0001/0002/0008; `0003_tenancy.sql` layers organization scoping on top of every
+**All migrations now apply (the six squashed migrations, 0001_core–0006_views, plus 0007).** The R11 hardening (now in 0002_approvals) makes `approvals_update_admin` require `reviewer_id = auth.uid()` and `reviewed_at is not null`, so every approval decision names its reviewer; 0001_core revokes client EXECUTE on `handle_new_user()` and the other trigger-only functions. Originally written for the owner-scoped model (2026-10-06): This spec describes that
+model; `0001_core.sql` layers organization scoping on top of every
 policy below (an org-membership check, and `is_admin()` re-pointed at
 `organization_members`). That org model is the known-wrong one, redesigned under C1 — see
 [access-model.md](access-model.md) and [data-model.md](data-model.md) §1.
@@ -32,16 +31,17 @@ policy below (an org-membership check, and `is_admin()` re-pointed at
 ## Schema contract
 
 Six tables, all with `ROW LEVEL SECURITY` **enabled and `FORCE`d**: `users`, `businesses`,
-`engagements`, `scout_intakes`, `architect_assessments` (0001), `engagement_events` (0002).
+`engagements`, `scout_intakes`, `architect_assessments` (0001_core), `engagement_events` (0003_delivery).
 
-**20 policies** are applied — 16 in 0001, 4 in 0002. **Seven** of them branch on
+**20 policies** are applied — all in 0001_core except `engagement_events`' (0003_delivery). **Seven** of them branch on
 `is_admin()`: `scout_intakes_select_admin`, `scout_intakes_update_admin`,
 `architect_assessments_select_admin`, `architect_assessments_insert_admin`,
-`architect_assessments_update_admin` (0001), `engagements_select_admin`,
-`engagement_events_select_admin` (0002).
+`architect_assessments_update_admin`, `engagements_select_admin` (0001_core),
+`engagement_events_select_admin` (0003_delivery).
 
-`is_admin()` (`0001_init.sql:323`) is `stable security definer` with
-`search_path = public, pg_temp` pinned, revoked from `public`, granted to `authenticated`.
+`is_admin()` (`0001_core.sql`) is `stable security definer` with
+`search_path = public, pg_temp` pinned, revoked from `public` and `anon`, granted only to
+`authenticated` (as is `user_org_ids()`).
 It is the **single indirection** for role checks — no policy inlines `role = 'admin'`, so
 re-pointing one function at a membership table later beats rewriting twenty policies.
 
@@ -69,7 +69,7 @@ Grants to `authenticated` — the outer gate, independent of policy:
   the referenced business belongs to the caller.
 - Users can only read and write their own `businesses` and `engagements` rows — every SELECT/
   UPDATE/DELETE policy on both tables is scoped `owner_id = auth.uid()`. **One exception,
-  added in 0002**: `engagements_select_admin` lets a caller whose `users.role = 'admin'`
+  added in 0001_core**: `engagements_select_admin` lets a caller whose `users.role = 'admin'`
   SELECT any engagement. It is read-only and admin-only — no corresponding admin INSERT/
   UPDATE/DELETE policy exists, so staff visibility does not become staff authorship. The
   `role` column's immutability (below) is what makes this policy safe to add: a client
@@ -84,12 +84,12 @@ Grants to `authenticated` — the outer gate, independent of policy:
   engagement (or, for reads, to an admin) — the policies join through
   `engagements.owner_id`, so event access can never outrun engagement access. An inserted
   event must also carry `created_by = auth.uid()`, so a caller cannot attribute an event
-  to someone else; this mirrors the `architect_assessments` `created_by` check in 0001.
+  to someone else; this mirrors the `architect_assessments` `created_by` check in 0001_core.
 - The `role` column on `users` is immutable by the client once set, and locked from change by
   the `users_enforce_immutable` trigger (object name `users_enforce_immutable_trg`). Elevation
   to `'admin'` is an out-of-band operation performed with the service role, which bypasses RLS
   by design.
-- **Every `public.users` row is created server-side, not by the client** (0008). The
+- **Every `public.users` row is created server-side, not by the client** (0001_core). The
   `on_auth_user_created` trigger on `auth.users` runs `handle_new_user()` —
   `security definer`, `search_path = public, pg_temp` pinned — which inserts the profile
   with `role` hard-coded to `'client'` and `on conflict (id) do nothing`. `display_name`
@@ -100,12 +100,12 @@ Grants to `authenticated` — the outer gate, independent of policy:
   `WITH CHECK (role = 'client')` still exists but is dead code on the normal signup path,
   because the definer function bypasses RLS entirely. The invariant holds either way — a
   client cannot self-assign `admin` — but it is enforced by the literal at
-  `0008_user_provisioning.sql:38`, not by the policy.
+  `0001_core.sql`, not by the policy.
 
   The bug this closes: under Firestore the *client* created the profile document, so any
   path that skipped that call (Google OAuth did) left an authenticated user with no profile
   row and therefore no role — and every RLS policy depends on the role.
-- **Lessons are written only by definer functions** (0015). `lessons` has RLS forced, a
+- **Lessons are written only by definer functions** (0004_drafts). `lessons` has RLS forced, a
   staff-only `SELECT` policy and **no** insert/update/delete privilege for `anon`,
   `authenticated` or `service_role`; rows arrive through `submit_chronicle_draft()` and
   `promote_lesson()`, both `security definer` with `search_path = public, pg_temp`, checking
@@ -121,7 +121,8 @@ Grants to `authenticated` — the outer gate, independent of policy:
   `reviewed_by` is still NULL — and `scout_intakes_update_admin`'s `WITH CHECK` requires
   `review_status = 'reviewed'`. So a single admin UPDATE must set `review_status`,
   `review_action`, `final_bucket`, and `reviewed_by` together. An admin who edits only
-  `review_notes` on an unreviewed row gets `check_violation` (23514). This constrains the
+  `review_notes` on an unreviewed row gets `check_violation` (23514). The same trigger locks
+  the `routing_*` provenance columns during review. This constrains the
   review-queue UI: it submits one complete review, never a partial save.
 
 ## 2. The Dirty Dozen (Attack Vectors)
@@ -129,17 +130,17 @@ Grants to `authenticated` — the outer gate, independent of policy:
 | # | Attack | Firestore-era defense | Supabase/RLS defense |
 |---|---|---|---|
 | 1 | **Identity Spoofing** — create a `businesses` row with someone else's `owner_id` | `request.auth.uid` check in `allow create` | `businesses_insert_own` policy `WITH CHECK (owner_id = auth.uid())` |
-| 2 | **Resource Hijacking** — read/update another user's `engagements` row | owner-scoped `allow get/update` | `engagements_select_own` / `engagements_update_own` policies, both `USING (owner_id = auth.uid())`. Since 0002, `engagements_select_admin` widens **reads** for `role = 'admin'`; writes stay owner-only |
+| 2 | **Resource Hijacking** — read/update another user's `engagements` row | owner-scoped `allow get/update` | `engagements_select_own` / `engagements_update_own` policies, both `USING (owner_id = auth.uid())`. `engagements_select_admin` (0001_core) widens **reads** for `role = 'admin'`; writes stay owner-only |
 | 3 | **Privilege Escalation** — self-update `role: 'client'` → `role: 'admin'` | immutability rule on `role` | `users_enforce_immutable` trigger raises on any `role` change, for every writer including future ones |
 | 4 | **Shadow Field Injection** — add an undeclared field (e.g. `is_verified: true`) to a `businesses` row | Firestore `hasOnly`/key-count checks | structurally impossible — Postgres has a fixed column list; an unknown key is a syntax/column error, not a smuggled field |
 | 5 | **Orphaned Engagement** — create an `engagements` row for a non-existent `business_id` | existence check in rule logic | `engagements.business_id` foreign key (`references businesses (id)`) — the database itself refuses the insert |
 | 6 | **Timeline Bypass** — revert a `completed` engagement to an earlier `status` | none in source rules (status updates unrestricted) | `engagements_enforce_transitions` trigger: `if old.status = 'completed' and new.status <> 'completed' then raise exception` — a stricter guarantee than the Firestore original had |
 | 7 | **Resource Exhaustion** — send a 1MB string as a business `name` | none in source rules | `check (char_length(name) <= 256)` on `businesses.name`, and equivalent length `CHECK`s on **most** text columns. **Seven are unbounded** — see the gap note below |
-| 8 | **Malicious ID** — supply a very long or special-character document ID | `isValidId()` regex (`^[a-zA-Z0-9_\-]+$`, <=128 chars) | not applicable — all primary keys are server-generated `uuid` (`uuid_generate_v4()`), so no client ever supplies an ID string |
+| 8 | **Malicious ID** — supply a very long or special-character document ID | `isValidId()` regex (`^[a-zA-Z0-9_\-]+$`, <=128 chars) | not applicable — all primary keys are server-generated `uuid` (`gen_random_uuid()`; `uuid-ossp` is not installed), so no client ever supplies an ID string |
 | 9 | **PII Leak** — list all `users` rows to scrape emails | admin-only `list` | no `SELECT ... FOR ALL` policy on `users`; `users_select_self` scopes every SELECT to `id = auth.uid()`, and RLS is `FORCE`d so even the table owner role cannot bypass it |
 | 10 | **State Corruption** — same as #6, listed separately in the source doc | terminal-state check | see #6 — one trigger covers both attack framings |
 | 11 | **Timestamp Forgery** — send a client-side `updated_at` far in the past/future | validate against `request.time` | not applicable — `updated_at` is set server-side by every enforcement trigger (`new.updated_at := now()`), and no policy grants a client the ability to set it directly |
-| 12 | **Unverified Account Write** — write data with an unverified email | conditional, `isEmailVerified()` was defined but never called | not ported — porting it would add an unenforced restriction the source never actually enforced (see `0001_init.sql`'s divergence note #3) |
+| 12 | **Unverified Account Write** — write data with an unverified email | conditional, `isEmailVerified()` was defined but never called | not ported — porting it would add an unenforced restriction the source never actually enforced (see `0001_core.sql`'s divergence note #3) |
 
 **Gap — seven unbounded text columns.** Vector #7 is only partly closed. These have no
 `char_length` CHECK, so any of them accepts an arbitrarily large string from a caller who
@@ -147,13 +148,13 @@ already passes RLS:
 
 | Column | Migration |
 |---|---|
-| `businesses.address` | `0001_init.sql:139` |
-| `engagements.notes` | `0001_init.sql:158` |
-| `engagements.hackathon_project` | `0001_init.sql:160` |
-| `scout_intakes.review_notes` | `0001_init.sql:219` |
-| `scout_intakes.onboarding_kit` | `0001_init.sql:220` |
-| `architect_assessments.cross_check_flag` | `0001_init.sql:298` |
-| `engagement_events.detail` | `0002_staff_engagement_access.sql:73` |
+| `businesses.address` | `0001_core.sql` |
+| `engagements.notes` | `0001_core.sql` |
+| `engagements.hackathon_project` | `0001_core.sql` |
+| `scout_intakes.review_notes` | `0001_core.sql` |
+| `scout_intakes.onboarding_kit` | `0001_core.sql` |
+| `architect_assessments.cross_check_flag` | `0001_core.sql` |
+| `engagement_events.detail` | `0003_delivery.sql` |
 
 Every one is admin- or owner-writable rather than public, so the exposure is bounded by
 authentication — this is a hardening gap, not an open door. Closing it is milestone M1 below.
@@ -166,11 +167,11 @@ they are recorded here rather than renumbered into it.
 
 | Attack | Introduced by | Defense |
 |---|---|---|
-| **History Tampering** — edit or delete an `engagement_events` row to change what the record says happened, and so change Pulse's verdict | `engagement_events` (0002) | Append-only, enforced twice: no UPDATE/DELETE policy exists, *and* `authenticated` holds only `select, insert`. The missing privilege is the outer gate, so the attempt raises `42501` rather than matching zero rows |
-| **Attribution Forgery** — append an event credited to another user | `engagement_events` (0002) | `engagement_events_insert_own`'s `WITH CHECK (created_by = auth.uid() and ...)` — the same shape as `architect_assessments`' `created_by` check |
-| **Staff Overreach** — a read-only staff grant used to write | `engagements_select_admin` (0002) | The admin policy is `FOR SELECT` only; no admin INSERT/UPDATE/DELETE policy exists on `engagements`. Deliberate — granting one would resolve U5 (who writes `engagements.stage`) by accident rather than by decision |
-| **Lifecycle Self-Advancement** — a partner org marks its own engagement `hackathon_ready` or `membership`, skipping the budget, ethics, and scoping gates | `engagements_insert_own` / `engagements_update_own` (0001), reachable today from `BusinessPortal.tsx:155-218` | **Closed by 0014** (written, not yet run against a local stack). `engagements_insert_own` / `engagements_update_own` are dropped and `INSERT`/`UPDATE` revoked from `authenticated`/`anon`; `transition_engagement()` ([lifecycle.md](lifecycle.md) §8 item 4) is the sole writer. The portal's stage buttons are removed (`BusinessPortal.tsx`); pgTAP asserts `42501` for partner insert, update and the GUC-assisted update |
-| **Self-Elevation into staff read** — set `role = 'admin'` to reach every org's engagements | `engagements_select_admin` (0002) | Not a new hole: Dirty Dozen #3's `users_enforce_immutable` trigger already makes `role` client-immutable, which is the precondition that makes an admin-scoped policy safe to add at all |
+| **History Tampering** — edit or delete an `engagement_events` row to change what the record says happened, and so change Pulse's verdict | `engagement_events` (0003_delivery) | Append-only, enforced twice: no UPDATE/DELETE policy exists, *and* `authenticated` holds only `select, insert`. The missing privilege is the outer gate, so the attempt raises `42501` rather than matching zero rows |
+| **Attribution Forgery** — append an event credited to another user | `engagement_events` (0003_delivery) | `engagement_events_insert_own`'s `WITH CHECK (created_by = auth.uid() and ...)` — the same shape as `architect_assessments`' `created_by` check |
+| **Staff Overreach** — a read-only staff grant used to write | `engagements_select_admin` (0001_core) | The admin policy is `FOR SELECT` only; no admin INSERT/UPDATE/DELETE policy exists on `engagements`. Deliberate — granting one would resolve U5 (who writes `engagements.stage`) by accident rather than by decision |
+| **Lifecycle Self-Advancement** — a partner org marks its own engagement `hackathon_ready` or `membership`, skipping the budget, ethics, and scoping gates | `engagements_insert_own` / `engagements_update_own` (0001_core), reachable today from `BusinessPortal.tsx:155-218` | **Closed in 0001_core.** `engagements_insert_own` / `engagements_update_own` are dropped and `INSERT`/`UPDATE` revoked from `authenticated`/`anon`; `transition_engagement()` ([lifecycle.md](lifecycle.md) §8 item 4) is the sole writer. The portal's stage buttons are removed (`BusinessPortal.tsx`); pgTAP asserts `42501` for partner insert and update, and that the terminal lock refuses the API roles |
+| **Self-Elevation into staff read** — set `role = 'admin'` to reach every org's engagements | `engagements_select_admin` (0001_core) | Not a new hole: Dirty Dozen #3's `users_enforce_immutable` trigger already makes `role` client-immutable, which is the precondition that makes an admin-scoped policy safe to add at all |
 
 **Privacy posture, not only a technical change**: `engagements_select_admin` makes
 engagement data cross-org readable by any `role = 'admin'` user. Approved 2026-08-07 for
@@ -252,13 +253,14 @@ not tested as one.
 
 ## 3. Test Runner
 
-The pgTAP suite is [`supabase/tests/rls.test.sql`](../../supabase/tests/rls.test.sql):
-363 assertions over all applied migrations, run by `make db-test`, which fails when no suite
-exists or zero assertions ran. It runs in CI on every PR (`db-test` job in `ci.yml`, R11) and pins the exact set of public functions `anon` and `authenticated` may execute (0017). It absorbed the former 81-assertion deferred suite
+The pgTAP suite is [`supabase/tests/`](../../supabase/tests/) — `core`, `spine` and `rpcs`
+`.test.sql`, with shared fixtures in `_shared/fixtures.psql` and counts scoped to fixture ids —
+over all applied migrations, run by `make db-test`, which fails when no suite
+exists or zero assertions ran. It runs in CI on every PR (`db-test` job in `ci.yml`, R11) and pins the exact set of public functions `anon` and `authenticated` may execute (0001_core). It absorbed the former 81-assertion deferred suite
 (2026-10-06).
 
-It documents what the schema does **today**, 0003's org model included. The assertion
-labelled `KNOWN WRONG — 0003 model, replaced by C1` pins the overreach C1 removes (an org
+It documents what the schema does **today**, 0001_core's org model included. The assertion
+labelled `KNOWN WRONG — 0001_core model, replaced by C1` pins the overreach C1 removes (an org
 `admin` volunteer reads every engagement in the org); the rewrite flips it deliberately.
 
 The append-only assertions use `throws_ok(..., '42501', ...)` rather than
@@ -269,11 +271,11 @@ would assert the weaker of the two guarantees.
 
 ## Dependencies
 
-- **Data:** all six applied tables; `auth.users` (FK target and 0008 trigger source)
+- **Data:** all six applied tables; `auth.users` (FK target and `handle_new_user` trigger source, 0001_core)
 - **Imported by:** [supabase.md](supabase.md) (client conventions),
   [access-model.md](access-model.md) (role model that would replace this one),
   [data-model.md](data-model.md) (migration sequencing)
-- **Verified by:** `supabase/tests/rls.test.sql` — §3
+- **Verified by:** the pgTAP suite in `supabase/tests/` — §3
 
 ## Milestones
 
@@ -283,8 +285,8 @@ Local labels (`M{n}`), not roadmap numbers — `roadmap.md` owns every `C{n}`/`D
   `char_length` CHECK. *Done when:* the seven columns in §2's gap note have CHECKs and
   `security.md` §2 row 7 needs no exception. *Status:* NOT STARTED.
 - **M2 — Restore the runnable share of the pgTAP suite.** *Done* 2026-10-06; first green
-  local run 2026-10-08 (363 assertions, `plan(363)`), and it found the missing grant
-  revokes fixed in 0019.
+  local run 2026-10-08, and it found the missing grant revokes, now restated in
+  0001_core.
   *Blocks:* nothing — independent of tenancy.
 - **M3 — Re-add `engagement_events` to the realtime publication.** *Done when:*
   `alter publication supabase_realtime add table engagement_events` is applied and a
@@ -306,24 +308,24 @@ Runnable against the **applied** schema today (M2 scope):
 - `engagement_events`: owner insert succeeds; `created_by` forgery → denied; UPDATE and
   DELETE → **42501** (privilege, not policy).
 - Admin reads every engagement; admin **cannot** write one (no admin write policy).
-- 0008: inserting into `auth.users` provisions exactly one `public.users` row with
+- 0001_core: inserting into `auth.users` provisions exactly one `public.users` row with
   `role = 'client'`; a second insert with the same id does not error and does not duplicate.
-- 0008: a client-supplied `role` in `raw_user_meta_data` is ignored — the row is `client`.
+- 0001_core: a client-supplied `role` in `raw_user_meta_data` is ignored — the row is `client`.
 - Draft-review refusal: admin updates only `review_notes` on a row with `reviewed_by` NULL
   → raises 23514.
 
 Also in the suite since all migrations apply: organization isolation, telemetry and
-approval table access, milestone/task and document scoping — asserted under 0003's org
+approval table access, milestone/task and document scoping — asserted under 0001_core's org
 model, so C1 changes these expectations.
 
 ## Requirement Trace
 
 | Old requirement | Source | Now at | Status |
 |---|---|---|---|
-| Business `ownerId` must match creator's `request.auth.uid` | `security_spec.md:4` | `docs/crm/security.md` §1 / `0001_init.sql` policy `businesses_insert_own` | Carried |
-| Engagement must reference an existing Business, `ownerId` matches creator | `security_spec.md:5` | §1 / `0001_init.sql` FK `engagements.business_id` + policy `engagements_insert_own` | Carried |
-| Users read/write only their own Business and Engagement docs | `security_spec.md:6` | §1 / `0001_init.sql` owner-scoped policies on `businesses`, `engagements` | Carried |
-| `role` immutable by client once set | `security_spec.md:7` | §1 / `0001_init.sql` trigger `users_enforce_immutable` | Carried |
+| Business `ownerId` must match creator's `request.auth.uid` | `security_spec.md:4` | `docs/crm/security.md` §1 / `0001_core.sql` policy `businesses_insert_own` | Carried |
+| Engagement must reference an existing Business, `ownerId` matches creator | `security_spec.md:5` | §1 / `0001_core.sql` FK `engagements.business_id` + policy `engagements_insert_own` | Carried |
+| Users read/write only their own Business and Engagement docs | `security_spec.md:6` | §1 / `0001_core.sql` owner-scoped policies on `businesses`, `engagements` | Carried |
+| `role` immutable by client once set | `security_spec.md:7` | §1 / `0001_core.sql` trigger `users_enforce_immutable` | Carried |
 | Timestamps validated against `request.time` | `security_spec.md:8` | §1 / server-assigned `now()` everywhere | Carried, strengthened — client can no longer supply a timestamp at all, not merely a validated one |
 | Identity Spoofing (Dirty Dozen #1) | `security_spec.md:11` | §2 row 1 | Carried |
 | Resource Hijacking (#2) | `security_spec.md:12` | §2 row 2 | Carried |
@@ -336,9 +338,9 @@ model, so C1 changes these expectations.
 | PII Leak (#9) | `security_spec.md:19` | §2 row 9 | Carried, strengthened — `FORCE ROW LEVEL SECURITY` closes the table-owner bypass Firestore rules had no equivalent gap for |
 | State Corruption (#10) | `security_spec.md:20` | §2 row 10 | Carried — same trigger as #6 |
 | Timestamp Forgery (#11) | `security_spec.md:21` | §2 row 11 | Dropped as a live check — client cannot set `updated_at` at all, so there is nothing left to forge |
-| Unverified Account Write (#12) | `security_spec.md:22` | §2 row 12 | Dropped — the source `isEmailVerified()` guard was defined but never called by any rule; porting it would add a restriction the original never enforced (`0001_init.sql` divergence note #3) |
-| Firestore `firestore.rules.test.ts` (Draft Plan) | `security_spec.md:24-25` | §3 / `supabase/tests/rls.test.sql` | Carried, implemented — the draft plan is no longer a draft |
-| Staff read access to engagements | `0002_staff_engagement_access.sql` §1, Pulse buildout | §1, §2 row 2, §2a | New — no Firestore-era counterpart; read-only and admin-only, deliberately not extended to writes |
-| Append-only engagement history | `0002_staff_engagement_access.sql` §3 | §1, §2a | New — enforced by policy absence *and* privilege absence |
-| Event attribution (`created_by = auth.uid()`) | `0002_staff_engagement_access.sql` §3 | §1, §2a | New — mirrors `architect_assessments`' existing `created_by` check |
-| U5: who writes `engagements.stage` | `design-system.md` §5, `0002` header note | — | **Resolved 2026-08-21** — [lifecycle.md](lifecycle.md) §2 assigns the write to one server-side domain command (`POST /api/engagement-transition`), never to a client or an agent. **Not yet enforced**: `engagements_insert_own` / `engagements_update_own` still let a partner org write its own stage from the browser ([lifecycle.md](lifecycle.md) §8 item 4 revokes them) |
+| Unverified Account Write (#12) | `security_spec.md:22` | §2 row 12 | Dropped — the source `isEmailVerified()` guard was defined but never called by any rule; porting it would add a restriction the original never enforced (`0001_core.sql` divergence note #3) |
+| Firestore `firestore.rules.test.ts` (Draft Plan) | `security_spec.md:24-25` | §3 / `supabase/tests/` | Carried, implemented — the draft plan is no longer a draft |
+| Staff read access to engagements | `0001_core.sql` (staff access), Pulse buildout | §1, §2 row 2, §2a | New — no Firestore-era counterpart; read-only and admin-only, deliberately not extended to writes |
+| Append-only engagement history | `0003_delivery.sql` | §1, §2a | New — enforced by policy absence *and* privilege absence |
+| Event attribution (`created_by = auth.uid()`) | `0003_delivery.sql` | §1, §2a | New — mirrors `architect_assessments`' existing `created_by` check |
+| U5: who writes `engagements.stage` | `design-system.md` §5, `0001_core` header note | — | **Resolved 2026-08-21** — [lifecycle.md](lifecycle.md) §2 assigns the write to one server-side domain command (`POST /api/engagement-transition`), never to a client or an agent. **Not yet enforced**: `engagements_insert_own` / `engagements_update_own` still let a partner org write its own stage from the browser ([lifecycle.md](lifecycle.md) §8 item 4 revokes them) |
