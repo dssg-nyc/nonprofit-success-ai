@@ -19,7 +19,7 @@ entry point that fakes a signed-in admin and serves static mock data, so every s
 explorable without a database.
 
 For the local Postgres stack, per-environment variables, and how migrations move from
-local to staging to production, see [docs/environments.md](docs/environments.md).
+local to staging to production, see [.claude/specs/stack/environments.md](.claude/specs/stack/environments.md).
 
 ## The workflow
 
@@ -56,8 +56,9 @@ git checkout -b NPS-42-scout-status-filter --no-track
 
 ## The gate — run this before every PR
 
-CI runs these same four jobs on every pull request. Running them locally first turns a
-red PR into a thirty-second fix.
+CI's `ci` job runs these same four steps on every pull request (`make gate` runs them
+locally). Running them first turns a red PR into a thirty-second fix. Two more jobs run
+beside it: `eval-heuristics` (the gated eval metrics) and `db-test` (the pgTAP RLS suite).
 
 ```bash
 npm run lint
@@ -87,10 +88,11 @@ useful information; a checked box that was not run costs a reviewer their aftern
 
 ## Documentation
 
-- `docs/` is tracked and shared — architecture, specs, requirements. Changes here get
-  reviewed like code.
+- `docs/` is tracked and holds the exported PRD (PDF + HTML) and the system-design HTML.
+- `.claude/specs/` is tracked too — the design record, roadmap and per-agent, data and
+  stack specs. Changes to either get reviewed like code.
 - `.claude/docs/` is git-ignored, so nothing in it reaches other contributors. Anything a
-  teammate needs belongs under `docs/`.
+  teammate needs belongs under `docs/` or `.claude/specs/`.
 
 ## Getting help
 

@@ -17,7 +17,7 @@ export default defineConfig(() => {
     // reach the bundle by accident. Never put a model key or a service-role key there.
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(__dirname, './src'),
       },
     },
     server: {

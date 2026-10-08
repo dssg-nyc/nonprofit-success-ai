@@ -17,6 +17,17 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    # typescript: typescript-eslint 8.x does not support TS 7 yet.
+    # @types/node: tracks the Node major in .nvmrc, not the latest.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+    # Groups match in order. vite, vitest and the React plugin share peer ranges,
+    # so they upgrade as one PR instead of three that each fail to install alone.
     groups:
+      vite-toolchain:
+        patterns: ["vite", "vitest", "@vitejs/*"]
       minor-and-patch:
         update-types: ["minor", "patch"]

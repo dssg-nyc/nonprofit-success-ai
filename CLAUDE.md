@@ -17,19 +17,19 @@ data models, and open items (U4, U5, U7).
 | Concern | Choice |
 |---|---|
 | UI | React 19 + Vite 6 + TypeScript + Tailwind 4 (SPA — **not** Next.js) |
-| Server | Vercel Functions under `/api` *(target — none written yet)* |
-| Agents | Vercel AI SDK (`ai` + `@ai-sdk/google`) *(target — `@google/genai` is wired today)* |
-| Data / auth | Supabase — Postgres, Auth, RLS, Realtime *(live — `src/lib/supabase.ts`)* |
-| Tests | Vitest (`src/**/*.test.ts`, node) — configured, no suites yet |
-| Evals | `src/evals/` + `targets.yaml` — heuristic + LLM-judge graders *(target — not ported)* |
+| Server | Vercel Functions under `/api` — 7 routes (`health`, `route-intake`, `architect-plan`, `envoy-draft`, `chronicle-draft`, `pulse-health`, `engagement-transition`) + `_env.ts`/`_http.ts`/`_auth.ts` helpers; tests in `api/__tests__/`. Every route but `health` requires a Supabase bearer token (`_auth.ts`); the public intake form gets one by anonymous sign-in (`src/lib/session.ts`, migration 0011) |
+| Agents | Vercel AI SDK (`ai` + `@ai-sdk/google`), called only through `src/model/gateway.ts` |
+| Data / auth | Supabase — Postgres, Auth, RLS, Realtime *(live — `src/lib/supabase.ts`)*. Stage changes go only through `transition_engagement()` (0013; partner writes to `engagements` revoked in 0014) |
+| Tests | Vitest (`src/**/*.test.ts` + `api/**/*.test.ts`, node) — 47 files in `__tests__/` dirs; pgTAP RLS suite in `supabase/tests/` (363 assertions, `make db-test`, runs in CI as the `db-test` job; first green local run 2026-10-08 — it found that 0001–0007 never revoked Supabase's default table grants, fixed in 0019; `make metrics` prints the 0016 `agent_run_metrics` view, needs `psql` — `brew install libpq`) |
+| Evals | `src/evals/` + `targets.yaml` — heuristic + LLM-judge graders. `npm run eval:grade -- --gate` gates `scoutRouting`, `architectScoring`, `architectPlanStructure`, `pulseHealth`, `envoyDraftStructure`, `chronicleReadiness` at 1.0; judges stay `UNGATED` until a keyed run measures them; not yet a CI job |
 
 The Firebase-to-Supabase migration is **complete**: `firebase` is out of `package.json`,
 RLS policies are the access-control layer. Do not add Firebase surface area.
 
-`supabase/reference/` holds the two Firebase source docs (`firestore.rules`,
+`supabase/migrations/reference/` holds the two Firebase source docs (`firestore.rules`,
 `firebase-blueprint.json`) the schema was ported from — history, not configuration.
 `0001_init.sql` cites `firestore.rules` 98 times by line (`-- rules:NN`), so they stay
-until that audit is no longer needed. See `supabase/reference/README.md`.
+until that audit is no longer needed. See `supabase/migrations/reference/README.md`.
 
 ## Conventions
 
@@ -39,17 +39,21 @@ until that audit is no longer needed. See `supabase/reference/README.md`.
   never `define:` an API key into the bundle (it inlined `GEMINI_API_KEY` until 2026-08-21;
   that block is gone and must not return). Model keys live in server-only env.
 - **Every agent path needs a deterministic fallback** — a pure local heuristic used when
-  the model call fails. `src/lib/scoutRouting.ts` is the existing instance; it gains a test
-  when it moves under `src/agents/scout/`. Four-rule contract: `.claude/specs/design-system.md` §2.
+  the model call fails. `src/agents/scout/routing.ts` is the reference instance, covered by
+  `src/agents/scout/__tests__/routing.test.ts`. Four-rule contract: `.claude/specs/design-system.md` §2.
 - **Every agent needs at least one eval metric**, registered in `src/evals/registry.ts`
   with a fixture and a `targetsKey`, so `registry.test.ts` fails the build when a roster
   agent has none. Heuristic graders for mechanical correctness, LLM judges for prose.
   `targets.yaml` thresholds come from a measured pass rate — unmeasured metrics stay
-  commented out and report `UNGATED`. *(Binds once the harness lands.)*
+  commented out and report `UNGATED`.
 - **HITL tiering is a contract.** `L2` = high confidence + ready signal, agent acts
   (reversible). `L3` = everything else, agent drafts and a human approves. The tier is
-  derived **server-side** so a model cannot grant itself `L2`. *(Arrives with `api/`.)*
-- Path alias `@` resolves to the repo root, in both `vite.config.ts` and `vitest.config.ts`.
+  derived **server-side** so a model cannot grant itself `L2` — Scout through
+  `deriveHitlTier()`, Architect as fixed `L3` via `submit_architect_draft()` (0009), which writes
+  the draft beside a pending `charter` approval; Envoy and Chronicle the same way through
+  `submit_envoy_draft()` / `submit_chronicle_draft()` (0012), each beside a pending L3 approval.
+- Path alias `@` resolves to `src/`, in `tsconfig.json`, `vite.config.ts` and `vitest.config.ts`.
+  `tsconfig.json` is `strict`.
 - Import ordering, naming, and type-strictness follow `~/.claude/refs/typescript.md`.
 
 ## Gates
@@ -58,33 +62,46 @@ until that audit is no longer needed. See `supabase/reference/README.md`.
 - Always on a branch (`NPS-{NUM}-{slug}`), never `main`. Commits carry `(#{num})`.
 - No code changes without a GitHub issue.
 - Before any commit batch: `make gate` (`type-check lint test build`). CI runs the same
-  four jobs per PR; `cd.yml` deploys on push to `main`. The eval gates are commented into
-  both workflows and land with the harness.
+  four jobs per PR, plus `eval-heuristics` and `db-test` in `ci.yml`; `cd.yml` calls `ci.yml` as a reusable workflow and deploys (preview on
+  PRs, `--prod` on push to `main`) only after it passes. Six metrics are gated locally
+  (`eval:grade --gate`); the heuristic eval job is live in `ci.yml`, the judge job is J3.
 - `.env*` is unreadable to Claude by policy.
 
 ## Local layout
 
-**Target layout, partially reached.** Today `src/` is `app/` (holding `App.tsx`,
-`main.tsx`, `index.css`, `vite-env.d.ts`), `components/` (with `architect/`, `auth/`,
-`business/`, `dashboard/`, `scout/` subdirs), `lib/`, and `types/`. The remaining gap is
-the flat-`components/` rule below. Each gap closes in its own
-issue. Follow these rules for new code; migrate existing code only in a refactor issue.
+**Target layout, reached.** `src/` is `app/`, `components/`, `agents/`, `model/`,
+`guardrails/`, `observability/`, `evals/`, `lib/`, `schemas/`, `types/`.
+Follow these rules for new code; migrate existing code only in a refactor issue.
 
-Concept layers are **flat under `src/`** per `~/.claude/refs/naming.md` §1 — no
-`platform/` wrapper. The dependency direction is the rule that matters:
+Concept layers are **flat under `src/`** — no `platform/` wrapper. Three zones, each with an owner:
+
+| Zone | Layers | Owner |
+|---|---|---|
+| UI | `app/`, `components/` | Tony |
+| Agents | `agents/`, `model/`, `guardrails/`, `observability/`, `evals/` | Ramsey |
+| Shared | `lib/`, `schemas/`, `types/` | both — a change here is reviewed by both zones |
+
+`api/` handlers belong to whoever owns the route (agent routes: Ramsey). The dependency
+direction is the rule that matters:
 
 ```
 app/, components/  ──┐
-                     ├──> agents/ ──> {model,guardrails,observability,schemas}
-api/               ──┘
+                     ├──> agents/ ──> {model,guardrails,observability}
+api/               ──┘        │                    │
+                              └──> {lib,schemas,types} <──┘   (UI imports these too)
 ```
 
 Nothing in the agent layers imports from `app/` or `components/` — that is what lets
-`api/` import agent logic without dragging React in.
+`api/` import agent logic without dragging React in. Shared layers import nothing above
+them: no React, no agent code. *(All of these are lint-enforced in `eslint.config.mjs`: the agent-side arrows,
+UI → `model/`/`observability/`/agent `model.ts`, and `lib/` → agents/UI.)*
 
-- `src/app/` — SPA entrypoint: `App.tsx`, `main.tsx`, `index.css`.
-- `src/components/` — **flat**, one file per screen or card. Component names already carry
-  the prefix (`ScoutReviewQueue`, `ArchitectPlan`), so feature subdirs only repeat it.
+- `src/app/` — SPA entrypoint: `App.tsx`, `main.tsx`, `index.css`, `vite-env.d.ts`.
+- `src/components/{feature}/` — one subdirectory per feature (`architect/`, `auth/`,
+  `business/`, `dashboard/`, `scout/`), one file per screen or card. A new agent's screens
+  get a new subdir (`pulse/`, `envoy/`, `chronicle/`). Components reach agents only
+  through `/api` (with the agent's fallback on error) or pure agent functions — never
+  `model/` or `observability/` directly.
 - `src/agents/` — one directory per agent (`scout/`, `architect/`, `pulse/`, `envoy/`,
   `chronicle/`), pure logic, whether or not the path calls a model. No barrel `index.ts` —
   import the module (`agents/pulse/health`) so exports can't drift from a re-export list.
@@ -93,16 +110,27 @@ Nothing in the agent layers imports from `app/` or `components/` — that is wha
 - `src/guardrails/hitl.ts` — L1–L4 tiering. `deriveHitlTier()` is one switch over the whole
   roster precisely so a model cannot grant itself a tier by living in its own file.
 - `src/observability/recorder.ts` — writes `agent_runs`. Service role, server-only.
-- `src/schemas/` — versioned wire contracts crossing `/api`.
+  `log.ts` — structured JSON server logs from a closed field set; never pass it an error
+  object, prompt or row (they carry intake data).
+- `src/schemas/` — versioned zod wire contracts crossing `/api`. The source of truth for
+  any shape validated at runtime.
 - `src/evals/` — the grading harness. Imports agents; nothing imports it.
-- `src/types/` — wire-contract types, re-exported from `src/types/index.ts`.
-- `src/lib/` — cross-cutting infrastructure (`supabase.ts`, `demoStore.ts`), not agent
-  logic. Also holds agent logic that has not moved yet (`scoutRouting.ts`,
-  `architectPlan.ts`, `architectScoring.ts`).
+- `src/types/` — the import surface for shared types, re-exported from `src/types/index.ts`.
+  See "Where a type goes".
+- `src/lib/` — cross-cutting infrastructure (`supabase.ts`, `demoStore.ts`, `api.ts`, `lessons.ts`), not agent
+  logic. `supabase.ts` is the browser (anon, `VITE_`) client. `api.ts` is the SPA's `/api` caller:
+  `postJson` (bearer token attached) and `withFallback`, which runs the agent's local
+  heuristic when the route fails. The only service-role client lives inside
+  `src/observability/recorder.ts` and is never exported; `api/` routes act as the caller
+  (anon key + the user's JWT, `api/_auth.ts`).
+  The former `scoutRouting.ts`, `architectPlan.ts` and `architectScoring.ts` now
+  live at `src/agents/scout/routing.ts`, `src/agents/architect/plan.ts` and `scoring.ts`.
 - `api/` — Vercel Functions. Root-level by necessity: a non-Next Vercel project discovers
   functions at `/api` by filesystem convention. Leading-underscore files (`_env.ts`,
   `_http.ts`) are shared helpers, not routes.
-- `docs/` — tracked documentation: architecture, CRM specs, platform/agent specs, UX specs.
+- `docs/` — tracked, shared documentation: the PRD (pdf + html), the generated system-design
+  record (html) and `architect-design.md`, the superseded Architect source spec. Build contracts
+  live in `.claude/specs/`, not here.
 - `.claude/docs/` — plans, research, archive. **Git-ignored**, so nothing here is visible
   to collaborators; anything that must be shared belongs under `docs/`.
 
@@ -113,9 +141,8 @@ Vitest picks up `src/**/*.test.ts`; there is no root `tests/`. Every test lives 
 `src/evals/__tests__/`. A test file sitting directly beside its source is the drift this
 prevents. New `__tests__/` directories need no config change.
 
-`test` carries `--passWithNoTests` because there are no suites yet. **Drop that flag with
-the first suite**, so a later test-glob mistake fails loudly instead of reporting green.
-First test to land: the routing fallback's, with the `src/agents/scout/` move.
+`test` is plain `vitest run` — no `--passWithNoTests` — so a test-glob mistake fails loudly
+instead of reporting green. Keep it that way.
 
 ### Where a type goes
 
@@ -123,21 +150,28 @@ The test is **who imports it**, not what it describes:
 
 - **Crosses the `/api` wire → `src/types/`.** If a handler in `api/` and a caller in `src/`
   must agree on the shape, it is a shared contract — `ScoutRoutingInput`, `ScoutResult`,
-  `PulseInput`, `EnvoyInput`, `ChronicleInput`.
-- **Read only by one agent's internals → stays with the agent.** `MaturityResult` and
-  `CsaScoredAnswers` (`architect/scoring.ts`) have no importer in `api/` or `src/lib/`.
+  `MaturityResult`, `ArchitectPlanRequest`, `PulseInput`, `EnvoyInput`, `ChronicleInput`.
+- **Read only by one agent's internals → stays with the agent.** `CsaScoredAnswers`
+  (`architect/scoring.ts`) has no importer in `api/` or `src/lib/`.
+
+**One definition per shape.** If a wire shape has a zod schema in `src/schemas/`, its type
+is inferred, never hand-written beside it — e.g. `src/types/scout.ts` holding
+`export type ScoutResult = z.infer<typeof scoutResultSchema>` (a type-only import, so the
+`schemas → types` constant import does not form a runtime cycle). Shapes with no runtime
+validation (UI-only view models, `ScoutIntake`) stay hand-written interfaces; DB row types
+come from `supabase gen types`. Migrate per agent as its wire schema lands, not wholesale
+(Scout, Architect, Envoy and Chronicle done).
 
 By the same test, `src/evals/types.ts` — Zod schemas validating JSONL fixtures at runtime,
 never crossing the wire — is a different concern from `src/types/` and does not merge into it.
 
 Import shared types from the barrel (`../types`), not the module (`../types/scout`). It
-resolves to `src/types.ts` today and to `src/types/` later, without changing import sites.
+resolves to `src/types/index.ts`.
 Agent directories have no barrel; only `src/types/` does.
 
 ## Refs
 
-Global (`~/.claude/refs/`): typescript.md, agent-architecture.md, agent-safety.md,
-agent-runtime.md, agent-eval.md
+Global (`~/.claude/refs/`): typescript.md
 
 Repo-local (`.claude/specs/`):
 
@@ -145,15 +179,17 @@ Repo-local (`.claude/specs/`):
 |------|----------------|
 | `roadmap.md` | **The delta registry** — owns every `D{n}`/`C{n}`. Specs and the design record cite it; neither mints |
 | `design-system.md` | Scope, direction decision, container model, execution semantics (§8) — the root doc |
-| `environments.md` | Deployment config (local / staging / prod) |
-| `design-scope.md` | Initiative framing — what we're building and why |
-| `design-requirements.md` | PRD — deliverables, requirements, acceptance criteria |
-| `design-interface.md` | Visual language, typography, palette, component patterns |
+| `stack/environments.md` | Deployment config (local / staging / prod) |
 | `stack/` | How to write code: `react-vite.md`, `vercel-ai-sdk.md`, `vercel-functions.md` |
 | `crm/` | Data model (incl. provenance §7), security + trust boundaries, access model, `lifecycle.md` (the state machine), Supabase conventions |
 | `platform/agents/` | One spec per agent: `scout.md`, `architect.md`, `pulse.md`, `envoy.md`, `chronicle.md` |
 | `platform/services/` | `contract-consent.md` |
 | `platform/infra/` | `eval-harness.md`, `model-gateway.md`, `observability.md` |
-| `platform/knowledge.md` | Knowledge base design (PROPOSED) |
+| `platform/knowledge.md` | Knowledge base design (PROPOSED — D30–D41, nothing built) |
+
+The initiative doc and PRD are frozen; the shared copies are the HTML in `docs/`, and the
+markdown sources sit in `.claude/docs/archive/specs/` (git-ignored). Specs cite the PRD by
+section (`PRD §8`), never by line. `src/app/index.css` is the styling source of truth; the
+old `design-interface.md` had drifted and was retired 2026-10-08.
 
 Read stack refs + the relevant component spec before writing code here.

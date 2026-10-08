@@ -25,8 +25,8 @@
 
 ## Testing
 
-<!-- make ship = npm run lint-check + type-check + test + build (no autofix — same as CI)
-     make gate = same four steps with lint --fix (dev variant)
+<!-- make ship = lint (no autofix) + type-check + test + build — same as CI
+     make gate = type-check + lint + test + build (the local pre-commit gate)
      Individual steps: npm run lint | npm run type-check | npm run test | npm run build -->
 
 - [ ] `npm run lint` passes — or `make ship` for all four at once (note which)

@@ -4,13 +4,17 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lets cd.yml call this workflow and gate the deploy on it (`needs: ci`).
+  workflow_call:
 
+# cd.yml calls this file via workflow_call and gates the deploy on `needs: ci`, which waits
+# for every job below (ci, eval-heuristics, db-test), not just the one named `ci`.
 jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -19,3 +23,27 @@ jobs:
       - run: npm run type-check
       - run: npm run test
       - run: npm run build
+
+  eval-heuristics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run eval:grade -- --no-judges --gate
+
+  db-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase db start
+      - run: |
+          out=$(mktemp)
+          supabase test db | tee "$out"
+          grep -Eq 'Tests=[1-9][0-9]*' "$out" || { echo "zero assertions ran"; exit 1; }
