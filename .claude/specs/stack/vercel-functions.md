@@ -14,6 +14,7 @@ This is a **Vite SPA** deployed to Vercel, not Next.js. Functions are discovered
 | `api/chronicle-draft.ts` | `POST /api/chronicle-draft` — Chronicle |
 | `api/pulse-health.ts` | `GET /api/pulse-health?engagementId=` — Pulse; no model call |
 | `api/engagement-transition.ts` | `POST /api/engagement-transition` — calls `transition_engagement()`; no model call |
+| `api/scout-approve.ts` | `POST /api/scout-approve` — the Scout-approve command, calls `approve_scout_intake()` (0008); no model call |
 | `api/_env.ts` | **Leading underscore = shared helper, not a route.** Vercel skips these. |
 | `api/_http.ts` | Same — shared request-parsing utilities |
 | `api/_auth.ts` | Same — `authenticate()`, the caller's bearer token → user-scoped Supabase client |
@@ -124,7 +125,8 @@ a 2xx. `authenticate()` (`{ ok: true, userId, client }`) and `checkModelBudget()
 
 ## Path alias
 
-`@` resolves to `src/` in `tsconfig.json`, `vite.config.ts` and `vitest.config.ts`:
+`@` resolves to `src/` in `tsconfig.json`, `vite.config.ts`, `vitest.config.ts` and
+`vitest.integration.config.ts`:
 
 ```typescript
 alias: { '@': path.resolve(__dirname, './src') }
@@ -132,3 +134,20 @@ alias: { '@': path.resolve(__dirname, './src') }
 
 So `import { callModel } from '../src/model/gateway'` from `api/` is correct — the `@`
 alias is available but relative paths are the convention in `api/` files.
+
+## Testing a route
+
+Two files per route, both in `api/__tests__/`:
+
+- `<route>.test.ts` — unit, hermetic. Mock `@supabase/supabase-js` and the agent's
+  `model.ts`; assert the status, the body, the RPC arguments and the log lines
+  (`addLogSink()` or the parsed `console.error` JSON). Runs in `npm test`.
+- `<route>.int.test.ts` — integration, against the running local stack. Build real
+  sessions with `_stack.ts` (`anonymousSession`, `staffSession`), call the exported
+  handler with a `Request`, read back with the service client what it filed, register
+  rows with `Cleanup`. Mock only the model. Runs in `make api-test` and the `api-test`
+  CI job; excluded from `npm test` by `vitest.config.ts`.
+
+A route that writes must have an integration test proving the write went through the
+RPC as the caller (RLS, tier, provenance) — a unit test can only show the RPC was
+called with the right arguments. api/README.md › Testing describes the four layers.

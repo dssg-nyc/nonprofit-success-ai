@@ -212,7 +212,7 @@ note_added`, so §8 adds `stage_advanced` and `stage_reverted`.
 
 | From | To | Trigger | Actor | Guard | Approval | Event | Side effects |
 |---|---|---|---|---|---|---|---|
-| *(none)* | `initial_meeting` | Scout intake approved, `composite_signal = Ready` | System | Reviewed `scout_intakes` row with `review_status = 'reviewed'` and `review_action ∈ (approved, edited)` | Already given — the Scout review **is** the approval | `stage_advanced` | Create `businesses` row if absent; notify staff; push contact to HubSpot |
+| *(none)* | `initial_meeting` | Scout intake approved, `composite_signal = Ready` | System, on `POST /api/scout-approve` (`approve_scout_intake()`, 0008)² | Reviewed `scout_intakes` row with `review_status = 'reviewed'` and `review_action ∈ (approved, edited)` | Already given — the Scout review **is** the approval | `stage_advanced` | Create `businesses` row if absent; notify staff; push contact to HubSpot |
 | `initial_meeting` | `budget_check` | Charter signed¹ | System, on `POST /api/contract-sign` | Immutable `engagement_contracts` row written; `signerName` matches contact | The signature is the approval | `stage_advanced` | PDF emailed to signer + dssgnyc@gmail.com; same transaction as the contract insert |
 | `budget_check` | `data_ethics_committee` | Staff confirms budget and volunteer capacity | Staff | `engagements.budget_amount` is non-null and ≥ 0 | Staff action is the authorization (L2) | `stage_advanced` | Ethics committee queue notification |
 | `data_ethics_committee` | `scoping` | Committee approves data handling | Ethics Committee | An `approvals` row for this engagement, `entity_type = 'assessment'`, `status = 'approved'` | **Required — L3.** Recorded, not implied | `stage_advanced` | Unblock Architect assessment; notify partner |
@@ -223,6 +223,11 @@ note_added`, so §8 adds `stage_advanced` and `stage_reverted`.
 admin attestation — a non-empty `reason` — for this guard and records `guard_deferred: "contract"` on the
 event detail (and on the `audit_events` detail). Delete the attestation when `/api/contract-sign` writes the
 contract in the same transaction.
+
+² Built (0008): `approve_scout_intake()` reviews a pending intake (or takes a queue-reviewed one), creates the
+`businesses` row linked by `scout_intake_id` — writable only by a non-API role, so only this definer function
+can — and calls `transition_engagement()` under the caller's idempotency key. The business is owned by the
+approving staff member until the partner has an account. Notify / HubSpot are still not built.
 
 ### Backward transitions
 

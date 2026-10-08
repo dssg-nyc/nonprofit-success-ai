@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "test:api": "vitest run --config vitest.integration.config.ts",
     "eval:grade": "tsx src/evals/pipelines/grade.ts",
     "eval:report": "tsx src/evals/pipelines/report.ts",
     "eval:review": "tsx src/evals/pipelines/review.ts"

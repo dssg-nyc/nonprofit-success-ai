@@ -8,7 +8,7 @@ on:
   workflow_call:
 
 # cd.yml calls this file via workflow_call and gates the deploy on `needs: ci`, which waits
-# for every job below (ci, eval-heuristics, db-test), not just the one named `ci`.
+# for every job below (ci, eval-heuristics, db-test, api-test), not just the one named `ci`.
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -47,3 +47,21 @@ jobs:
           out=$(mktemp)
           supabase test db | tee "$out"
           grep -Eq 'Tests=[1-9][0-9]*' "$out" || { echo "zero assertions ran"; exit 1; }
+
+  # The api/ handlers against a real local stack (api/__tests__/*.int.test.ts): Auth, RLS
+  # and the RPCs are real, only the model is mocked. `make api-test` reads the stack's
+  # keys from `supabase status` and fails on zero tests, as db-test does.
+  api-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: npm ci
+      - run: supabase start
+      - run: make api-test

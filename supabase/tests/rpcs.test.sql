@@ -5,7 +5,7 @@
 
 \ir _shared/fixtures.psql
 
-select plan(211);
+select plan(229);
 
 -- submit_architect_draft() — 0004_drafts (assessment + L3 charter approval + audit, one txn)
 -- ---------------------------------------------------------------------------
@@ -2048,6 +2048,205 @@ reset role;
 
 -- scout_intakes routing provenance ---------------------------------------------------
 
+
+-- approve_scout_intake() — 0008_scout_approve (lifecycle.md §4 row 1, T2: the Scout-approve
+-- command; the one API-reachable writer of businesses.scout_intake_id).
+-- ---------------------------------------------------------------------------
+
+reset role;
+
+-- Fixtures, as the superuser: a pending intake with no org and a bucket (the queue's
+-- normal case), a pending one with no bucket, one the review queue already approved,
+-- and a pending one to approve into a different bucket.
+insert into scout_intakes (
+  id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+  problem_description, current_systems, timeline, referral_source,
+  bucket, confidence, rationale, poc_score, clarity_score, foothold_score,
+  composite_signal, flags, hitl_tier,
+  review_status, review_action, final_bucket, organization_id
+) values (
+  'abcd0008-0000-0000-0000-0000000000a1',
+  'Approve Org', 'Pat Diaz, ED', 'pat@example.org', 'Housing.',
+  '40 staff', 'analyze_data', 'No view of outcomes.', 'Spreadsheets',
+  'Next quarter', 'Referral',
+  'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2',
+  'pending', null, null, null
+), (
+  'abcd0008-0000-0000-0000-0000000000a2',
+  'No Bucket Org', 'Lou Chen, ED', 'lou@example.org', 'Arts.',
+  '5 staff', 'something_else', 'Unclear.', 'None',
+  'Someday', 'Referral',
+  null, null, 'Could not route.', 1, 1, 1, 'Not Ready', '{}', 'L3',
+  'pending', null, null, null
+), (
+  'abcd0008-0000-0000-0000-0000000000a3',
+  'Queue Approved Org', 'Ana Ruiz, ED', 'ana@example.org', 'Youth.',
+  '20 staff', 'build_tool', 'Need a dashboard.', 'Sheets',
+  'Next quarter', 'Referral',
+  'Tooling & Automation', 'Medium', 'Clear need.', 2, 2, 2, 'Conditional', '{}', 'L3',
+  'reviewed', 'approved', 'Tooling & Automation', :org_id
+), (
+  'abcd0008-0000-0000-0000-0000000000a4',
+  'Edited Org', 'Kai Wong, ED', 'kai@example.org', 'Food.',
+  '10 staff', 'organize_data', 'Messy data.', 'Paper',
+  'Next quarter', 'Referral',
+  'Data Infrastructure', 'Medium', 'Clear need.', 2, 2, 2, 'Conditional', '{}', 'L3',
+  'pending', null, null, :org_id
+);
+
+select tests.logout();
+
+select throws_ok(
+  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0001') $$,
+  '42501', null,
+  'anon cannot execute approve_scout_intake (0008: no grant)'
+);
+
+select tests.login_as(:alice_id);
+
+select throws_ok(
+  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0001') $$,
+  '42501', null,
+  'a partner cannot approve an intake (0008: admin only)'
+);
+
+select tests.login_as(:rival_id);
+
+select throws_ok(
+  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a4', 'approve-0001') $$,
+  '42501', null,
+  'an admin of another org cannot approve an intake filed under this org (0008)'
+);
+
+select tests.login_as(:admin_id);
+
+select throws_ok(
+  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'short') $$,
+  '22023', null,
+  'an idempotency key under 8 characters is refused (0008)'
+);
+
+select throws_ok(
+  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000ff', 'approve-0001') $$,
+  'P0002', null,
+  'a missing intake is P0002 (0008)'
+);
+
+select throws_ok(
+  $$ select approve_scout_intake('cccccccc-0000-0000-0000-000000000009', 'approve-0001') $$,
+  '55000', 'guard:intake_approved',
+  'a redirected intake never opens an engagement (0008: guard:intake_approved)'
+);
+
+select throws_ok(
+  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a2', 'approve-0001') $$,
+  '22023', 'bucket_required',
+  'a pending intake Scout could not bucket needs the reviewer''s bucket (0008)'
+);
+
+select is(
+  (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
+     from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0001') r),
+  jsonb_build_object(
+    'intake_id', 'abcd0008-0000-0000-0000-0000000000a1',
+    'business_created', true, 'review_action', 'approved',
+    'final_bucket', 'Analytics & Insight', 'replayed', false
+  ),
+  'approving a pending intake reviews it as approved, creates the business and opens the pipeline (0008)'
+);
+
+select results_eq(
+  $$ select review_status::text, review_action::text, final_bucket::text, reviewed_by,
+            reviewed_at is not null, organization_id
+       from scout_intakes where id = 'abcd0008-0000-0000-0000-0000000000a1' $$,
+  $$ values ('reviewed', 'approved', 'Analytics & Insight',
+             '33333333-3333-3333-3333-333333333333'::uuid, true,
+             'eeeeeeee-0000-0000-0000-000000000001'::uuid) $$,
+  'the intake row is reviewed by the caller and filed under the caller''s organization (0008)'
+);
+
+select results_eq(
+  $$ select name, type::text, owner_id, organization_id
+       from businesses where scout_intake_id = 'abcd0008-0000-0000-0000-0000000000a1' $$,
+  $$ values ('Approve Org', 'nonprofit', '33333333-3333-3333-3333-333333333333'::uuid,
+             'eeeeeeee-0000-0000-0000-000000000001'::uuid) $$,
+  'the business is named after the intake, linked by scout_intake_id, owned by the caller (0008)'
+);
+
+select results_eq(
+  $$ select e.stage::text, e.status::text
+       from engagements e join businesses b on b.id = e.business_id
+      where b.scout_intake_id = 'abcd0008-0000-0000-0000-0000000000a1' $$,
+  $$ values ('initial_meeting', 'in_progress') $$,
+  'the first transition opened initial_meeting in_progress (0008 -> 0005)'
+);
+
+select results_eq(
+  $$ select kind::text, detail ->> 'to', detail -> 'evidence' ->> 'scout_intake_id'
+       from engagement_events where idempotency_key = 'approve-0001' $$,
+  $$ values ('stage_advanced', 'initial_meeting', 'abcd0008-0000-0000-0000-0000000000a1') $$,
+  'the transition event carries the caller''s key and names the intake as evidence (0008)'
+);
+
+select results_eq(
+  $$ select detail ->> 'review_action', (detail ->> 'reviewed_here')::boolean,
+            (detail ->> 'business_created')::boolean, actor_id
+       from audit_events
+      where action = 'scout_intake.approve'
+        and entity_id = 'abcd0008-0000-0000-0000-0000000000a1' $$,
+  $$ values ('approved', true, true, '33333333-3333-3333-3333-333333333333'::uuid) $$,
+  'the approval writes its own audit row beside the transition''s (0008)'
+);
+
+select is(
+  (select r - 'engagement_id' - 'event_id' - 'transitioned_at'
+     from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0001') r),
+  jsonb_build_object(
+    'intake_id', 'abcd0008-0000-0000-0000-0000000000a1',
+    'business_id', (select id from businesses where scout_intake_id = 'abcd0008-0000-0000-0000-0000000000a1'),
+    'business_created', false, 'review_action', 'approved',
+    'final_bucket', 'Analytics & Insight', 'replayed', true
+  ),
+  'the same key replays: the same business, nothing created, replayed true (0008)'
+);
+
+select throws_ok(
+  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0002') $$,
+  '22023', 'already_approved',
+  'a new key on an intake already in the pipeline is refused, not a second transition (0008)'
+);
+
+select throws_ok(
+  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a3', 'approve-0003',
+                                 'ML / Predictive') $$,
+  '22023', 'already_reviewed',
+  'an intake the queue reviewed cannot be re-bucketed here (0008)'
+);
+
+select is(
+  (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
+     from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a3', 'approve-0003') r),
+  jsonb_build_object(
+    'intake_id', 'abcd0008-0000-0000-0000-0000000000a3',
+    'business_created', true, 'review_action', 'approved',
+    'final_bucket', 'Tooling & Automation', 'replayed', false
+  ),
+  'an intake the review queue approved is taken as reviewed and opens the pipeline (0008)'
+);
+
+select is(
+  (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
+     from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a4', 'approve-0004',
+                               'Analytics & Insight', 'Rerouted on review') r),
+  jsonb_build_object(
+    'intake_id', 'abcd0008-0000-0000-0000-0000000000a4',
+    'business_created', true, 'review_action', 'edited',
+    'final_bucket', 'Analytics & Insight', 'replayed', false
+  ),
+  'a different final bucket reviews the intake as edited (0008)'
+);
+
+reset role;
 
 select * from finish();
 

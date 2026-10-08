@@ -847,6 +847,7 @@ select results_eq(
                                   where p.pronamespace = 'public'::regnamespace)
       order by 1 $$,
   $$ values
+       ('approve_scout_intake'),       -- 0008: explicit grant
        ('check_model_budget'),         -- 0007: explicit grant
        ('current_engagement_stage'),   -- 0005_lifecycle: explicit grant
        ('derive_engagement_outcome'),  -- 0004_drafts: explicit grant

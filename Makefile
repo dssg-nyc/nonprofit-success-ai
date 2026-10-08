@@ -42,13 +42,15 @@ gate: type-check lint test build
 # src/evals/experiments/log.jsonl. A run is labelled with the prompt versions it measured
 # (scout 0.05, architect 0.04, …, read from the *_PROMPT_VERSION constants, so a bumped
 # prompt relabels the next run by itself); EVAL_LABEL="what changed" make eval overrides that.
+# EVAL_ONLY=chronicleDraft,chronicleReadiness make eval grades those metrics only (one agent's
+# judge + model path, a fifth of a full run's calls); a scoped run is not logged or trended.
 #
 # `eval` and `eval-gate` depend on `gate`: a keyed run spends real model calls, and a
 # run over code that does not type-check, lint, test or build measures nothing worth
 # keeping. `eval` renders the report in the same step so report.html is never stale.
 
 eval: gate  ## Gate, then grade every metric (judges + model path when a key is exported), render the report and the review CSVs
-	npm run eval:grade
+	npm run eval:grade -- $(if $(EVAL_ONLY),--only $(EVAL_ONLY))
 	npm run eval:report
 	npm run eval:review
 
@@ -132,6 +134,24 @@ db-test:  ## Run the pgTAP RLS suite (supabase/tests/*.test.sql); fails on zero 
 	if ! grep -Eq 'Tests=[1-9][0-9]*' $$out; then \
 		echo "db-test: zero assertions ran -- refusing to report green"; rm -f $$out; exit 1; \
 	fi; \
+	rm -f $$out
+
+# The api/ handlers against the running local stack (api/__tests__/*.int.test.ts): real
+# Auth sessions, RLS and RPCs; only the model is mocked. Keys come from the stack itself,
+# never from a file, and the model key is dropped from the environment so a developer's
+# exported key can never reach a real model from a test. Fails on zero tests, like db-test.
+api-test:  ## Run the api/ integration suite against the local Supabase stack (make db-start first)
+	@env=$$($(SUPABASE) status -o env 2>/dev/null); \
+	[ -n "$$env" ] || { echo "api-test: local stack not running (make db-start)"; exit 1; }; \
+	pick() { printf '%s\n' "$$env" | sed -n "s/^$$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}$$/\1/p"; }; \
+	url=$$(pick API_URL); anon=$$(pick ANON_KEY); service=$$(pick SERVICE_ROLE_KEY); \
+	[ -n "$$url" ] && [ -n "$$anon" ] && [ -n "$$service" ] || { echo "api-test: could not read API_URL/ANON_KEY/SERVICE_ROLE_KEY from supabase status"; exit 1; }; \
+	out=$$(mktemp); \
+	env -u GOOGLE_GENERATIVE_AI_API_KEY -u MODEL_CALLS_PER_HOUR \
+	  SUPABASE_URL="$$url" SUPABASE_ANON_KEY="$$anon" SUPABASE_SERVICE_ROLE_KEY="$$service" \
+	  npm run test:api >$$out 2>&1; status=$$?; cat $$out; \
+	if [ $$status -ne 0 ]; then rm -f $$out; exit $$status; fi; \
+	grep -Eq 'Tests +[1-9][0-9]* passed' $$out || { echo "api-test: zero tests ran -- refusing to report green"; rm -f $$out; exit 1; }; \
 	rm -f $$out
 
 db-types:  ## Regenerate src/lib/database.types.ts from the local stack's schema

@@ -4,7 +4,8 @@ name: CD
 # Vercel's own Git integration must be disabled (Ignored Build Step → exit 0)
 # to avoid competing deploys.
 #
-# Requires repo secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID.
+# Requires repo secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID; optionally
+# VERCEL_AUTOMATION_BYPASS_SECRET so the post-deploy health check can reach a protected preview.
 # Runtime config (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) is NOT set here —
 # vercel pull fetches it from the Vercel project's environment variables.
 
@@ -38,4 +39,31 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
       - name: Deploy
-        run: vercel deploy ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }} --yes
+        id: deploy
+        # The CLI prints the deployment URL alone on stdout (progress goes to stderr).
+        run: |
+          url=$(vercel deploy ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }} --yes)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed: $url"
+      # The deploy is not done until the functions answer. /api/health probes Supabase
+      # Auth with the deployment's own env, so a project whose variables are missing or
+      # wrong fails here (503) instead of on the first visitor's intake. A preview behind
+      # Vercel Deployment Protection needs the bypass secret
+      # (VERCEL_AUTOMATION_BYPASS_SECRET, from the project's protection settings); the
+      # header is sent only when the secret is set.
+      - name: Check /api/health
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          body=$(mktemp)
+          for attempt in 1 2 3 4 5 6; do
+            status=$(curl -sS -o "$body" -w '%{http_code}' \
+              ${BYPASS:+-H "x-vercel-protection-bypass: $BYPASS"} \
+              "$URL/api/health" || echo 000)
+            echo "attempt $attempt: HTTP $status $(cat "$body")"
+            [ "$status" = "200" ] && exit 0
+            sleep 10
+          done
+          echo "::error::/api/health did not answer 200 (last status $status) — see api/README.md › Testing › Deploy check"
+          exit 1
