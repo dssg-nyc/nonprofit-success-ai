@@ -2,7 +2,7 @@
 
 **Status:** Decided 2026-08-21. Not yet implemented — no applied migration writes
 this. Supersedes the two-role model inherited from `firestore.rules` and the
-organization-scoped design in `_deferred/0003_tenancy.sql`.
+organization-scoped design in `0003_tenancy.sql`.
 
 ## What a project is
 
@@ -54,14 +54,15 @@ specified. When it is:
 ## Why the current schema cannot express this
 
 `0001_init.sql` defines `user_role as enum ('client', 'admin')` — a faithful port of
-`firestore.rules`, which never modeled volunteers. Twelve RLS policies branch on
-`is_admin()`, which reads that enum.
+`firestore.rules`, which never modeled volunteers. RLS policies branch on `is_admin()`,
+which since `0003_tenancy.sql` reads `organization_members` (`role in ('admin', 'owner')`
+in any organization), not that enum. Neither knows a volunteer.
 
 The diplomat tier is the expensive part: a volunteer is neither the **owner** of a record
 (the client is) nor a **global admin**. Their access is a per-project, time-bounded grant,
 requiring a membership relation no applied migration provides.
 
-## Why `_deferred/0003_tenancy.sql` is the wrong shape
+## Why `0003_tenancy.sql` is the wrong shape
 
 Worth stating plainly, because at a glance it looks like it solves this.
 
@@ -98,6 +99,6 @@ table is written.
 Roles must be settled **before** pushing to a hosted project. Postgres enums are awkward to
 alter once data exists, and every RLS policy branches on the role.
 
-**Do not write the tenancy migration yet unless necessary.** The
-immediate goal is the app running on Supabase for the tables that already exist; the role
-and project model lands as its own piece of work.
+**Do not write the tenancy migration yet unless necessary.** The app already runs on
+Supabase over 0003's org model; the role and project migration lands after #28's decision
+(roadmap D29, C1), as its own piece of work.

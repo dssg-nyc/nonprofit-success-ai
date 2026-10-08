@@ -13,12 +13,12 @@ Two forms write to Google Sheets:
 | Diplomat intake | [`1AyvBMU8…`](https://docs.google.com/spreadsheets/d/1AyvBMU87yUHmn9m74-NX6yDrTERYVVOXs8McvrKFqP4/edit?gid=1257108654) gid 1257108654 | Volunteers |
 
 Both are private — their column structure has not been mapped against
-`scout_intakes` (31 columns). **That mapping is the first task**, and until it is done
+`scout_intakes` (35 columns, `src/lib/database.types.ts`). **That mapping is the first task**, and until it is done
 nobody should assume the schema matches what the forms collect.
 
-There is also a third path: the in-app `ScoutIntakeForm` writes directly to Firestore
-`scoutIntakes`. So intake currently has two unrelated destinations, and the sync has to
-account for both without double-creating records.
+There is also a third path: the in-app `ScoutIntakeForm` inserts directly into Supabase
+`scout_intakes`, under an anonymous session (migration 0011). So intake currently has two
+unrelated destinations, and the sync has to account for both without double-creating records.
 
 ## Decision
 

@@ -7,10 +7,16 @@ This is a **Vite SPA** deployed to Vercel, not Next.js. Functions are discovered
 
 | Pattern | Meaning |
 |---------|---------|
-| `api/route-intake.ts` | Routable function → `POST /api/route-intake` |
-| `api/health.ts` | Routable function → `GET /api/health` |
+| `api/health.ts` | Routable function → `GET /api/health` (the only unauthenticated route) |
+| `api/route-intake.ts` | `POST /api/route-intake` — Scout |
+| `api/architect-plan.ts` | `POST /api/architect-plan` — Architect |
+| `api/envoy-draft.ts` | `POST /api/envoy-draft` — Envoy |
+| `api/chronicle-draft.ts` | `POST /api/chronicle-draft` — Chronicle |
+| `api/pulse-health.ts` | `GET /api/pulse-health?engagementId=` — Pulse; no model call |
+| `api/engagement-transition.ts` | `POST /api/engagement-transition` — calls `transition_engagement()`; no model call |
 | `api/_env.ts` | **Leading underscore = shared helper, not a route.** Vercel skips these. |
 | `api/_http.ts` | Same — shared request-parsing utilities |
+| `api/_auth.ts` | Same — `authenticate()`, the caller's bearer token → user-scoped Supabase client |
 
 ## Function signature
 
@@ -35,17 +41,23 @@ export async function POST(request: Request) {
   export const maxDuration = 30;
   ```
 
-## The four-rung failure ladder
+## The failure ladder
 
-Every agent endpoint follows the same shape. The first two rungs are shared via
-`api/_http.ts`; the next two are per-endpoint:
+Every agent endpoint follows the same shape. Rung 0 runs first in every route except
+`health`; the next two are shared via `api/_http.ts`; the last two are per-endpoint:
 
 | Rung | Check | Response | Shared? |
 |------|-------|----------|---------|
+| 0. No / bad caller | `authenticate()` | `401 { error: 'unauthorized' }`; `503 auth_not_configured` (no Supabase URL/anon key) or `503 auth_unavailable` (Auth down) | Yes (`_auth.ts`) |
 | 1. No model key | `readJsonBody()` | `503 { error: 'model_key_missing' }` | Yes (`_http.ts`) |
-| 2. Bad JSON | `readJsonBody()` | `400 { error: 'invalid_json' }` | Yes (`_http.ts`) |
+| 2. Bad JSON | `readJsonBody()` / `parseJsonBody()` | `400 { error: 'invalid_json' }` | Yes (`_http.ts`) |
 | 3. Invalid input | Per-agent field check | `400 { error: 'invalid_input' }` | No — different predicates per agent |
-| 4. Model failure | `callModel()` throws | `502 { error: <code> }` via `GatewayError.toResponse()` | No — post-processing differs |
+| 4. Model failure | `callModel()` throws | `{ error: <code> }` at the code's status via `GatewayError.toResponse()` | No — post-processing differs |
+
+Rung 1 applies only where the model is the sole path (`route-intake`). Architect, Envoy
+and Chronicle use `parseJsonBody()` (rung 2 alone) because without a key they still
+answer — they save the deterministic template — so a missing key is a fallback there,
+not a 503. `pulse-health` is a GET with no model call and no body.
 
 ### Why rungs 3-4 are NOT shared
 
@@ -69,13 +81,18 @@ export async function POST(request: Request) {
 
 Returns `{ ok: true, body: unknown }` or `{ ok: false, response: Response }`. The
 failure arm carries a `Response` so a caller cannot accidentally answer a failure with
-a 2xx.
+a 2xx. `parseJsonBody()` has the same return shape without the model-key check, and
+`authenticate()` the same pattern (`{ ok: true, userId, client }` or a `response`).
 
 ## Environment
 
 - `api/_env.ts` is the single place `/api` reads server-side env.
 - `requireModelKey()` returns the key or `null` — never throws.
 - `modelKeyConfigured()` returns a boolean for the health endpoint.
+- `supabasePublicConfig()` returns `{ url, anonKey }` or `null` — `SUPABASE_URL` /
+  `SUPABASE_ANON_KEY`, falling back to the public `VITE_` names. `_auth.ts` builds the
+  user-scoped client from it. The service-role key is not read here; it lives only in
+  `src/observability/recorder.ts`.
 - A missing key is **supported state**: local dev has no key, fallbacks cover it.
 
 ## Security rules
@@ -96,10 +113,10 @@ a 2xx.
 
 ## Path alias
 
-`@` resolves to the repo root in both `vite.config.ts` and `vitest.config.ts`:
+`@` resolves to `src/` in `tsconfig.json`, `vite.config.ts` and `vitest.config.ts`:
 
 ```typescript
-alias: { '@': path.resolve(__dirname, '.') }
+alias: { '@': path.resolve(__dirname, './src') }
 ```
 
 So `import { callModel } from '../src/model/gateway'` from `api/` is correct — the `@`

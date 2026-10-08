@@ -1,8 +1,8 @@
 # Engagement Lifecycle — the state machine
 
 **Status:** Decided 2026-08-21. Resolves **D17** (stage enum ratification, U7) and
-**D18** (who writes `engagements.stage`, U5). Not yet implemented — no applied migration
-enforces the transition rules below; §9 is the implementation ladder.
+**D18** (who writes `engagements.stage`, U5). Implemented: `transition_engagement()` (0013)
+is the only stage writer, partner writes revoked (0014); §9 rungs 1–5 done, rung 6 open.
 **Plate:** C2.1 in `docs/nonprofit-success-system-design.html`
 **Lane:** crm (PRD Workstream 2)
 **Satisfies:** PRD §5.4 stage transitions; closes the lifecycle gap
@@ -119,7 +119,7 @@ new one — the roll-out has to account for the portal losing a write it current
 | **Staff, via a direct admin RLS policy** | Ships stage-writing as a *grant* rather than a *transition*: an admin UPDATE policy authorizes writing any value from any state, so guards, approvals, and events all become optional. `0002` refuses this explicitly (`0002:23-25`) and it was right to. |
 | **Pulse** | It reads `stage` to judge overrun. Making the observer the writer means health signals become self-fulfilling. [pulse.md](../platform/agents/pulse.md) §7 already rules this out. |
 | **An agent (Scout / Architect / Chronicle)** | Agents reason over ambiguous input; a transition is a guard evaluation over structured state. An agent may *propose* one (§6), never commit it. |
-| **A HubSpot webhook** | `design-requirements.md`:319, 346 — Supabase owns the state machine; a stage never advances because an external system said so. |
+| **A HubSpot webhook** | PRD §8 — Supabase owns the state machine; a stage never advances because an external system said so. |
 
 ### The command contract
 
@@ -129,7 +129,10 @@ POST /api/engagement-transition
 → 201 { engagementId, fromStage, toStage, transitionedAt, eventId }
 ```
 
-Executed with the service-role client, server-side only. Its obligations, in order, in one
+Executed by `transition_engagement()` (0013), a `SECURITY DEFINER` function called with the
+caller's JWT through `api/engagement-transition.ts` — `api/` holds no service-role client by
+design. The function re-derives role (`is_admin()`) and org membership itself; the handler
+only pre-checks so a 422 names the unmet guard. Its obligations, in order, in one
 transaction:
 
 1. **Authenticate** the caller and resolve their role from `users.role` (never from the
@@ -140,12 +143,12 @@ transaction:
 4. **Evaluate the guard**. A failed guard is `422` with the unmet condition named — never a
    silent no-op.
 5. **Check the approval**, where the transition requires one: an `approvals` row for this
-   engagement with `status = 'approved'` (deferred migration `_deferred/0005`).
+   engagement with `status = 'approved'` (deferred migration `0005_approval_spine.sql`).
 6. **Write**, atomically:
    - `UPDATE` the current stage's row to `status = 'completed'`
    - `INSERT` the target stage's row at `status = 'in_progress'`
    - `INSERT` an `engagement_events` row
-   - `INSERT` an `audit_events` row (once `_deferred/0005` lands)
+   - `INSERT` an `audit_events` row (once `0005_approval_spine.sql` lands)
 7. **Fire side effects after commit**, never inside the transaction (§7).
 
 **Idempotency.** `idempotencyKey` is required and unique per transition attempt; a replay
@@ -200,7 +203,7 @@ Actors: **Partner** (org owner, `owner_id = auth.uid()`), **Staff** (`users.role
 diplomat tier lands, see [access-model.md](access-model.md)), **System** (the transition
 command, acting on a verified server-side precondition).
 
-Every row writes an `engagement_events` row and, once `_deferred/0005` lands, an
+Every row writes an `engagement_events` row and, once `0005_approval_spine.sql` lands, an
 `audit_events` row. "Event written" names the `engagement_event_kind`; the enum
 (`0002:62-67`) currently has `milestone_completed | session_held | blocker_raised |
 note_added`, so §8 adds `stage_advanced` and `stage_reverted`.
@@ -210,11 +213,16 @@ note_added`, so §8 adds `stage_advanced` and `stage_reverted`.
 | From | To | Trigger | Actor | Guard | Approval | Event | Side effects |
 |---|---|---|---|---|---|---|---|
 | *(none)* | `initial_meeting` | Scout intake approved, `composite_signal = Ready` | System | Reviewed `scout_intakes` row with `review_status = 'reviewed'` and `review_action ∈ (approved, edited)` | Already given — the Scout review **is** the approval | `stage_advanced` | Create `businesses` row if absent; notify staff; push contact to HubSpot |
-| `initial_meeting` | `budget_check` | Charter signed | System, on `POST /api/contract-sign` | Immutable `engagement_contracts` row written; `signerName` matches contact | The signature is the approval | `stage_advanced` | PDF emailed to signer + dssgnyc@gmail.com; same transaction as the contract insert |
+| `initial_meeting` | `budget_check` | Charter signed¹ | System, on `POST /api/contract-sign` | Immutable `engagement_contracts` row written; `signerName` matches contact | The signature is the approval | `stage_advanced` | PDF emailed to signer + dssgnyc@gmail.com; same transaction as the contract insert |
 | `budget_check` | `data_ethics_committee` | Staff confirms budget and volunteer capacity | Staff | `engagements.budget_amount` is non-null and ≥ 0 | Staff action is the authorization (L2) | `stage_advanced` | Ethics committee queue notification |
 | `data_ethics_committee` | `scoping` | Committee approves data handling | Ethics Committee | An `approvals` row for this engagement, `entity_type = 'assessment'`, `status = 'approved'` | **Required — L3.** Recorded, not implied | `stage_advanced` | Unblock Architect assessment; notify partner |
 | `scoping` | `hackathon_ready` | Partner accepts charter and 90-day plan | Staff, on recorded partner acceptance | `engagements.assessment_id` is non-null **and** its `architect_assessments` row is complete **and** ≥ 1 `milestones` row exists | **Required — L3.** Staff confirms partner acceptance | `stage_advanced` | Project brief published; volunteer team assignment opens |
 | `hackathon_ready` | `membership` | Delivery cycle complete | Staff | All `milestones` for the engagement are `completed` or explicitly waived with a reason | **Required — L3** | `stage_advanced` | Chronicle readiness check becomes available; wrap-up communication offered |
+
+¹ Interim (R7): `engagement_contracts` does not exist yet (C2), so `transition_engagement()` accepts an
+admin attestation — a non-empty `reason` — for this guard and records `guard_deferred: "contract"` on the
+event detail (and on the `audit_events` detail). Delete the attestation when `/api/contract-sign` writes the
+contract in the same transaction.
 
 ### Backward transitions
 
@@ -241,7 +249,7 @@ exactly the engagement most in trouble.
 | A partner writing any transition | `403`. Partners trigger transitions by *doing things* (signing a charter, accepting a plan); they never write the stage. |
 | Any transition out of `membership` | `409`. Terminal (§5). |
 | A stage change on a `completed` engagement row | Refused by `engagements_enforce_transitions` (`0001_init.sql:407-410`) — the terminal-status lock, already in force. |
-| A transition triggered by an inbound HubSpot webhook | Rejected at the integration boundary — `design-requirements.md`:346. |
+| A transition triggered by an inbound HubSpot webhook | Rejected at the integration boundary — PRD §8. |
 | A transition whose guard has no evidence | `422` with the unmet condition named. Never a silent success. |
 
 ---
@@ -280,7 +288,7 @@ name because three different things currently claim it:**
 |---|---|
 | `engagements.status = 'completed'` on a row | *That stage* is done. Says nothing about the engagement. |
 | Reaching `membership` | The pipeline is done. The delivery work may not be. |
-| Chronicle's `status = 'completed'` gate (`design-requirements.md`:CF4) | Ambiguous today — reads a per-stage status as if it were engagement-level. **This is a live defect.** |
+| Chronicle's `status = 'completed'` gate (PRD §12 CF4) | Ambiguous today — reads a per-stage status as if it were engagement-level. **This is a live defect.** |
 
 **Definition, for the whole engagement:**
 
@@ -306,7 +314,7 @@ the relationship. Neither derives the other, and one guard connects them.**
 | | Stage | Milestone |
 |---|---|---|
 | Granularity | Six, fixed, enum | Many, per engagement, free-form |
-| Author | The transition command | Architect's 90-day plan (`_deferred/0006`) |
+| Author | The transition command | Architect's 90-day plan (`0006_delivery`) |
 | Cadence | Weeks to months | Days to weeks |
 | Order | Strictly sequential | Parallel, three phases (Days 1–30 / 31–60 / 61–90) |
 | Reversible | By recorded reversal only | Freely — `pending \| in_progress \| completed \| blocked` |
@@ -325,12 +333,12 @@ the relationship. Neither derives the other, and one guard connects them.**
 milestone to exist (a plan with no milestones is not a plan), and
 `hackathon_ready → membership` requires all of them resolved.
 
-**Until `_deferred/0006` lands, both guards are unenforceable.** The `milestones` table does
-not exist in an applied migration; Architect emits milestones as prose
+**Until the guards read `milestones`, both are unenforceable.** `0006_delivery` now creates
+the table, but nothing writes it yet; Architect emits milestones as prose
 (`data-model.md` §3). Until then those two transitions are **staff-attested**: the endpoint
-records that a human asserted the condition, and the `audit_events` row says *attested*
-rather than *verified*. This is a deliberate, dated weakening — not an oversight — and it
-is the strongest reason to land `_deferred/0006` early.
+records that a human asserted the condition, and the `audit_events` detail says *attested*
+(`guard_deferred`) rather than *verified*. This is a deliberate, dated weakening — not an oversight — and it
+is the strongest reason to wire `0006_delivery` early.
 
 `engagement_events.kind = 'milestone_completed'` (`0002:62-67`) already anticipates this
 edge and predates the `milestones` table. Once the table lands, that event should carry the
@@ -370,16 +378,18 @@ someone has the tab open.
 
 ## 8. Schema work this spec implies
 
-None of it is applied. Listed so §4 is not read as describing something that exists.
+Status column added: items 1, 2, 3 and 6 are applied in `0013_engagement_transition.sql`; item 4 is
+applied in `0014_engagements_revoke.sql`. Both migrations are written but not yet run against a
+local stack (see the R7 plan's `Outstanding:` line).
 
 | # | Change | Why |
 |---|---|---|
-| 1 | Add `stage_advanced` and `stage_reverted` to `engagement_event_kind` | §4 writes both; neither value exists (`0002:62-67`) |
-| 2 | Add `reason text` to `engagement_events`, or use `detail` by convention | A reversal's reason is mandatory (§4). `detail` suffices; pick one and document it |
-| 3 | Amend `engagements_enforce_transitions` to allow `completed → in_progress` **only** for the service role | Reversal (§5) needs it; the client-facing lock must stay absolute |
-| 4 | Revoke `INSERT`/`UPDATE` on `engagements` from `authenticated`; drop `engagements_insert_own` / `engagements_update_own` | Makes the transition command the *only* writer. The privilege is the outer gate — §2 is unenforceable while the portal can upsert directly |
+| 1 | **Applied 0013.** Add `stage_advanced` and `stage_reverted` to `engagement_event_kind` | §4 writes both; neither value exists (`0002:62-67`) |
+| 2 | **Applied 0013** (`detail`, a JSON string carrying reason and evidence). Add `reason text` to `engagement_events`, or use `detail` by convention | A reversal's reason is mandatory (§4). `detail` suffices; pick one and document it |
+| 3 | **Applied 0013** — the exception is a transaction-local GUC set inside `transition_engagement()`, not the service role (the GUC alone is reachable by a partner until 0014 revokes the privilege). Amend `engagements_enforce_transitions` to allow `completed → in_progress` **only** for the service role | Reversal (§5) needs it; the client-facing lock must stay absolute |
+| 4 | **Applied 0014.** Revoke `INSERT`/`UPDATE` on `engagements` from `authenticated`; drop `engagements_insert_own` / `engagements_update_own` | Makes the transition command the *only* writer. The privilege is the outer gate — §2 is unenforceable while the portal can upsert directly |
 | 5 | Keep `engagements_select_own` and `engagements_select_admin` unchanged | Reads are settled; this spec changes writes only |
-| 6 | Add an `idempotency_keys` table, or a unique index on `(engagement_id, to_stage, idempotency_key)` | §2 requires replay safety |
+| 6 | **Applied 0013** — `engagement_events.idempotency_key` with a partial unique index (no separate table). Add an `idempotency_keys` table, or a unique index on `(engagement_id, to_stage, idempotency_key)` | §2 requires replay safety |
 
 **Change 4 breaks the partner portal**, which writes stage today (§2). Sequence it with the
 portal work that replaces `updateStage()` with a call to the transition endpoint, or the
@@ -393,12 +403,12 @@ Ordered so each rung leaves the pgTAP suite green and delivers something usable.
 
 | # | Rung | Delivers | Depends on |
 |---|---|---|---|
-| 1 | Derive current stage server-side, one shared function | Kills the duplicate `find()` logic (§3) and fixes Chronicle's gate (§5) | Nothing |
-| 2 | `POST /api/engagement-transition` with guards, events, and idempotency — additive, portal untouched | The state machine exists and is used by staff | Rung 1 |
-| 3 | Enum values + trigger amendment (§8 items 1–3) | Reversal and correct event kinds | Rung 2 |
-| 4 | Approval spine (`_deferred/0005`) wired to the three L3 transitions | Approvals recorded rather than implied | Rung 3 |
-| 5 | Revoke direct write privileges (§8 item 4) + port the portal | Single-writer invariant becomes true, not just intended | Rung 4 |
-| 6 | Delivery tables (`_deferred/0006`) | The two milestone guards become verifiable rather than attested (§6) | Rung 5 |
+| 1 ✅ | Derive current stage server-side, one shared function | Kills the duplicate `find()` logic (§3) and fixes Chronicle's gate (§5) | Nothing |
+| 2 ✅ | `POST /api/engagement-transition` with guards, events, and idempotency — additive, portal untouched | The state machine exists and is used by staff | Rung 1 |
+| 3 ✅ | Enum values + trigger amendment (§8 items 1–3) | Reversal and correct event kinds | Rung 2 |
+| 4 ✅ | Approval spine (`0005_approval_spine.sql`) wired to the three L3 transitions | Approvals recorded rather than implied | Rung 3 |
+| 5 ✅ | Revoke direct write privileges (§8 item 4) + port the portal | Single-writer invariant becomes true, not just intended | Rung 4 |
+| 6 | Delivery tables (`0006_delivery`) | The two milestone guards become verifiable rather than attested (§6) | Rung 5 |
 
 Rungs 1–2 are the ones worth doing now; they resolve D18 in practice, and the rest hardens
 what they establish.
@@ -420,7 +430,7 @@ what they establish.
   ([pulse.md](../platform/agents/pulse.md) §4). Revisit after ~10
   engagements have real per-stage durations — which this spec's `stage_advanced` events are
   what make measurable.
-- **Waiving a milestone** (§5) needs a mechanism. `_deferred/0006` has no `waived` status —
+- **Waiving a milestone** (§5) needs a mechanism. `0006_delivery` has no `waived` status —
   either add one or express it as `completed` with a reason. Decide when the table lands.
 - **Reversal beyond a signed contract.** A `budget_check → initial_meeting` reversal moves
   back across a signed charter. The signature stays immutable and valid

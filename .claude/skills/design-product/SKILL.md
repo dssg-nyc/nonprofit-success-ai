@@ -130,6 +130,42 @@ Two rules that survive review:
 - **Separate the audit trail from agent telemetry.** An immutable operational/security trail answers "who did what, and can it be disputed"; agent-run telemetry answers "how did the model behave." Same table for both means retention and access rules collide.
 - **Immutable events get their own entity.** Signatures, approvals, and stage transitions are records that must reject later writes — including from admins. If the doc says immutable but names no entity that enforces it, it is not immutable yet.
 
+## Unrecoverable requirements get their own class
+
+**Some requirements cannot be added later at any price.** Anything whose data is generated
+by traffic — instrumentation, log fields, holdout and randomization slices, viewport
+tracking, pre-registration — is recoverable only by *waiting again*. A missing column on a
+served result set is not a gap; it is a permanently missing row.
+
+Mark these **`UNRECOVERABLE`** in the requirement table, and for each one state:
+
+1. **What ships it** — the *same commit* as the feature it observes, never a follow-up item.
+   A separately-sequenced instrumentation item is an instrumentation item that slips.
+2. **The complete field list**, enumerated. "Log the result set" is not a requirement;
+   the specific version stamps and per-item fields are. (diskoe, 2026-08-24: T-0 shipped
+   `BUILT` with 5 of 7 stamps and 5 of 9 per-item fields having **no column** — the
+   contract said "logging exists", so nothing caught it.)
+3. **What it costs to skip**, in units of time. Not "we lose data" — "we wait 90 days
+   again."
+
+**Then predict the descope.** (diskoe, 2026-08-24, §16 RK-2: viewport tracking was
+*"usually the first thing cut for scope"* and the 5% randomization slice *deliberately
+degrades results for 1-in-20 users* — both would "feel like reasonable trims in week
+three." Naming the trim before it is proposed is the only mitigation that works, because
+by week three the person proposing it will be right about everything except recoverability.)
+
+## PARTIAL is a state, and it names its missing field
+
+A binary built/not-built vocabulary cannot express the most common real outcome: the shape
+shipped and the field list did not. Every requirement gets `ABSENT` / `PARTIAL` / `MET`,
+and **`PARTIAL` is invalid unless it names the specific missing field or unmet criterion**.
+
+Where this document and a build-state summary elsewhere disagree, **this document is the
+stricter and correct one** — say so in the header, and say it in the other document too.
+Two registries that both claim authority produce a repo where `BUILT` quietly means two
+different things in two files. See `~/.claude/refs/verification.md` §2 for the
+cross-cutting pattern.
+
 ## Designer contribution (§4 and throughout)
 
 The Designer role is specifically accountable for:
@@ -138,6 +174,40 @@ The Designer role is specifically accountable for:
 - **§5 UI workstream** — interaction patterns, state management from the user's perspective
 - **Accessibility throughout** — WCAG level, keyboard navigation requirements, screen reader considerations
 - **Content design** — what the system says to users in each state (empty, loading, error, success)
+
+### When a design artifact contradicts a requirement, the requirement wins
+
+Exported screens are an artifact; a budget is a contract. (diskoe, 2026-08-24: an intake
+shipped at **≥6 taps against a ≤4-tap, ≤20 s budget** (PR-1.1) because the Figma flow was
+transcribed faithfully and nobody re-read the requirement — and **nothing measured taps
+or elapsed time**, so it passed every gate, DC-3.)
+
+- Any requirement with a **number in it** (taps, seconds, items, characters) names the
+  test that measures it, in this document. A budget with no meter is a preference.
+  See `~/.claude/refs/verification.md` §1 corollary: "every budget needs a meter."
+- Where an exported screen and a stated budget disagree, file it as a contradiction with
+  an ID and resolve it explicitly. The screen changes, or the budget is amended on the
+  record — never a silent win for whichever one got implemented first.
+
+### Enumerate the states no screen was exported for
+
+Design sets cover the happy path and are thin exactly where the system is most often seen.
+List the states per surface and mark which have a design and which are a **guess**:
+
+- **The zero-state that every instance passes through first** — a dashboard with no
+  engagements, a report before any data, a profile before any save. (diskoe, 2026-08-24:
+  a zero-vote poll state had no export at all, RK-8 — the shipped fallback was invented at
+  implementation time and recorded as a guess only after the fact.)
+- Empty-because-filtered vs empty-because-broken. These must not render identically.
+  (diskoe, 2026-08-24: a barrier-free filter needed a dedicated honest empty state, B-13a.)
+- Partial-data, upstream-outage, and permission-denied. A **permission-denied path that
+  renders as "no data" is the failure mode that survives longest**: RLS that blocks
+  every anonymous read catalogue-wide makes the whole public surface read as "no events"
+  rather than "no permission" (diskoe, 2026-08-24). This repo's Supabase RLS is the same
+  stack — the defect is a live risk here, not an analogy.
+
+A state that ships as a guess is fine. A state that ships as a guess and is *recorded as
+a transcription* is the defect.
 
 ## HITL Gates
 

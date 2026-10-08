@@ -1,11 +1,15 @@
 # Architect Agent
 **Plate:** C3.2 in docs/nonprofit-success-system-design.html
-**Status:** BUILT, NOT WIRED
+**Status:** see `roadmap.md` D2, D8, D24, D31 (built) — build state lives only in the registry and in CLAUDE.md
 **PRD sections:** §5, §6, §7, §9 CF2
 
-> Engineering note: scoring logic exists in `src/lib/architectScoring.ts` and plan logic
-> in `src/lib/architectPlan.ts` (target: `src/agents/architect/`). No tests, no eval
-> metric, no `api/` endpoint yet. Supersedes `architect-design.md`.
+> Engineering note: scoring is `src/agents/architect/scoring.ts`, the templates
+> `src/agents/architect/plan.ts`, the model path `src/agents/architect/model.ts`, and the
+> SPA's submit logic `src/agents/architect/draft.ts`. Served by `POST /api/architect-plan`
+> (`api/architect-plan.ts`). Unit-tested under `src/agents/architect/__tests__/` and
+> `api/__tests__/architect-plan.test.ts`; graded by `architectScoring`,
+> `architectPlanStructure` and `architectCharter` (`src/evals/`). Supersedes
+> `architect-design.md` (tracked at `docs/architect-design.md` since 2026-10-08; superseded source).
 
 ## Responsibility
 
@@ -73,7 +77,7 @@ bucket from Scout is a redirect-before-chartering signal (`crossCheckFlag` in
 `scoreAssessment()`), not something the plan quietly charters around.
 
 All five steps, the override scope rationale, and the cross-check are implemented verbatim
-in `scoreAssessment()` (`architect/scoring.ts:100-163`) — no drift found between spec and
+in `scoreAssessment()` (`src/agents/architect/scoring.ts:84-128`) — no drift found between spec and
 code at the composite-logic level.
 
 ### Validated edge cases
@@ -81,16 +85,20 @@ code at the composite-logic level.
 Four profiles from `architect-design.md` exercise the override, single-flag, and
 remediation-only paths:
 
-1. Paper-based org — Foundational on both DI and Governance → remediation-only, both flags
-   mandatory.
+1. Paper-based org — Foundational on both DI and Governance → both flags mandatory.
+   `architect-design.md` called this remediation-only, but a paper-based org's composite
+   is Foundational, and the Rules put level first: it gets `build_basics`, carrying both
+   flagged workstreams (see §4). Remediation-only is reachable only at Developing
+   (profile 4).
 2. Mixed-maturity org — Governance-only flag → named workstream runs alongside deliverable.
 3. Well-resourced-but-siloed org — DI Foundational despite high points → override triggers,
    composite capped at Developing.
 4. Dual-gaps-strong-capacity org — both flags → remediation-only regardless of capacity
    scores.
 
-Not re-verified as executable test cases in this pass — see `evals/` golden fixtures for
-`architectScoring`, which cover the same scoring surface with automated assertions.
+Each profile is now an executable case: `architectScoring` (25 cases) covers the scoring
+surface and `architectPlanStructure` (23 cases, `fixtures/architectCharter.jsonl`) the
+plan each one produces.
 
 ## §3 Output
 
@@ -121,8 +129,35 @@ gap, not fixed here (see §4 Open items).
 - **Team Capacity / Governance question-to-dimension mapping** — `architect-design.md`
   flagged this as unconfirmed against any build-side schema; the shipped `CsaScoredAnswers`
   type is now that schema, but no separate confirmation/sign-off is recorded.
-- **Human review UI for Architect's output** — no HITL tier or approval flow specified for
-  Architect's output, unlike Scout's L2/L3 pattern. Not assumed here; left open.
+- **Cross-check does not stop the charter.** The Rules say a Foundational org on an
+  `ML / Predictive` bucket is "redirect signal, do not charter", and the flag text says the
+  same, but `generateCharter()` still produces a `build_basics` charter — with the
+  cross-check as its first risk — and the route submits it for approval. Either the rule
+  is "charter the basics and lead with the redirect" (what the code does) or the route
+  should refuse to draft. Undecided; the L3 approval is the stop today.
+- **Cross-check runs after the DI override.** `scoreAssessment()` caps an Established
+  `di_score === 1` org at Developing before evaluating the cross-check, which only fires at
+  Foundational — so the two never co-occur. Correct by construction today, but the order
+  is load-bearing and not stated anywhere but the code.
+- **A re-submit after approval leaves the approval in place.** `submit_architect_draft()`
+  (0009) expires only *pending* approvals for the assessment. Re-conducting an assessment
+  whose charter was already approved writes a new pending approval beside the approved
+  one; the approved row is not expired or reopened, so the plan page shows the new
+  pending draft while an approval for the old content still exists.
+- **Edge-case 1 conflict, resolved in code, not in `architect-design.md`.** See §2
+  "Validated edge cases": a Foundational org with both flags is `build_basics`, not
+  `remediation_only`. The Rules and `plan.test.ts` agree; the source doc does not.
+- *Fixed in R5:* an Established org with a Governance flag (di=3, gov=1, others 3 — 17
+  points) lost its required Reporting Automation workstream on the `accelerate` plan while
+  the charter's risks still called it non-skippable. `generateNinetyDayPlan()` now carries
+  flagged workstreams on every shape; caught by `architectPlanStructure`
+  (`established-governance-flag`).
+
+**Decided — human review.** Architect's output is **L3**: the model drafts, a staff
+member approves. `POST /api/architect-plan` never sets the tier from model output;
+`submit_architect_draft()` (0009) writes the assessment, a pending `charter` approval and
+the `architect.draft_submitted` audit event in one transaction, and `ArchitectPlan` shows
+the approval's state. Direct client writes to `architect_assessments` are revoked (0010).
 
 ## Contract
 
@@ -137,33 +172,42 @@ gap, not fixed here (see §4 Open items).
 - **Output:** `MaturityResult` (di_score, gov_score, tooling_score, dc_score, tc_score,
   points, compositeLevel, overrideApplied, flaggedDimensions[], remediationOnly,
   crossCheckFlag) + `ArchitectCharter` + `NinetyDayPlan`
-- **Side effects:** Writes one `architect_assessments` row (all CSA answers + scoring
-  output + generated documents).
+- **Side effects:** Through `submit_architect_draft()` only, in one transaction: upserts
+  the `architect_assessments` row (id = the intake id; CSA answers + scoring output +
+  generated documents), expires any older pending approval for it, inserts one pending
+  `approvals` row (`entity_type 'charter'`, keyed by `idempotency_key`), and writes one
+  `architect.draft_submitted` audit event. The model call writes one `agent_runs` row via
+  the gateway — `fallback` when it fails — linked from the approval. A replay of the same
+  idempotency key writes nothing and returns the stored result.
 
 ## Rules
 
 - Assessment requires a matching `scout_intakes` row (`scoutIntakeId` FK). Cannot assess an org that has not been intake-reviewed.
-- No delete on `architect_assessments` — rows are permanent audit trail. Admin-only CRUD.
+- No delete on `architect_assessments` — rows are permanent audit trail. Org admins read;
+  only `submit_architect_draft()` writes (INSERT/UPDATE revoked from `authenticated`, 0010).
+- HITL is **L3**, always: the draft is pending staff approval, and a model cannot raise it.
+- Every path saves a draft: a model failure saves `buildTemplate()` (`source: 'fallback'`).
 - Plan shape is derived: `compositeLevel === 'Foundational'` → `build_basics`; `remediationOnly` → `remediation_only`; `compositeLevel === 'Developing'` (and not remediationOnly) → `ship_deliverable`; `compositeLevel === 'Established'` → `accelerate`. Model must not generate `shape`.
 - DI override: `di_score === 1 && compositeLevel === 'Established'` → cap to `Developing`, set `overrideApplied = true`.
 - Remediation-only: `flaggedDimensions.length >= 2` (both DI and Governance at Foundational).
-- Cross-check flag: `compositeLevel === 'Foundational' && scoutBucket === 'ML / Predictive'` → redirect signal, do not charter.
-- DI and Governance Foundational scores become named required workstreams in the charter — never generic "areas to improve" language.
+- Cross-check flag: `compositeLevel === 'Foundational' && scoutBucket === 'ML / Predictive'` → redirect signal, do not charter. (The code still drafts a `build_basics` charter that leads with the redirect — §4 open item.)
+- DI and Governance Foundational scores become named required workstreams in the charter and the plan, at every composite level — never generic "areas to improve" language.
 - Tooling's Developing tier covers either-direction pairing (CRM without reporting tool, or reporting tool without CRM) — this is a documented, intentional extension of the original rubric.
 
 ## Dependencies
 
-- **Imports:** `src/types.ts` (ArchitectAssessment, MaturityResult, ArchitectCharter, NinetyDayPlan, CompositeLevel, FlaggedDimension, ScoutBucket); `src/lib/architectScoring.ts`; `src/lib/architectPlan.ts`; future: `src/model/` gateway, `src/observability/recorder.ts`
-- **Imported by:** CSA form component; engagement detail screen (charter/plan display)
-- **Data:** `architect_assessments` table (`supabase/migrations/0001_init.sql`); `scout_intakes` (FK); `agent_runs` (`_deferred/0004_telemetry.sql`)
+- **Imports:** `src/types/` (barrel: ArchitectAssessment, MaturityResult, ArchitectCharter, NinetyDayPlan, CompositeLevel, FlaggedDimension, ScoutBucket, ArchitectPlanRequest/Response); `src/schemas/`; `src/model/gateway.ts` (which records `agent_runs` through `src/observability/recorder.ts`); `src/guardrails/hitl.ts`
+- **Imported by:** `api/architect-plan.ts`; `ArchitectAssessment.tsx` (via `draft.ts` and `/api/architect-plan` — never `model.ts`); `ArchitectPlan.tsx` (`approvalBadge`); `src/evals/`
+- **Data:** `architect_assessments` table (`supabase/migrations/0001_init.sql`; writes revoked in `0010_architect_assessments_revoke.sql`); `scout_intakes` (FK); `approvals` + `audit_events` (`submit_architect_draft()`, `0009_architect_draft.sql`); `agent_runs` (`0004_telemetry.sql`)
 
 ## Delta rows
 
 Cited from [`roadmap.md`](../../roadmap.md) — this spec does not mint numbers.
 
-- **D2** — Architect end-to-end: `/api/architect-assess`, model enrichment — SPECIFIED
+- **D2** — Architect end-to-end: `/api/architect-plan`, model enrichment — **BUILT** (R5) · local only, not on a hosted project
 - **D8** — move Architect to `src/agents/architect/` — SPECIFIED
-- **D24** — Architect eval suite: scoring edge cases + charter generation — GAP
+- **D24** — Architect eval suite: scoring edge cases + charter generation — **BUILT** (R5, partial) · `architectScoring` and `architectPlanStructure` gated at 1.0; `architectCharter` judge unmeasured
+- **D31** — Architect HITL gate — **BUILT** (R5) · L3 via `submit_architect_draft()`, local only
 - **D26** — `demoStore` → Supabase retarget for CSA form and engagement detail — SPECIFIED
 
 ## Test contract
@@ -179,7 +223,7 @@ Cited from [`roadmap.md`](../../roadmap.md) — this spec does not mint numbers.
 
 1. Meeting intelligence (transcript extraction) as Architect input — which transcription service, and does it flow in as `q1_org_context` or as a separate pre-fill step?
 2. MOU / kickoff deck templates — implementation deferred; when does this become scope?
-3. Human review UI — no HITL tier or approval flow specified for Architect's output, unlike Scout's L2/L3 pattern. Needs a decision before `api/architect-assess` is built.
+3. ~~Human review UI~~ — **decided:** L3 via `submit_architect_draft()`; see §4 "Decided — human review".
 4. Q-to-dimension mapping confirmation — `CsaScoredAnswers` is the de facto schema; a formal sign-off on the Team Capacity / Governance mapping is still unrecorded.
 
 ## Requirement Trace
@@ -198,7 +242,7 @@ Cited from [`roadmap.md`](../../roadmap.md) — this spec does not mint numbers.
 | Downstream effect by composite level table | `architect-design.md` §Downstream effect | §3 | Carried |
 | MOU generation | `architect-design.md` §Output | §3 | Dropped — no generation code exists; charter/plan only |
 | Kickoff deck generation | `architect-design.md` §Output | §3 | Dropped — no generation code exists |
-| Validated edge-case profiles (4) | `architect-design.md` §Validated edge cases | §2 | Carried as narrative; not re-verified as executable cases here — see `evals/` golden fixtures instead |
+| Validated edge-case profiles (4) | `architect-design.md` §Validated edge cases | §2 | Carried; executable in `architectScoring` / `architectPlanStructure`. Profile 1 corrected to `build_basics` |
 | Charter/MOU/kickoff templates open item | `architect-design.md` §Still open | §4 | Carried — still open |
 | Q-to-dimension mapping confirmation open item | `architect-design.md` §Still open | §4 | Carried — still open |
-| Human review UI open item | `architect-design.md` §Still open | §4 | Carried — still open |
+| Human review UI open item | `architect-design.md` §Still open | §4 | Resolved — L3 via `submit_architect_draft()` (R5) |

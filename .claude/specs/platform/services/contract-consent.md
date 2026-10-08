@@ -1,6 +1,6 @@
 # Contract & Consent Gate
 **Plate:** C4.2 in docs/nonprofit-success-system-design.html
-**Status:** GAP
+**Status:** see `roadmap.md` D9, D27 (specified, not built) — build state lives only in the registry and in CLAUDE.md
 **PRD sections:** §9 CF3
 
 ## Responsibility

@@ -1,6 +1,6 @@
 # Envoy
 **Plate:** C4.3 in docs/nonprofit-success-system-design.html
-**Status:** GAP
+**Status:** see `roadmap.md` D10 (built; send path not designed) — build state lives only in the registry and in CLAUDE.md
 **PRD sections:** §8
 
 > Design note: the prior consolidated model classified this as a service (Communications
@@ -58,20 +58,20 @@ decides whether the situation warrants contacting the partner at all.
 
 ## §4 Draft and confirm flow
 
-Staff selects an occasion and recipient in the engagement UI → POST `/api/draft-communication` →
-server selects the matching template → if staff opted into AI polish, calls model gateway
-to rewrite the body for tone and clarity → returns draft to staff for preview and editing →
-staff confirms → POST `/api/send-communication` → email sent → `communication_log` row written.
+Staff selects an occasion in the engagement UI → POST `/api/envoy-draft` → the model
+drafts (or the template in `src/agents/envoy/draft.ts` does, on failure) →
+`submit_envoy_draft()` (0012) writes one `communications` row, one pending L3 approval and
+one audit event in one transaction → staff reviews the approval.
 
-**The draft step does not send or log.** The confirm step sends and logs. This two-step
-flow is how the L3 gate is enforced in the API, not just in the UI.
+**The draft step does not send.** The send step (C3) is not built; nothing leaves the
+portal. An approved draft is a record until C3 lands.
 
-**Model polish failure** — gateway throws → service falls back to template-only body,
-`polished = false`, draft returned successfully. Fallback draft still routes through staff
-confirmation — it is never auto-sent.
+**Model failure** — gateway throws → the template is saved and the route answers 200 with
+`source: 'fallback'`. A fallback draft still routes through the pending approval; it is
+never auto-sent.
 
-**Double-confirm** — second POST to confirm with the same `previewToken` → 409, no second
-email sent.
+**Replay** — the same `idempotencyKey` returns the original result without a model call;
+an expired approval answers 409 `draft_superseded`, a mismatched payload 400 `invalid_draft`.
 
 ## §5 Deterministic fallback
 
@@ -80,6 +80,13 @@ email sent.
 the caller falls back on any failure without branching on which path produced the draft. A
 staff member is going to read and edit this before it is sent, so a plain accurate scaffold
 beats a fluent guess.
+
+The fallback is **server-side**, in `api/envoy-draft.ts`, following `architect-plan.ts`:
+a failed model call is a 200 carrying the template with `source: 'fallback'`, a model
+draft carries `source: 'model'`, and the gateway records the failed call as one `fallback`
+run (`failureStatus: 'fallback'`). A missing model key is a fallback too, never a 503.
+Only 401 (no session), 400 (bad input) and 405 are non-2xx. *(Decided 2026-10-07,
+design-system.md §2.)*
 
 ## §6 HITL tier
 
@@ -93,20 +100,18 @@ secrets reach the client" constraint (`CLAUDE.md` Conventions).
 
 ## Contract
 
-- **Input (draft):** `CommunicationDraftInput` — `engagementId` (FK), `occasion` (one of the registered occasion keys), `recipientEmail` (string), `staffNotes?` (string), `aiPolish?` (boolean, default false)
-- **Output (draft):** `CommunicationDraft` — `subject` (string), `body` (string), `polished` (boolean), `occasion` (string), `previewToken` (string — required by the confirm endpoint)
-- **Input (confirm):** `previewToken` (string)
-- **Side effects (on confirm only):** Sends email; writes one `communication_log` row with `polished`, `occasion`, `sentAt`, and `recipientEmail`. The draft step does not send or log.
+- **Input:** `EnvoyDraftRequest` — `engagementId` (guid), `idempotencyKey` (8-200 chars), `occasion` (one of `ENVOY_OCCASIONS`), `orgName`, `planTitle?`, `cadence?`, `concerns?`
+- **Output:** `EnvoyDraftResponse` — the draft (`subject`, `body`, `occasion`, `hitlTier` 'L3') plus `source` ('model' | 'fallback'), `approvalId`, `draftId`, `runId`
+- **Side effects:** `submit_envoy_draft()` writes one `communications` row, one pending L3 approval and one audit event, in one transaction. Nothing is sent; the send step is C3 and not built.
 
 ## Rules
 
 - `hitlTier = 'L3'` always — the service never sends without an explicit staff confirmation step after previewing the draft. There is no L2 path for communications.
-- `aiPolish` rewrites only the body text — subject line, recipient, occasion, and template-variable substitutions are never modified by the model.
-- Templates are static files in `src/agents/communications/templates/` — not stored in the database. A template change requires a deploy, not a database edit, so changes are version-controlled.
-- `recipientEmail` must match the engagement's registered contact email unless staff explicitly overrides (an acknowledged mismatch flag in the confirm request). This check is server-side.
-- Model polish failure: gateway throws → service falls back to template-only body, `polished = false`, draft returned successfully. Fallback draft still routes through staff confirmation — it is never auto-sent.
-- Double-confirm: second POST to confirm with the same `previewToken` → 409, no second email sent.
-- No new Firebase surface area. `communication_log` writes to Supabase.
+- The model drafts subject and body only; `occasion` and `hitlTier` are never model-supplied.
+- Templates live in `src/agents/envoy/draft.ts` — not stored in the database. A template change requires a deploy, not a database edit, so changes are version-controlled.
+- Model failure: gateway throws → the template is saved, `source = 'fallback'`, 200. A fallback draft still routes through the pending approval — it is never auto-sent.
+- Replay: the same `idempotencyKey` returns the original result; an edit is a new row with `supersedes_id`, and `communications` content is write-once (trigger).
+- No new Firebase surface area. `communications` is a Supabase table (0012), admin-readable through RLS, written only by `submit_envoy_draft()`.
 - Staff-initiated only. Pulse detecting `at_risk` must not auto-trigger a communication draft.
 - `occasion` is stamped server-side — a draft cannot be attributed to a different occasion than the one requested.
 - The `at_risk_follow_up` template raises concerns as questions, not accusations. When no concerns are supplied, it owns the gap as possibly DSSG's own.
@@ -114,9 +119,9 @@ secrets reach the client" constraint (`CLAUDE.md` Conventions).
 
 ## Dependencies
 
-- **Imports:** `src/types/` (`CommunicationDraftInput`, `CommunicationDraft`); `src/model/gateway.ts` (polish path only); email service (TBD — same provider as contract-consent); Supabase service-role client (`src/lib/supabase.ts`) for log write
+- **Imports:** `src/types/` (`EnvoyDraftRequest`, `EnvoyDraftResponse`); `src/model/gateway.ts`; the caller's user-scoped client for the RPC (no service-role client in `api/`). Email service for C3 is TBD — same provider as contract-consent
 - **Imported by:** Engagement detail screen (communications panel, staff-facing)
-- **Data:** `communication_log` table (not yet in migrations — needs a new migration); `engagements` table (contact email validation, occasion context); `architect_assessments` (cadence field for template variant selection)
+- **Data:** `communications` table (0012); `engagements` table (occasion context, RLS-checked lookup); `architect_assessments` (cadence field for template variant selection)
 
 ## Delta rows
 
@@ -127,14 +132,12 @@ Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbe
 
 ## Test contract
 
-- Template path (no polish): valid input with `aiPolish = false` → `CommunicationDraft` with `polished = false`, body matches template with substitutions applied.
-- Polish path: `aiPolish = true` → model gateway called with body text, `CommunicationDraft` with `polished = true`.
-- Preview token: draft response includes `previewToken`; confirm endpoint requires it — prevents confirm without prior draft.
-- Recipient mismatch: `recipientEmail` differs from engagement contact email → server returns 422 unless override flag is set in confirm request.
-- Confirm sends: POST to confirm with valid `previewToken` → email sent, `communication_log` row written with `polished`, `sentAt`, `occasion`.
-- Double confirm: second POST with same `previewToken` → 409, no second email.
-- Model polish failure: gateway throws → draft returned with `polished = false`, no error surfaced to staff.
-- No send on draft: POST to draft endpoint alone → no email sent, no log row written.
+- Template path: model failure → template saved, `source = 'fallback'`, 200.
+- Model path: model succeeds → `source = 'model'`, provenance row carries model, version and run id.
+- Replay: same `idempotencyKey` → original result, no model call, no new rows.
+- Expired approval on replay → 409 `draft_superseded`; mismatched payload → 400 `invalid_draft`.
+- Authority: non-admin or other-org caller → 42501, mapped by the route.
+- No send on draft: the draft endpoint sends nothing (C3 not built).
 - `at_risk_follow_up` with no staffNotes: draft body does not manufacture a reason; framing owns the gap.
 - `at_risk_follow_up` with staffNotes: concerns appear as questions, not accusations.
 
@@ -142,8 +145,8 @@ Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbe
 
 1. Which occasions are in scope for MVP? Likely: `kickoff`, `check_in`, `at_risk_follow_up`, `wrap_up`. Full list needs product sign-off before templates are authored.
 2. Email provider: same as contract-consent? The provider decision there unblocks this service too — coordinate.
-3. In-portal messaging (deferred) — when it lands, does it share the `communication_log` table and occasion template registry, or is it a separate surface?
-4. Should `communication_log` rows be partner-visible in a future partner portal, or internal staff records only?
+3. In-portal messaging (deferred) — when it lands, does it share the `communications` table and occasion template registry, or is it a separate surface?
+4. Should `communications` rows be partner-visible in a future partner portal, or internal staff records only?
 5. Whether `occasion` set needs to grow (e.g. a scheduling or reschedule occasion).
 6. Whether the Architect charter's `cadence` should be read automatically rather than passed in by the caller.
 7. Whether staff-initiated should later become event-suggested — Pulse proposing that a draft *might* be warranted, still without creating one.

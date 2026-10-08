@@ -32,11 +32,10 @@ This settles two earlier directions, both dead:
 | Deployment | **Vercel** — Vite SPA + Vercel Functions under `/api` | Not Next.js: the SPA stays a plain Vite build |
 | Agent logic | **Vercel AI SDK** (`ai` + `@ai-sdk/google`) | Replaces both LangGraph and the current direct `@google/genai` client calls |
 | Database & Auth | **Supabase** — Postgres, Auth, RLS, Realtime | Full replacement of Firebase/Firestore, not auth-only |
-| Styling | Tailwind CSS 4 | See [design-interface.md](design-interface.md) |
+| Styling | Tailwind CSS 4 | `src/app/index.css` is the source of truth; no design doc describes it |
 
-Only the frontend and styling rows are true of the working tree today. `/api`, the AI SDK,
-and the Supabase client are the target; `supabase/` holds the schema and RLS suite ahead of
-that wiring. See the "Not present yet" section of [CLAUDE.md](../CLAUDE.md).
+All five rows are in the working tree. [CLAUDE.md](../CLAUDE.md)'s Stack table and
+`roadmap.md` track what exists; this doc records why it is shaped this way.
 
 **Why a server boundary is mandatory.** The SPA has no server-side code at all, so it has
 nowhere to put a model key. Its `vite.config.ts` used to inline `GEMINI_API_KEY` into the
@@ -72,8 +71,8 @@ remove a component from the agent roster.
 
 | Component | Type | Scope | State |
 |---|---|---|---|
-| **Scout** | Agent | Light-touch intake triage and routing (~10-question form) → bucket + confidence, engagement-readiness signal, recommended onboarding kit. **Also absorbs meeting intelligence** — transcript capture, extraction, calendar coordination. | Intake built (`src/components/`, `src/lib/scoutRouting.ts`); meeting intelligence **specified** — [scout.md](platform/agents/scout.md) |
-| **Architect** | Agent | 18-question current-state assessment → deterministic scoring, then charter and 90-day plan. | Built (`src/components/`, `src/lib/architectPlan.ts`, `architectScoring.ts`) — [architect.md](platform/agents/architect.md) |
+| **Scout** | Agent | Light-touch intake triage and routing (~10-question form) → bucket + confidence, engagement-readiness signal, recommended onboarding kit. **Also absorbs meeting intelligence** — transcript capture, extraction, calendar coordination. | Intake built (`src/components/scout/`, `src/agents/scout/routing.ts`); meeting intelligence **specified** — [scout.md](platform/agents/scout.md) |
+| **Architect** | Agent | 18-question current-state assessment → deterministic scoring, then charter and 90-day plan. | Built and wired, local only (`src/components/architect/`, `src/agents/architect/`, `api/architect-plan.ts`; L3 via `submit_architect_draft()`) — [architect.md](platform/agents/architect.md) |
 | **Pulse** | Agent | Internal engagement-health verdict, computed per engagement on read. Deterministic — no model path by design. | **Specified** here; built in the prototype — [pulse.md](platform/agents/pulse.md) |
 | **Envoy** | Agent | Partner communications across five occasions; drafting calls a model and is L3, delivery is deterministic. | **Specified** here; drafting built in the prototype. **No send path** — [envoy.md](platform/agents/envoy.md) |
 | **Chronicle** | Agent | Impact statements and case studies, gated by a readiness check on the record. Carries the feedback edge into Scout. | **Specified** here; drafting built in the prototype. Feedback loop still undesigned — [chronicle.md](platform/agents/chronicle.md) |
@@ -102,7 +101,8 @@ carries forward to all five agents:
 ### Agent path contract
 
 Every path that can fail — a model call, a network hop, a parse — obeys these rules.
-Scout, Envoy, and Chronicle implement the first three today; rule 4 binds nowhere yet.
+Scout, Envoy, Chronicle and Architect implement the first three today (Architect with
+the rule-2 exception below); rule 4 binds nowhere yet.
 Pulse has no model path at all, so rules 1–2 are satisfied trivially: the deterministic
 computation is the only path.
 
@@ -128,10 +128,22 @@ computation is the only path.
    outcome, not a silent branch. Rule 2 is what makes that possible: a signalled failure
    is observable, a simulated one is not.
 
-Architect (`src/agents/architect/scoring.ts`, `plan.ts`) is deterministic end to end
-today, so rules 1 and 2 have nothing to bind. They apply the moment the enrichment noted
-at `src/agents/architect/plan.ts:9-16` lands — a model call behind the same output shapes
-is still a model call.
+Architect's model path (`src/agents/architect/model.ts` `enrichWithModel()`) has
+`buildTemplate()` as its rule-1 counterpart, and the two are graded on the same fixtures
+(`architectPlanStructure`, rule 3).
+
+**Architect's exception to rule 2.** `POST /api/architect-plan` does *not* return a
+non-2xx when the model call fails: it saves `buildTemplate()` as the draft and returns
+200 with `source: 'fallback'`. The draft is a write — an L3 approval staff will act on —
+and a draft that exists only in a browser tab is lost on refresh, so the server persists
+the deterministic one rather than make the client do it (the client cannot: writes are
+revoked, 0010). The failure is still *signalled*, never simulated: `source` is in the
+response, the audit event (`architect.draft_submitted.detail.source`) and the plan
+page's badge, and the gateway records the failed call as one `fallback` `agent_runs` row
+linked from the approval. What rule 2 forbids — a half-enriched draft passed off as the
+model's — still cannot happen: `enrichWithModel()` throws rather than return partial
+output. A non-2xx from this route means nothing was saved (auth, validation, RLS, the
+RPC), and the SPA then shows the local template marked unsaved with a retry.
 
 ### Agent handoffs
 
@@ -302,7 +314,7 @@ is the verdict; where a source conflicts with a row below, this row wins.
 - **Envoy** has two distinct halves. Choosing the occasion, assembling context, and setting
   tone is judgment that calls a model and is **L3, always**. SMTP, templates, and retry are
   deterministic execution. Envoy owns both halves; the model call is what makes it an agent.
-- **The L4 tension is real and stays flagged.** `design-requirements.md` puts
+- **The L4 tension is real and stays flagged.** The PRD (§8) puts
   partner-facing communications at **L4**, its strictest tier, while the current spec
   treats drafting as L3. Resolve when the send path is designed — nothing sends today, so
   nothing is blocked. See `envoy.md` Open questions.
@@ -583,7 +595,7 @@ command → transaction → state + event rows → (commit) → Realtime informs
 ```
 
 If a step must happen without a user present, it is a server-side call in the command, or
-it does not happen. There is no scheduler in this stack (`design-scope.md` constraints),
+it does not happen. There is no scheduler in this stack (a PRD constraint),
 so "later" currently means "on the next request that needs it" — which is why the Health
 Service computes on read rather than on a sweep.
 
@@ -595,7 +607,7 @@ JSONB is right for a **flexible artifact** the system stores and renders whole:
 Relational columns are right for **queryable domain state**. The test is whether the
 product needs to ask a question across rows. "Show every engagement with a milestone
 overdue by more than seven days" cannot be answered from `plan JSONB` at any acceptable
-cost — which is why `milestones` and `tasks` are tables in `_deferred/0006`, not fields.
+cost — which is why `milestones` and `tasks` are tables in `0006_delivery`, not fields.
 
 The rule: **if a query the product needs would have to reach inside the blob, it is not a
 blob.** Storing a plan as JSONB *and* projecting its milestones into rows is not

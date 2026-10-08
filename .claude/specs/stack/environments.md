@@ -1,7 +1,7 @@
 # Environments — local, staging, production
 
-**Status:** production is live; staging and the hosted Supabase projects are not yet
-provisioned. This describes the intended shape and what is missing.
+**Status:** production is live; the hosted Supabase projects (staging and prod) are
+tracked in #27 (Jian). This describes the intended shape and what is missing.
 
 ## The three environments
 
@@ -52,21 +52,23 @@ npx supabase db push
 
 ## What is missing
 
-1. **Neither hosted project exists.** Only the local stack runs. Production currently
-   deploys a frontend with no database behind it.
-2. **`cd.yml` deploys `main` to production only.** There is no staging deploy step, because
-   Vercel's Git integration is disabled (Settings -> Git -> Ignored Build Step -> "Don't
-   build anything") and the workflow only triggers on `main`. Preview deploys need either a
-   PR trigger in the workflow or Vercel's integration re-enabled for non-main branches.
+1. **The hosted projects** — staging and prod Supabase, their Vercel env values and the
+   CD secrets — are tracked in #27 (Jian). Until they land, only the local stack has a
+   database behind it.
+2. **`cd.yml` deploys from the workflow, not Vercel's Git integration** (disabled: Settings
+   -> Git -> Ignored Build Step). It triggers on `pull_request` and on push to `main`, calls
+   `ci.yml` as a reusable workflow (`workflow_call`), and deploys only after it passes — a
+   preview deploy on PRs, `--prod` on `main`. Previews read the `Preview` scope, so they
+   need #27's staging values to have a database.
 3. **Auth redirect URLs** must be registered per environment — a staging Supabase project
    needs the preview URLs in Authentication -> URL Configuration, and preview URLs change
-   per PR (see CLAUDE.md on why the wildcard was rejected for Firebase).
+   per PR.
 
 ## Current reality, stated plainly
 
-Right now there is **one** environment that fully works: local. Production has a deployed
-frontend whose data layer is mid-migration — auth is on Supabase, five components still
-read Firestore, and no hosted Supabase project exists for either to talk to.
+Right now there is **one** environment that fully works: local. The Firebase-to-Supabase
+migration is complete in code — auth and every component are on Supabase — but production
+has a deployed frontend whose hosted Supabase project is tracked in #27 (Jian).
 
-Do not treat the production URL as working software until the migration completes and a
-hosted project is behind it.
+Do not treat the production URL as working software until a hosted project is behind it
+and its migrations are pushed (#28).

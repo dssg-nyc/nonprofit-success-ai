@@ -144,6 +144,48 @@ lifecycle state, making the subject of a gate its own approver.
 Include the model provider as a principal. It reads whatever a prompt includes, which
 makes prompt assembly a tenancy-scoped read like any other.
 
+### The schema plate is a claim about a live database, not an instruction
+
+Required wherever the design record draws a data model against a database that already
+exists. **A migration is a claim about reality that must be verified, not an instruction
+that will fail loudly if wrong.** This repo's Supabase migrations (`supabase/migrations/`)
+are the live instance of this risk.
+
+Rules for the plate (evidence from diskoe, 2026-08-24, which hit each one):
+
+1. **`IF NOT EXISTS` guards on NAME, not definition.** Where a migration must change an
+   existing object, drop-then-create is the only honest form. (diskoe: `create table if
+   not exists` silently skipped against a hand-built live table — `text[]` in the repo,
+   `jsonb` holding JSON strings in reality, 117 rows deep.)
+2. **A migration is not done until it is pushed AND probed.** The file existing is not
+   evidence that it ran. Put a drift check in the gate, and **fail on duplicate migration
+   versions rather than dedupe them** — diskoe's checker keyed its map by version, so a
+   second file with the same version silently evicted the first (DC-4). *An instrument
+   that disagrees with the directory and says nothing invalidates every row it certifies.*
+   See `~/.claude/refs/verification.md` §1.
+3. **Every column names its reader before it is added.** A status column no query filters
+   on is a trap, not documentation. (diskoe: `events` carried **four** lifecycle columns;
+   one was read, and the other three all disagreed with reality.)
+4. **One lifecycle column per entity**, and the plate says which one is the gate.
+5. **Verify a constraint in a way that cannot be intercepted** — an undeclared trigger
+   once made a passing probe meaningless. Never probe production destructively.
+6. **Index the predicate the application actually filters on.** (diskoe: 25+ indexes
+   and none covered the column every public read and every RLS policy used.)
+7. **A row-level security policy is part of the plate, not an ops detail.** Enabling RLS
+   with no `select` policy for the anonymous principal returns zero rows, and **reads as
+   "no data" rather than "no permission"** — which is why it can survive unnoticed across
+   an entire catalogue while the public surface renders empty (diskoe, 2026-08-24). This
+   repo runs Supabase with RLS — the defect is a live risk here, not an analogy. State
+   the policy per table per principal, and verify by loading the same query as both
+   principals: if service-role sees rows and anon sees 0, the gate is not working, it is
+   closed. See `~/.claude/refs/verification.md` §1.
+
+**Mark each row `WRITTEN` or `APPLIED`, never both by implication.** (diskoe: shipped code
+depending on three RLS migrations that were all written and unapplied — leaving the only
+credential gating a privileged action readable by `anon` in the live database, DC-5.)
+Documents describing those guarantees as in force must say *written, not applied* until
+the drift check is clean.
+
 ### The provenance contract — required for any system with AI-generated content
 
 If a model generates content a human reads or approves, the design record must state
@@ -501,9 +543,73 @@ it). Use the same four-state vocabulary, reading COVERED / PARTIAL / SPECIFIED /
 
 ### Honesty rules
 
-- Verify every build-state claim against the working tree at publication.
+- Verify every build-state claim against the working tree at publication. **If there is
+  no working tree, no component may be marked `BUILT`** — the honest state is `SPECIFIED`,
+  and the footer says build state was unverifiable. (diskoe, 2026-08-24: this repo HAS a
+  tree — `src/`, `api/`, `supabase/` — so the rule runs rather than triggering the
+  no-tree fallback.)
 - The footer names sources and states the re-verify rule.
 - A confident design for an unbuilt thing is SPECIFIED, drawn dashed.
+
+### Altitude split — what belongs in the HTML vs the specs
+
+The design of record and the deep specs are two artifacts at two altitudes. The
+rule that decides which content goes where:
+
+> **Does this demonstrate engineering JUDGMENT, or engineering DETAIL?**
+> Judgment stays in the HTML. Detail moves to `.claude/specs/`.
+
+**Stays in the design of record (Output 1):**
+
+- System architecture — C1 context, C2 containers, runtime/container view
+- Intelligence architecture — what each agent decides, how agents compose
+- Lifecycle — the gated state machine (C2.1), who may transition, what blocks
+- Data & memory as concept — entity relationships, what is structured vs blob
+- Human oversight as a principle — HITL tiering rationale, the approval model
+- Provenance as a concept — the audit chain from model output to external effect
+- Evaluation philosophy — what is graded, why, the role of deterministic fallback
+- Current build state — verified against the tree, not claimed
+- Roadmap / delta — the build queue and decision register
+- Key architectural decisions — condensed to the claim and its consequence
+
+**Moves to engineering specs (Output 2):**
+
+- Exact SQL schema — `CREATE TABLE` DDL, column types, index definitions
+- Individual RLS policies — per-table `USING` / `WITH CHECK` clauses
+- HTTP status codes and response shapes — `4xx` / `5xx` semantics per endpoint
+- `SELECT ... FOR UPDATE` and locking semantics
+- Idempotency implementation — the specific key and the specific guard
+- Exact filenames and line numbers — `src/lib/scoutRouting.ts:47`
+- API payload schemas — field-by-field `{ input, output }` contracts
+- Every model field — column names, types, nullability, defaults
+- Detailed failure matrix — per-endpoint, per-status-code behaviour
+- Exact GitHub issue numbers and milestone assignments
+- Migration version numbers and file paths
+- Individual test cases with input/output fixtures
+- GitHub Action implementation — workflow YAML, job definitions
+- MCP resource definitions — tool schemas, handler signatures
+- CRM sync conflict rules — field-level merge precedence
+- Plugin/extension registration contracts — hook signatures, lifecycle callbacks
+
+**The test in practice.** These are architectural principles — they belong in the
+founder-facing document:
+
+- "AI output is a proposal, not a state change"
+- "One system of record per operational capability"
+- "Realtime is UI synchronization, not the domain event bus"
+- "Deterministic fallback exists independently of the model"
+- "Provenance follows content through model → proposal → edit → approval → action"
+
+Their *implementations* — the exact column that stores provenance, the SQL that
+enforces idempotency, the RLS policy that blocks a direct state write — belong in
+the specs. Cut the implementation from the HTML when applying this rule; never cut
+the principle in the name of "less technical."
+
+**Plate numbering is not affected.** The C4-derived plate numbers (C1, C2, C3,
+C3.<n>, D1–D*n*) are structural — `.plate-head` carries them and specs are
+addressed as `C3.<n>`. Do not rename them. The tab bar already permits
+plain-language tab *names* (the text after `<span class="tab-mark">`) — use that
+for audience-friendly labels rather than changing the numbering scheme.
 
 ## Output 2 — Deep component specs (`.claude/specs/`)
 
@@ -518,11 +624,10 @@ organized by architectural lane:
   design-scope.md
   design-requirements.md
   design-system.md
-  design-interface.md
-  environments.md
 
   # Stack refs (how to write code in this repo)
   stack/
+    environments.md
     react-vite.md
     vercel-ai-sdk.md
     vercel-functions.md
