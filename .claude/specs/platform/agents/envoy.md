@@ -100,7 +100,8 @@ secrets reach the client" constraint (`CLAUDE.md` Conventions).
 
 ## Contract
 
-- **Input:** `EnvoyDraftRequest` — `engagementId` (guid), `idempotencyKey` (8-200 chars), `occasion` (one of `ENVOY_OCCASIONS`), `orgName`, `planTitle?`, `cadence?`, `concerns?`
+- **Input:** `EnvoyDraftRequest` — `engagementId` (guid), `idempotencyKey` (8-200 chars), `occasion` (one of `ENVOY_OCCASIONS`), `concerns?` (at most 10, each ≤300 chars). `orgName`, `planTitle?` and `cadence?` are read by the route from `businesses` and the Architect charter (`api/_engagement.ts`), never from the body (v3, 2026-10-08). `EnvoyInput` — the full shape the agent sees — adds those read fields.
+- **Model caps:** `subject` ≤200 and `body` ≤4,000 chars in `envoyModelSchema`; longer answers fall back to the template.
 - **Output:** `EnvoyDraftResponse` — the draft (`subject`, `body`, `occasion`, `hitlTier` 'L3') plus `source` ('model' | 'fallback'), `approvalId`, `draftId`, `runId`
 - **Side effects:** `submit_envoy_draft()` writes one `communications` row, one pending L3 approval and one audit event, in one transaction. Nothing is sent; the send step is C3 and not built.
 
@@ -148,7 +149,7 @@ Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbe
 3. In-portal messaging (deferred) — when it lands, does it share the `communications` table and occasion template registry, or is it a separate surface?
 4. Should `communications` rows be partner-visible in a future partner portal, or internal staff records only?
 5. Whether `occasion` set needs to grow (e.g. a scheduling or reschedule occasion).
-6. Whether the Architect charter's `cadence` should be read automatically rather than passed in by the caller.
+6. ~~Whether the Architect charter's `cadence` should be read automatically rather than passed in by the caller.~~ Closed 2026-10-08: the route reads it from the charter (`api/_engagement.ts`).
 7. Whether staff-initiated should later become event-suggested — Pulse proposing that a draft *might* be warranted, still without creating one.
 
 ## Requirement Trace
@@ -163,5 +164,5 @@ Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbe
 | HITL tier unratified (L3 working assumption) | prior Envoy spec §HITL tier | §6 HITL tier | Closed — L3, encoded and enforced by schema omission |
 | Deterministic fallback undesigned | prior Envoy spec §Deterministic fallback | §5 Deterministic fallback | Closed — occasion templates |
 | Relationship to Pulse health signal undesigned | prior Envoy spec §Open questions | §3 Relationship to Pulse | Closed — availability, not triggering |
-| Relationship to Architect's charter cadence | prior Envoy spec §Inputs, §Open questions | §Contract, §Open questions | Partial — `cadence` is consumed, but passed in rather than read automatically |
+| Relationship to Architect's charter cadence | prior Envoy spec §Inputs, §Open questions | §Contract, §Open questions | Closed — `cadence` is read from the charter by the route (2026-10-08) |
 | Channel undesigned | prior Envoy spec §Open questions | §Open questions | Carried as open — current channel is email only; in-portal messaging deferred |

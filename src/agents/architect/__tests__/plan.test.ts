@@ -156,6 +156,27 @@ describe("generateNinetyDayPlan — workstreams", () => {
     expect(ws[0].required).toBe(false);
   });
 
+  it("keeps a flagged Governance workstream on accelerate — an Established org can carry one", () => {
+    // di=3, gov=1, the rest 3: 6 + 2 + 9 = 17 points, Established, one flag.
+    const m = maturity({
+      compositeLevel: "Established",
+      di_score: 3,
+      gov_score: 1,
+      tooling_score: 3,
+      dc_score: 3,
+      tc_score: 3,
+      points: 17,
+      flaggedDimensions: ["governance"],
+    });
+    const plan = generateNinetyDayPlan(input(m));
+    expect(plan.shape).toBe("accelerate");
+    expect(plan.workstreams.map((w) => [w.name, w.required])).toEqual([
+      ["Reporting Automation", true],
+      ["Board-Facing Insight Report", false],
+    ]);
+    expect(generateCharter(input(m)).workstreams).toEqual(plan.workstreams);
+  });
+
   it("carries only flagged work on build_basics — no deliverable is promised", () => {
     const m = maturity({
       compositeLevel: "Foundational",
@@ -163,6 +184,13 @@ describe("generateNinetyDayPlan — workstreams", () => {
     });
     const ws = generateNinetyDayPlan(input(m)).workstreams;
     expect(ws.map((w) => w.name)).toEqual(["Data Integration & Hygiene"]);
+  });
+
+  it("names Data Foundations as the required workstream on build_basics when nothing is flagged", () => {
+    const m = maturity({ compositeLevel: "Foundational", flaggedDimensions: [] });
+    const ws = generateNinetyDayPlan(input(m)).workstreams;
+    expect(ws.map((w) => [w.name, w.required])).toEqual([["Data Foundations", true]]);
+    expect(generateCharter(input(m)).workstreams).toEqual(ws);
   });
 });
 

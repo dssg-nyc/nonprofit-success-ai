@@ -56,7 +56,13 @@ from the database without a second model call.
 
 **`envoy-draft`** / **`chronicle-draft`** — same shape as Architect: lookup as the
 caller, staff-membership check, replay check, model call with local fallback, one RPC
-that writes the draft and the L3 approval. Chronicle additionally refuses a
+that writes the draft and the L3 approval. The body carries only `engagementId` and
+`idempotencyKey` (Envoy adds `occasion` and optional `concerns`); every fact the draft is
+written from — org name, engagement status, charter title / objectives / success criteria /
+cadence, event count — is read through RLS by `_engagement.ts`, never taken from the body,
+so a caller cannot make a `not_ready` record read as `ready`. Model prose is capped in
+the model-facing schemas (`agents/*/schema.ts`); an over-long answer is a parse-error
+fallback. Chronicle additionally refuses a
 `not_ready` record (saves nothing, answers 200 with null ids) and requires a
 `membership`-stage engagement. Nothing is ever sent to a partner from here; the send
 step (`send-communication`, D45) does not exist yet.

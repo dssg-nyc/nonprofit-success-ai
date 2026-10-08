@@ -20,7 +20,10 @@ function stageWindow(stage: string): number | null {
   return STAGE_WINDOW_DAYS[stage] ?? null;
 }
 
-export function computePulseSignal(input: PulseInput): PulseSignal {
+export function computePulseSignal(
+  input: PulseInput,
+  now: Date = new Date(),
+): PulseSignal {
   const reasons: string[] = [];
   let status: PulseStatus = "on_track";
 
@@ -66,5 +69,6 @@ export function computePulseSignal(input: PulseInput): PulseSignal {
     daysInStage: input.daysInStage,
     hasPlan: input.hasPlan,
     hitlTier: "L2",
+    computedAt: now.toISOString(),
   };
 }

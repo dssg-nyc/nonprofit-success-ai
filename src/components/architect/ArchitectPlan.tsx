@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { ErrorBanner } from '../ErrorBanner';
+import { reportSupabaseError } from '../supabaseErrors';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { supabase, handleSupabaseError, rowToDomain, OperationType } from '../../lib/supabase';
+import { supabase, rowToDomain, OperationType } from '../../lib/supabase';
 import { ArchitectAssessment } from '../../types';
 import { DIMENSION_LABELS, LEVEL_NAMES } from '../../agents/architect/scoring';
+import { approvalBadge } from '../../agents/architect/draft';
+import type { ApprovalBadge } from '../../agents/architect/draft';
 import { demoAssessments } from '../../lib/demoStore';
 import { motion } from 'motion/react';
 import {
@@ -29,6 +33,9 @@ export default function ArchitectPlan({ isDemo }: Props) {
   const [assessment, setAssessment] = useState<ArchitectAssessment | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('plan');
+  const [error, setError] = useState<string | null>(null);
+  // null until loaded; demo mode has no approvals table and shows no badge.
+  const [badge, setBadge] = useState<ApprovalBadge | null>(null);
 
   useEffect(() => {
     if (!intakeId) return;
@@ -49,14 +56,44 @@ export default function ArchitectPlan({ isDemo }: Props) {
       .maybeSingle()
       .then(({ data, error }) => {
         if (error) {
-          try {
-            handleSupabaseError(error, OperationType.GET, `architect_assessments/${intakeId}`);
-          } catch { /* logged */ }
+          setError(
+            reportSupabaseError(error, OperationType.GET, `architect_assessments/${intakeId}`, 'Could not load this plan. It may exist — reload to try again.'),
+          );
         } else if (data) {
           setAssessment(rowToDomain<ArchitectAssessment>(data, ['createdAt', 'updatedAt']));
         }
         setLoading(false);
       });
+
+    // The draft's review state: the newest `charter` approval for this assessment (a
+    // re-submit expires the older ones), and the source its audit event recorded.
+    const loadApproval = async () => {
+      const { data: approval, error: approvalErr } = await supabase
+        .from('approvals')
+        .select('id, status, created_at')
+        .eq('entity_type', 'charter')
+        .eq('entity_id', intakeId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (approvalErr) {
+        // The plan still renders; only the badge is missing, and the banner says so.
+        setError(reportSupabaseError(approvalErr, OperationType.GET, `approvals/charter/${intakeId}`, 'Could not load the approval status for this plan.'));
+        return;
+      }
+      let source: unknown = null;
+      if (approval) {
+        const { data: event } = await supabase
+          .from('audit_events')
+          .select('detail')
+          .eq('action', 'architect.draft_submitted')
+          .eq('detail->>approval_id', approval.id)
+          .maybeSingle();
+        source = (event?.detail as { source?: unknown } | null)?.source ?? null;
+      }
+      setBadge(approvalBadge(approval, source));
+    };
+    void loadApproval();
   }, [intakeId, isDemo]);
 
   if (loading) return <div className="h-screen flex items-center justify-center text-slate-400 text-sm font-medium">Loading plan…</div>;
@@ -64,6 +101,7 @@ export default function ArchitectPlan({ isDemo }: Props) {
   if (!assessment) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-24 text-center">
+        <ErrorBanner message={error} onDismiss={() => setError(null)} />
         <h2 className="text-2xl font-display font-bold text-dssg-blue mb-3">No assessment found</h2>
         <p className="text-slate-500 text-sm mb-8">
           This organization hasn't been through the Architect assessment yet.
@@ -82,6 +120,7 @@ export default function ArchitectPlan({ isDemo }: Props) {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-12">
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
       <div className="flex items-center justify-between mb-8">
         <button
           onClick={() => navigate('/scout/review')}
@@ -115,6 +154,7 @@ export default function ArchitectPlan({ isDemo }: Props) {
           <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-3">
             Scout bucket: {a.scoutBucket} · Confidence: {a.scoutConfidence ?? '—'} · Readiness: {a.scoutReadiness}
           </p>
+          {badge && <ApprovalStatus badge={badge} />}
         </div>
 
         {/* Warning banners */}
@@ -313,6 +353,28 @@ function PlaceholderDoc({ name }: { name: string }) {
       <p className="text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
         Template not yet drafted — listed as an open item in <span className="font-mono text-xs">architect-design.md</span> ("Still open"). The charter and 90-day plan carry the engagement's substance for this build.
       </p>
+    </div>
+  );
+}
+
+const BADGE_TONE: Record<ApprovalBadge['tone'], string> = {
+  pending: 'bg-amber-50 text-amber-700 border-amber-200',
+  approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  rejected: 'bg-rose-50 text-rose-700 border-rose-200',
+  none: 'bg-slate-50 text-slate-600 border-slate-200',
+};
+
+function ApprovalStatus({ badge }: { badge: ApprovalBadge }) {
+  const details = [
+    badge.sourceLabel,
+    badge.submittedAt && `submitted ${new Date(badge.submittedAt).toLocaleString()}`,
+  ].filter(Boolean);
+  return (
+    <div className="flex flex-wrap items-center gap-2 mt-3">
+      <span className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-[0.1em] border ${BADGE_TONE[badge.tone]}`}>
+        {badge.label}
+      </span>
+      {details.length > 0 && <span className="text-xs text-slate-400">{details.join(' · ')}</span>}
     </div>
   );
 }

@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { ErrorBanner } from '../ErrorBanner';
+import { reportSupabaseError } from '../supabaseErrors';
 import {
   supabase, liveQuery, toColumns, handleSupabaseError, OperationType,
 } from '../../lib/supabase';
+import type { TablesInsert } from '../../lib/database.types';
 import { Business, BusinessType } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Building2, ChevronRight, Info, CheckCircle2, X, Layers } from 'lucide-react';
@@ -11,6 +14,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [newBusiness, setNewBusiness] = useState({ name: '', type: 'small_business' as BusinessType, industry: '', address: '' });
   const navigate = useNavigate();
 
@@ -62,9 +66,9 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
       },
       (err) => {
         setLoading(false);
-        try {
-          handleSupabaseError(err, OperationType.LIST, 'businesses');
-        } catch { /* logged */ }
+        setError(
+          reportSupabaseError(err, OperationType.LIST, 'businesses', 'Could not load businesses. The list below may be empty or stale.'),
+        );
       },
       ['createdAt', 'updatedAt'],
     );
@@ -83,7 +87,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
       // checks it in WITH CHECK, so a row claiming a different owner is rejected by the
       // database rather than trusted from the client.
       const { error } = await supabase.from('businesses').insert(
-        toColumns({
+        toColumns<TablesInsert<'businesses'>>({
           ...newBusiness,
           ownerId: user.id,
           certified: false,
@@ -95,14 +99,14 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
       setShowAddModal(false);
       setNewBusiness({ name: '', type: 'small_business', industry: '', address: '' });
     } catch (err) {
-      try {
-        handleSupabaseError(err, OperationType.CREATE, 'businesses');
-      } catch { /* logged */ }
+      console.error('Dashboard: add business failed — not created', err);
+      setError('Could not add the business. Nothing was saved.');
     }
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
       {/* Hero Section Strategy */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 mb-16 animate-fade-in-up">
         <div className="max-w-2xl">

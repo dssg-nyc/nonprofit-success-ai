@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
+import { ErrorBanner } from '../ErrorBanner';
+import { reportSupabaseError } from '../supabaseErrors';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   supabase, liveQuery, toColumns, rowToDomain, handleSupabaseError, OperationType,
 } from '../../lib/supabase';
-import { Business, Engagement, EngagementStage, EngagementStatus } from '../../types';
+import type { TablesInsert } from '../../lib/database.types';
+import { Business, Engagement, EngagementStage } from '../../types';
 import type { LucideIcon } from 'lucide-react';
 import {
   History,
@@ -27,6 +30,8 @@ const STAGES: { id: EngagementStage; label: string; short: string; icon: LucideI
   { id: 'membership', label: 'Membership', short: 'Membership', icon: CheckCircle, color: 'text-purple-600 bg-purple-100' },
 ];
 
+interface StageNote { id: string; detail: string; createdAt: string }
+
 export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -35,6 +40,9 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
   const [activeStage, setActiveStage] = useState<EngagementStage>('initial_meeting');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [notes, setNotes] = useState<StageNote[]>([]);
 
   useEffect(() => {
     if (isDemo && id) {
@@ -107,9 +115,10 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
         .maybeSingle();
 
       if (error) {
-        try {
-          handleSupabaseError(error, OperationType.GET, `businesses/${id}`);
-        } catch { /* logged */ }
+        setError(
+          reportSupabaseError(error, OperationType.GET, `businesses/${id}`, 'Could not load this business. Reload to try again.'),
+        );
+        setLoading(false);
         return;
       }
 
@@ -137,9 +146,9 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       },
       (err) => {
         setLoading(false);
-        try {
-          handleSupabaseError(err, OperationType.LIST, 'engagements');
-        } catch { /* logged */ }
+        setError(
+          reportSupabaseError(err, OperationType.LIST, 'engagements', 'Could not load engagements. The stages shown may be incomplete.'),
+        );
       },
       ['createdAt', 'updatedAt'],
     );
@@ -148,79 +157,116 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
   }, [id, isDemo, navigate]);
 
   const getCurrentEngagement = () => engagements.find(e => e.stage === activeStage);
+  const currentEngagementId = engagements.find(e => e.stage === activeStage)?.id;
 
-  const updateStage = async (status: EngagementStatus, extraData: Partial<Engagement> = {}) => {
+  // The current stage row's saved notes, newest first, read through RLS. Demo notes live in
+  // local state only.
+  const loadNotes = async (engagementId: string) => {
+    const { data, error: notesError } = await supabase
+      .from('engagement_events')
+      .select('id, detail, created_at')
+      .eq('engagement_id', engagementId)
+      .eq('kind', 'note_added')
+      .order('created_at', { ascending: false });
+    if (notesError) {
+      setError(
+        reportSupabaseError(notesError, OperationType.LIST, 'engagement_events', 'Could not load saved notes.'),
+      );
+      return;
+    }
+    // `detail` is a jsonb object; a note carries its text under `text`.
+    setNotes(
+      (data ?? []).map(r => ({
+        id: r.id,
+        detail: (r.detail as { text?: string } | null)?.text ?? '',
+        createdAt: r.created_at,
+      })),
+    );
+  };
+
+  useEffect(() => {
+    if (isDemo) return;
+    if (!currentEngagementId) {
+      setNotes([]);
+      return;
+    }
+    void loadNotes(currentEngagementId);
+  }, [currentEngagementId, isDemo]);
+
+  // Stage changes are no longer written from the browser: engagements is read-only to
+  // partners (0001_core) and stages move only through transition_engagement() (/api/engagement-
+  // transition). A partner's note is an append-only `note_added` event on the stage's row.
+  const addNote = async () => {
+    const text = noteDraft.trim();
+    if (!text) return;
+
     if (isDemo) {
-      setEngagements(prev => {
-        const existing = prev.find(e => e.stage === activeStage);
-        if (existing) {
-          return prev.map(e => e.id === existing.id ? { ...e, ...extraData, status, updatedAt: { seconds: Date.now() / 1000 } } : e);
-        }
-        return [...prev, {
-          id: `demo-${activeStage}`,
-          businessId: id!,
-          ownerId: 'demo-user-123',
-          stage: activeStage,
-          status,
-          updatedAt: { seconds: Date.now() / 1000 },
-          ...extraData
-        }];
-      });
+      const existing = getCurrentEngagement();
+      if (existing) {
+        setEngagements(prev => prev.map(e => e.id === existing.id
+          ? { ...e, notes: text, updatedAt: { seconds: Date.now() / 1000 } }
+          : e));
+        setNotes(prev => [
+          { id: `demo-note-${Date.now()}`, detail: text, createdAt: new Date().toISOString() },
+          ...prev,
+        ]);
+      }
+      setNoteDraft('');
       return;
     }
 
-    if (!id) return;
+    const existing = getCurrentEngagement();
+    if (!id || !existing) {
+      setError('Notes attach to a started stage. This stage has not started yet.');
+      return;
+    }
+
+    if (!existing.organizationId) {
+      setError('This stage is not linked to an organization yet; ask DSSG staff.');
+      return;
+    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     setSaving(true);
-
-    const existing = getCurrentEngagement();
-
     try {
-      if (existing) {
-        const { error } = await supabase
-          .from('engagements')
-          .update(toColumns({ ...extraData, status, updatedAt: new Date().toISOString() }))
-          .eq('id', existing.id);
+      const { error } = await supabase.from('engagement_events').insert(
+        toColumns<TablesInsert<'engagement_events'>>({
+          engagementId: existing.id,
+          organizationId: existing.organizationId,
+          createdBy: user.id,
+          kind: 'note_added',
+          detail: { text },
+        }),
+      );
 
-        if (error) handleSupabaseError(error, OperationType.UPDATE, `engagements/${existing.id}`);
-      } else {
-        // Firestore used a deterministic id (`${businessId}_${stage}`) so a double-submit
-        // overwrote rather than duplicating. Surrogate uuid keys lose that, so 0001_init
-        // adds `unique (business_id, stage)` and this upserts onto it — same guarantee,
-        // enforced by the database instead of by id construction.
-        const { error } = await supabase.from('engagements').upsert(
-          toColumns({
-            businessId: id,
-            ownerId: user.id,
-            stage: activeStage,
-            status,
-            updatedAt: new Date().toISOString(),
-            ...extraData,
-          }),
-          { onConflict: 'business_id,stage' },
-        );
-
-        if (error) handleSupabaseError(error, OperationType.CREATE, 'engagements');
-      }
+      if (error) handleSupabaseError(error, OperationType.CREATE, 'engagement_events');
+      setNoteDraft('');
+      await loadNotes(existing.id);
     } catch (err) {
-      try {
-        handleSupabaseError(err, OperationType.WRITE, 'engagements');
-      } catch { /* logged */ }
+      console.error('BusinessPortal: note save failed — note not recorded', err);
+      setError('Could not save this note. It was not recorded.');
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center">Loading portal...</div>;
-  if (!business) return null;
+  if (!business) {
+    // A failed load used to render nothing at all; show why.
+    return error ? (
+      <div className="max-w-2xl mx-auto px-4 py-24">
+        <ErrorBanner message={error} onDismiss={() => navigate('/dashboard')} />
+      </div>
+    ) : null;
+  }
 
   const currentEngagement = getCurrentEngagement();
 
   return (
     <div className="bg-bg-base min-h-screen">
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
       {/* Header Strategy */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
@@ -267,7 +313,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
               </div>
               <div>
                 <p className="text-[9px] font-bold text-blue-300 uppercase tracking-widest mb-1">NYC Partnership</p>
-                <p className="text-sm font-bold">Est. {new Date(business.createdAt?.seconds * 1000).getFullYear()}</p>
+                <p className="text-sm font-bold">Est. {new Date((business.createdAt?.seconds ?? NaN) * 1000).getFullYear()}</p>
               </div>
             </div>
 
@@ -327,7 +373,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                   <div className={`w-1 h-8 rounded-full shrink-0 ${e.status === 'completed' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                   <div>
                     <p className="text-xs font-bold text-slate-800 uppercase tracking-tight">{STAGES.find(s => s.id === e.stage)?.label}</p>
-                    <p className="text-[10px] text-slate-400 font-medium">{e.status} • {new Date(e.updatedAt?.seconds * 1000).toLocaleDateString()}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">{e.status} • {new Date((e.updatedAt?.seconds ?? NaN) * 1000).toLocaleDateString()}</p>
                   </div>
                 </div>
               ))}
@@ -395,51 +441,35 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
              <div>
                 <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-8">Stage Management</h2>
                 <div className="space-y-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:bg-blue-50 transition-colors">
-                      <RefreshCcw size={20} />
-                    </div>
-                    <div className="flex-grow">
-                      <p className="text-xs font-bold text-slate-700">Project Status</p>
-                      <div className="flex gap-2 mt-2">
-                         <button
-                          onClick={() => updateStage('in_progress')}
-                          className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
-                            currentEngagement?.status === 'in_progress' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                          }`}
-                         >
-                           In Progress
-                         </button>
-                         <button
-                          onClick={() => updateStage('completed')}
-                          className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
-                            currentEngagement?.status === 'completed' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                          }`}
-                         >
-                           Complete
-                         </button>
-                      </div>
-                    </div>
-                  </div>
-
                   <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Stage Log</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Add a note</p>
                     <textarea
                       className="w-full h-32 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-blue-100 outline-none resize-none"
-                      placeholder="Add milestone notes..."
-                      value={currentEngagement?.notes || ''}
-                      onChange={(e) => updateStage(currentEngagement?.status || 'pending', { notes: e.target.value })}
+                      placeholder="Add a note to this stage..."
+                      value={noteDraft}
+                      onChange={(e) => setNoteDraft(e.target.value)}
                     />
                   </div>
+                  {notes.length > 0 && (
+                    <ul className="space-y-2 max-h-40 overflow-y-auto">
+                      {notes.map(n => (
+                        <li key={n.id} className="text-xs text-slate-600 bg-slate-50 rounded-xl p-3">
+                          <p className="whitespace-pre-wrap">{n.detail}</p>
+                          <p className="text-[9px] text-slate-400 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
              </div>
 
              <button
-              disabled={saving}
+              disabled={saving || !noteDraft.trim()}
+              onClick={() => void addNote()}
               className="w-full py-4 bg-dssg-blue text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all font-display uppercase tracking-widest text-[11px]"
              >
                {saving ? <RefreshCcw className="animate-spin" size={18} /> : <Save size={18} />}
-               Save Lifecycle State
+               Add Note
              </button>
           </div>
 

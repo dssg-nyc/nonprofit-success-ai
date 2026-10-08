@@ -160,3 +160,19 @@ describe("missing plan", () => {
     expect(result.reasons).toContain("no linked assessment to measure against");
   });
 });
+
+describe("computePulseSignal wire shape", () => {
+  it("stamps computedAt from the injected now", () => {
+    const now = new Date("2026-10-07T12:00:00.000Z");
+    expect(computePulseSignal(HEALTHY, now).computedAt).toBe("2026-10-07T12:00:00.000Z");
+  });
+
+  it("produces a result that parses with pulseSignalSchema", () => {
+    expect(() => pulseSignalSchema.parse(computePulseSignal(HEALTHY))).not.toThrow();
+  });
+
+  it("registers the pulse-health schema version", async () => {
+    const { SCHEMA_VERSIONS } = await import("../../../schemas");
+    expect(SCHEMA_VERSIONS["pulse-health"]).toBe("v1");
+  });
+});

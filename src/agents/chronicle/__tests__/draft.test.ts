@@ -105,15 +105,24 @@ describe("generateChronicleDraft — ready", () => {
     expect(result.narrative).toContain("Harbor Youth Collective");
   });
 
-  it("draws outcomes from the success criteria", () => {
-    expect(draft().outcomes).toEqual([
-      "Quarterly funder report produced in under a day",
-    ]);
+  it("states the success criteria as a definition, never as outcomes", () => {
+    const result = draft();
+    expect(result.narrative).toContain(
+      "Success was defined as: Quarterly funder report produced in under a day.",
+    );
+    expect(result.outcomes).toEqual([]);
   });
 
-  it("falls back to objectives when no success criteria were recorded", () => {
+  it("claims no outcomes from objectives either when no success criteria were recorded", () => {
     const result = draft({ successCriteria: undefined });
-    expect(result.outcomes).toEqual(READY.objectives);
+    expect(result.outcomes).toEqual([]);
+    expect(result.narrative).not.toContain("Success was defined as");
+  });
+
+  it("omits the objective sentence rather than inventing one when no objectives were recorded", () => {
+    const result = draft({ objectives: undefined });
+    expect(result.narrative).not.toContain("set out to");
+    expect(result.narrative).not.toContain("scoped with the organisation");
   });
 
   it("claims no outcomes when neither was recorded", () => {
@@ -203,10 +212,25 @@ describe("chronicleModelSchema", () => {
     expect("engagementId" in chronicleModelSchema.shape).toBe(false);
   });
 
-  it("permits empty story fields, unlike Envoy", () => {
-    expect(() =>
-      chronicleModelSchema.parse({ headline: "", narrative: "", outcomes: [] }),
-    ).not.toThrow();
+  it("requires a headline and a narrative, and caps them", () => {
+    const story = { headline: "A story", narrative: "It happened.", successFactors: [], failureFactors: [] };
+    expect(chronicleModelSchema.safeParse(story).success).toBe(true);
+    expect(chronicleModelSchema.safeParse({ ...story, headline: "" }).success).toBe(false);
+    expect(chronicleModelSchema.safeParse({ ...story, narrative: "" }).success).toBe(false);
+    expect(chronicleModelSchema.safeParse({ ...story, headline: "h".repeat(201) }).success).toBe(false);
+    expect(chronicleModelSchema.safeParse({ ...story, narrative: "n".repeat(4_001) }).success).toBe(false);
+  });
+
+  it("does not ask the model for outcomes — nothing in the input records an achievement (D46)", () => {
+    expect(chronicleModelSchema.shape).not.toHaveProperty("outcomes");
+    const parsed = chronicleModelSchema.parse({
+      headline: "A story",
+      narrative: "It happened.",
+      outcomes: ["Reduced reporting time by 40%"],
+      successFactors: [],
+      failureFactors: [],
+    });
+    expect(parsed).not.toHaveProperty("outcomes");
   });
 
   it("accepts the story fields a model is asked to write", () => {
@@ -215,7 +239,45 @@ describe("chronicleModelSchema", () => {
         headline: "Faster funder reporting",
         narrative: "The organisation cut its reporting time.",
         outcomes: ["Reports produced in a day"],
+        successFactors: ["A named funder-report owner"],
+        failureFactors: [],
       }),
     ).not.toThrow();
+  });
+
+  const STORY = { headline: "h", narrative: "n", outcomes: [], successFactors: [], failureFactors: [] };
+
+  it("rejects more than ten factors", () => {
+    const eleven = Array.from({ length: 11 }, (_, i) => `factor ${i}`);
+    expect(chronicleModelSchema.safeParse({ ...STORY, successFactors: eleven }).success).toBe(false);
+    expect(chronicleModelSchema.safeParse({ ...STORY, failureFactors: eleven }).success).toBe(false);
+  });
+
+  it("accepts exactly ten factors", () => {
+    const ten = Array.from({ length: 10 }, (_, i) => `factor ${i}`);
+    expect(chronicleModelSchema.safeParse({ ...STORY, successFactors: ten }).success).toBe(true);
+  });
+
+  it("rejects an empty or over-long factor string", () => {
+    expect(chronicleModelSchema.safeParse({ ...STORY, successFactors: [""] }).success).toBe(false);
+    expect(chronicleModelSchema.safeParse({ ...STORY, failureFactors: ["x".repeat(301)] }).success).toBe(false);
+  });
+
+  it("requires both factor lists", () => {
+    const missing: Partial<typeof STORY> = { ...STORY };
+    delete missing.successFactors;
+    expect(chronicleModelSchema.safeParse(missing).success).toBe(false);
+  });
+});
+
+describe("the deterministic fallback proposes no factors", () => {
+  it.each([
+    ["ready", {}],
+    ["thin", { eventCount: 1 }],
+    ["not_ready", { status: "in_progress" }],
+  ] as Array<[string, Partial<ChronicleInput>]>)("%s returns empty factor lists", (_label, overrides) => {
+    const result = draft(overrides);
+    expect(result.successFactors).toEqual([]);
+    expect(result.failureFactors).toEqual([]);
   });
 });

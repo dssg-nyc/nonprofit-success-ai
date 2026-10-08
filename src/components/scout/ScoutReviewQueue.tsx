@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { ErrorBanner } from '../ErrorBanner';
+import { reportSupabaseError } from '../supabaseErrors';
 import { useNavigate } from 'react-router-dom';
 import {
   supabase, liveQuery, toColumns, handleSupabaseError, OperationType,
 } from '../../lib/supabase';
+import { ApiError, approveScoutIntake } from '../../lib/api';
+import { accessToken } from '../../lib/session';
+import type { TablesUpdate } from '../../lib/database.types';
 import { ScoutIntake, ScoutBucket, SCOUT_BUCKETS } from '../../types';
 import { routeScoutIntake, getOnboardingKitName } from '../../agents/scout/routing';
 import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
@@ -120,6 +125,7 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
   const [modalBucket, setModalBucket] = useState<ScoutBucket | ''>('');
   const [modalNotes, setModalNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [assessedIds, setAssessedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -144,9 +150,9 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
       },
       (err) => {
         setLoading(false);
-        try {
-          handleSupabaseError(err, OperationType.LIST, 'scout_intakes');
-        } catch { /* logged */ }
+        setError(
+          reportSupabaseError(err, OperationType.LIST, 'scout_intakes', 'Could not load the intake queue. The list below may be empty or stale.'),
+        );
       },
       ['submittedAt', 'reviewedAt'],
     );
@@ -157,9 +163,9 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
       () => supabase.from('architect_assessments').select('id'),
       (rows) => setAssessedIds(new Set(rows.map(r => r.id))),
       (err) => {
-        try {
-          handleSupabaseError(err, OperationType.LIST, 'architect_assessments');
-        } catch { /* logged */ }
+        setError(
+          reportSupabaseError(err, OperationType.LIST, 'architect_assessments', 'Could not load assessment status. "Assessed" badges may be missing.'),
+        );
       },
     );
 
@@ -171,26 +177,18 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
     .sort((a, b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0));
 
   const applyDecision = async (intake: ScoutIntake, finalBucket: ScoutBucket, reviewAction: 'approved' | 'edited' | 'redirected', reviewNotes?: string) => {
-    const { data: { user } } = isDemo
-      ? { data: { user: null } }
-      : await supabase.auth.getUser();
-
-    const patch = {
-      reviewStatus: 'reviewed' as const,
-      reviewAction,
-      finalBucket,
-      onboardingKit: getOnboardingKitName(finalBucket),
-      reviewedBy: isDemo ? DEMO_USER.uid : user?.id,
-      // `?? undefined` rather than the raw value: Supabase types email as `string | null`,
-      // while ScoutIntake declares `string | undefined`. Without this the assignment is a
-      // type error under strictNullChecks — the same mismatch flagged at ScoutReviewQueue
-      // :167 before the migration.
-      reviewedByEmail: isDemo ? DEMO_USER.email : user?.email ?? undefined,
-      ...(reviewNotes ? { reviewNotes } : {}),
-    };
-
     if (isDemo) {
-      const updated: ScoutIntake = { ...intake, ...patch, reviewedAt: { seconds: Date.now() / 1000 } };
+      const updated: ScoutIntake = {
+        ...intake,
+        reviewStatus: 'reviewed',
+        reviewAction,
+        finalBucket,
+        onboardingKit: getOnboardingKitName(finalBucket),
+        reviewedBy: DEMO_USER.uid,
+        reviewedByEmail: DEMO_USER.email,
+        ...(reviewNotes ? { reviewNotes } : {}),
+        reviewedAt: { seconds: Date.now() / 1000 },
+      };
       demoReviewedIntakes.set(intake.id, updated);
       setIntakes(prev => prev.map(i => i.id === intake.id ? updated : i));
       return;
@@ -198,21 +196,58 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
 
     setSaving(true);
     try {
-      // reviewed_at has no column default (0001_init.sql:218), so it is sent explicitly —
-      // unlike scout_intakes.submitted_at, which does default and is left to the server.
-      const { error } = await supabase
-        .from('scout_intakes')
-        .update(toColumns({ ...patch, reviewedAt: new Date().toISOString() }))
-        .eq('id', intake.id);
-
-      if (error) handleSupabaseError(error, OperationType.UPDATE, `scout_intakes/${intake.id}`);
+      if (reviewAction === 'redirected') {
+        await redirectIntake(intake, finalBucket, reviewNotes);
+      } else {
+        // Approve and Edit are the Scout-approve command (lifecycle §4 row 1): one call
+        // reviews the intake, creates its business and opens `initial_meeting`. The row
+        // itself is updated server-side by approve_scout_intake(); liveQuery picks it up.
+        const token = await accessToken(supabase.auth);
+        if (!token) throw new ApiError('unauthorized', null);
+        await approveScoutIntake(
+          {
+            intakeId: intake.id,
+            // Per click, so a retry of a failed request replays rather than refuses.
+            idempotencyKey: `review-${crypto.randomUUID()}`,
+            finalBucket,
+            ...(reviewNotes ? { reviewNotes } : {}),
+          },
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+      }
     } catch (err) {
-      try {
-        handleSupabaseError(err, OperationType.UPDATE, `scout_intakes/${intake.id}`);
-      } catch { /* logged */ }
+      const code = err instanceof ApiError ? err.code : 'client_error';
+      const requestId = err instanceof ApiError ? err.requestId : null;
+      console.error(`ScoutReviewQueue: review decision for ${intake.id} failed — not saved (${code})`, err);
+      setError(decisionErrorMessage(code) + (requestId ? ` Reference: ${requestId}.` : ''));
     } finally {
       setSaving(false);
     }
+  };
+
+  // A redirect never opens an engagement (approve_scout_intake() refuses a `redirected`
+  // intake), so it stays a direct admin update of the review fields.
+  const redirectIntake = async (intake: ScoutIntake, finalBucket: ScoutBucket, reviewNotes?: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const patch = {
+      reviewStatus: 'reviewed' as const,
+      reviewAction: 'redirected' as const,
+      finalBucket,
+      onboardingKit: getOnboardingKitName(finalBucket),
+      reviewedBy: user?.id,
+      // `?? undefined` rather than the raw value: Supabase types email as `string | null`,
+      // while ScoutIntake declares `string | undefined`.
+      reviewedByEmail: user?.email ?? undefined,
+      ...(reviewNotes ? { reviewNotes } : {}),
+      // reviewed_at has no column default (0001_core), so it is sent explicitly —
+      // unlike scout_intakes.submitted_at, which does default and is left to the server.
+      reviewedAt: new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from('scout_intakes')
+      .update(toColumns<TablesUpdate<'scout_intakes'>>(patch))
+      .eq('id', intake.id);
+    if (error) handleSupabaseError(error, OperationType.UPDATE, `scout_intakes/${intake.id}`);
   };
 
   const handleApprove = (intake: ScoutIntake) => {
@@ -236,6 +271,7 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-dssg-blue rounded-full text-[10px] font-bold uppercase tracking-widest mb-4">
@@ -349,7 +385,7 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.2em]">{intake.reviewAction} → {intake.finalBucket}</p>
-                      <p className="text-[10px] text-slate-400 font-medium mt-0.5">{intake.onboardingKit}</p>
+                      <p className="text-[10px] text-slate-400 font-medium mt-0.5">{intake.onboardingKit ?? (intake.finalBucket ? getOnboardingKitName(intake.finalBucket) : '')}</p>
                     </div>
                     <p className="text-[10px] text-slate-400 font-medium">{intake.reviewedByEmail}</p>
                   </div>
@@ -438,4 +474,27 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
       </AnimatePresence>
     </div>
   );
+}
+
+/** What the review banner says for each `/api/scout-approve` error code. */
+function decisionErrorMessage(code: string): string {
+  switch (code) {
+    case 'unauthorized':
+    case 'network_error':
+      return 'Could not reach the server. Check your connection and sign-in, then try again. The intake is still pending.';
+    case 'forbidden':
+      return 'Only an admin of the organization this intake belongs to can approve it.';
+    case 'already_approved':
+      return 'This intake is already in the pipeline — its business has an engagement. Nothing was changed.';
+    case 'already_reviewed':
+      return 'This intake was already reviewed with a different bucket. Nothing was changed.';
+    case 'guard_unmet':
+      return 'This intake was redirected, so it cannot enter the pipeline. Nothing was changed.';
+    case 'organization_required':
+      return 'You administer more than one organization; this intake needs one chosen before it can be approved.';
+    case 'bucket_required':
+      return 'Choose a bucket with Edit before approving — Scout could not assign one.';
+    default:
+      return 'Could not save the review decision. The intake is still pending.';
+  }
 }

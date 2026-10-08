@@ -1,17 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ErrorBanner } from '../ErrorBanner';
+import { reportSupabaseError } from '../supabaseErrors';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  supabase, toColumns, rowToDomain, handleSupabaseError, OperationType,
-} from '../../lib/supabase';
+import { supabase, rowToDomain, OperationType } from '../../lib/supabase';
+import { ApiError, postJson } from '../../lib/api';
+import { architectPlanResponseSchema } from '../../schemas';
 import {
   ScoutIntake, ArchitectAssessment as ArchitectAssessmentDoc,
-  CSA_OPTIONS, CSA_TOOL_OPTIONS, CsaTool, ScoutBucket,
+  CSA_OPTIONS, CSA_TOOL_OPTIONS, CsaTool, CsaFullAnswers, ScoutBucket,
 } from '../../types';
-import { scoreAssessment } from '../../agents/architect/scoring';
-import { generateCharter, generateNinetyDayPlan } from '../../agents/architect/plan';
+import {
+  localDraft, nextAttempt, submitDraft, unsavedMessage,
+} from '../../agents/architect/draft';
+import type { DraftAttempt, LocalDraft } from '../../agents/architect/draft';
 import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
 import { motion } from 'motion/react';
-import { DraftingCompass, ChevronLeft, ArrowRight } from 'lucide-react';
+import { DraftingCompass, ChevronLeft, ArrowRight, RotateCcw } from 'lucide-react';
 
 interface Props {
   isDemo?: boolean;
@@ -37,6 +41,12 @@ export default function ArchitectAssessment({ isDemo }: Props) {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // A failed submit's local draft: shown, never written (the route is the only writer).
+  const [unsaved, setUnsaved] = useState<{ draft: LocalDraft; errorCode: string } | null>(null);
+  // The last submit's idempotency key, reused while the answers are unchanged so a retry
+  // replays rather than submits twice (design-system.md §8.1).
+  const attemptRef = useRef<DraftAttempt | null>(null);
 
   useEffect(() => {
     if (!intakeId) return;
@@ -67,7 +77,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
 
         // An assessment may only be built on an intake a reviewer has already approved and
         // bucketed — the same precondition the Firestore version enforced, and what
-        // architect_assessments' insert policy checks server-side.
+        // submit_architect_draft() checks server-side (0004_drafts).
         if (!loaded || loaded.reviewStatus !== 'reviewed' || !loaded.finalBucket) {
           setNotFound(true); setLoading(false); return;
         }
@@ -87,7 +97,11 @@ export default function ArchitectAssessment({ isDemo }: Props) {
           });
         }
       } catch (err) {
-        try { handleSupabaseError(err, OperationType.GET, `architect_assessments/${intakeId}`); } catch { /* logged */ }
+        // Was reported as "not found", which tells staff the intake does not exist when
+        // the read failed. Distinguish the two.
+        setError(
+          reportSupabaseError(err, OperationType.GET, `architect_assessments/${intakeId}`, 'Could not load this intake or its previous answers. Reload to try again.'),
+        );
         setNotFound(true);
       } finally {
         setLoading(false);
@@ -110,58 +124,28 @@ export default function ArchitectAssessment({ isDemo }: Props) {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = async () => {
     if (!intake || !intakeId) return;
 
-    const currentUser = isDemo ? null : (await supabase.auth.getUser()).data.user;
-
     const bucket = intake.finalBucket as ScoutBucket;
-    const scored = {
-      q4_collection_scope: answers.q4_collection_scope,
-      q6_system_integration: answers.q6_system_integration,
-      q7_integration_familiarity: answers.q7_integration_familiarity,
-      q8_quality_confidence: answers.q8_quality_confidence,
-      q11_decision_empowerment: answers.q11_decision_empowerment,
-      q13_reporting_automation: answers.q13_reporting_automation,
-      q14_tools: answers.q14_tools,
-      q15_staff_confidence: answers.q15_staff_confidence,
-      q16_budget_speed: answers.q16_budget_speed,
-    } as Parameters<typeof scoreAssessment>[0];
-
-    const maturity = scoreAssessment(scored, bucket);
-    const genInput = {
-      orgName: intake.org_name,
-      bucket,
-      maturity,
-      q1_org_context: answers.q1_org_context,
-      q9_current_decisions: answers.q9_current_decisions,
-      q10_wished_decisions: answers.q10_wished_decisions,
-      q17a_wish_list: answers.q17a_wish_list,
-      q17b_biggest_worry: answers.q17b_biggest_worry,
-      q18_past_blockers: answers.q18_past_blockers,
-    };
-    const charter = generateCharter(genInput);
-    const ninetyDayPlan = generateNinetyDayPlan(genInput);
-
-    const docBody = {
-      scoutIntakeId: intakeId,
-      org_name: intake.org_name,
-      scoutBucket: bucket,
-      scoutConfidence: intake.confidence,
-      scoutReadiness: intake.composite_signal,
-      ...answers,
-      ...maturity,
-      charter,
-      ninetyDayPlan,
-      createdBy: isDemo ? DEMO_USER.uid : currentUser?.id,
-      createdByEmail: isDemo ? DEMO_USER.email : currentUser?.email ?? undefined,
-    };
+    // The form's `required` fields guarantee every answer is filled before submit fires.
+    const full = answers as CsaFullAnswers;
 
     if (isDemo) {
+      const { maturity, charter, plan } = localDraft(full, intake.org_name, bucket);
       demoAssessments.set(intakeId, {
         id: intakeId,
-        ...docBody,
+        scoutIntakeId: intakeId,
+        org_name: intake.org_name,
+        scoutBucket: bucket,
+        scoutConfidence: intake.confidence,
+        scoutReadiness: intake.composite_signal,
+        ...answers,
+        ...maturity,
+        charter,
+        ninetyDayPlan: plan,
+        createdBy: DEMO_USER.uid,
+        createdByEmail: DEMO_USER.email,
         createdAt: { seconds: Date.now() / 1000 },
         updatedAt: { seconds: Date.now() / 1000 },
       } as ArchitectAssessmentDoc);
@@ -169,25 +153,40 @@ export default function ArchitectAssessment({ isDemo }: Props) {
       return;
     }
 
+    const attempt = nextAttempt(attemptRef.current, full, () => crypto.randomUUID());
+    attemptRef.current = attempt;
+
     setSaving(true);
+    setUnsaved(null);
     try {
-      // upsert, not insert: setDoc with a fixed id overwrote an existing document, and the
-      // form is reachable again for an already-assessed intake (it pre-loads the previous
-      // answers above). `id` is the conflict target because it IS the intake id.
-      const { error } = await supabase
-        .from('architect_assessments')
-        .upsert(toColumns({ ...docBody, id: intakeId }), { onConflict: 'id' });
+      // The handler writes as the signed-in user (RLS + is_admin() see the real actor), so
+      // it needs this session's access token. No session is the same "unsaved" outcome.
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      if (error) handleSupabaseError(error, OperationType.WRITE, `architect_assessments/${intakeId}`);
+      const outcome = await submitDraft(
+        { scoutIntakeId: intakeId, idempotencyKey: attempt.key, answers: full, orgName: intake.org_name, bucket },
+        (request) => token
+          ? postJson('/api/architect-plan', request, architectPlanResponseSchema, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+          : Promise.reject(new ApiError('unauthorized', null)),
+      );
 
-      navigate(`/architect/plan/${intakeId}`);
-    } catch (err) {
-      try {
-        handleSupabaseError(err, OperationType.WRITE, `architect_assessments/${intakeId}`);
-      } catch { /* logged */ }
+      if (outcome.kind === 'saved') {
+        navigate(`/architect/plan/${intakeId}`);
+        return;
+      }
+      console.error(`ArchitectAssessment: submit for ${intakeId} failed (${outcome.errorCode}) — draft not saved`);
+      setUnsaved({ draft: outcome.draft, errorCode: outcome.errorCode });
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void submit();
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center text-slate-400 text-sm font-medium">Loading assessment…</div>;
@@ -195,6 +194,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
   if (notFound || !intake) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-24 text-center">
+        <ErrorBanner message={error} onDismiss={() => setError(null)} />
         <h2 className="text-2xl font-display font-bold text-dssg-blue mb-3">No reviewed intake found</h2>
         <p className="text-slate-500 text-sm mb-8">
           Architect assessments start from an approved Scout intake. {isDemo && 'In Demo Mode, approve an intake in the Review Queue first (demo data resets on page reload).'}
@@ -206,6 +206,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
       <button
         onClick={() => navigate('/scout/review')}
         className="flex items-center gap-2 text-slate-400 hover:text-dssg-blue transition-all font-bold text-[10px] uppercase tracking-[0.2em] mb-8"
@@ -307,6 +308,15 @@ export default function ArchitectAssessment({ isDemo }: Props) {
             </Field>
           </Section>
 
+          {unsaved && (
+            <UnsavedDraft
+              draft={unsaved.draft}
+              message={unsavedMessage(unsaved.errorCode)}
+              saving={saving}
+              onRetry={() => void submit()}
+            />
+          )}
+
           <button
             type="submit"
             disabled={saving}
@@ -383,5 +393,46 @@ function HandoffBadge({ label }: { label: string }) {
     <span className="px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-[0.1em] border bg-slate-50 text-slate-600 border-slate-200">
       {label}
     </span>
+  );
+}
+
+/**
+ * The local template, shown when the route failed. It is not saved and not submitted:
+ * there is no approval for staff to act on until a retry succeeds.
+ */
+function UnsavedDraft({ draft, message, saving, onRetry }: {
+  draft: LocalDraft;
+  message: string;
+  saving: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div role="alert" className="bento-card p-8 border-2 border-amber-300 bg-amber-50/40">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <span className="px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-[0.1em] border bg-amber-50 text-amber-800 border-amber-300">
+          Draft · unsaved, not submitted
+        </span>
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-dssg-blue text-white text-xs font-bold disabled:opacity-50"
+        >
+          <RotateCcw size={14} /> Retry
+        </button>
+      </div>
+      <p className="text-sm text-slate-600 mb-4">{message}</p>
+      <h3 className="text-lg font-display font-bold text-dssg-blue mb-1">{draft.charter.title}</h3>
+      <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">
+        Maturity: {draft.maturity.compositeLevel} · {draft.plan.headline}
+      </p>
+      <ol className="space-y-2 text-sm text-slate-600">
+        {draft.plan.phases.map(phase => (
+          <li key={phase.window}>
+            <span className="font-bold">{phase.window} — {phase.title}:</span> {phase.milestones.join('; ')}
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }

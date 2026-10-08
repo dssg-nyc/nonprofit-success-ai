@@ -5,12 +5,13 @@ import type { Json } from "../src/lib/database.types";
 import { GatewayError } from "../src/model/errors";
 import { errorName, log } from "../src/observability/log";
 import { envoyDraftRequestSchema, envoyDraftResponseSchema } from "../src/schemas";
-import type { EnvoyDraft, EnvoyDraftRequest, EnvoyDraftResponse } from "../src/types";
+import type { EnvoyDraft, EnvoyDraftRequest, EnvoyDraftResponse, EnvoyInput } from "../src/types";
 import { authenticate } from "./_auth";
 import type { UserClient } from "./_auth";
 import { checkModelBudget } from "./_budget";
 import { modelKeyConfigured } from "./_env";
 import { parseJsonBody } from "./_http";
+import { loadEngagementFacts } from "./_engagement";
 import { handler } from "./_request";
 
 /**
@@ -25,8 +26,9 @@ import { handler } from "./_request";
  *
  * Authority is the caller's, never an elevated key's: every query below runs on the
  * user-scoped client from `_auth.ts`, so RLS and the RPC's `is_admin()` see the real
- * actor. Server-derived, never read from the body: `hitlTier` (always L3), the draft's
- * org, author and provenance (inside the RPC, from the model run).
+ * actor. Server-derived, never read from the body: `hitlTier` (always L3), the partner's
+ * name, plan title and cadence (`_engagement.ts`), and the draft's org, author and
+ * provenance (inside the RPC, from the model run).
  */
 
 export const maxDuration = 30;
@@ -112,13 +114,13 @@ export const POST = handler("envoy-draft", async (request: Request) => {
   const valid = envoyDraftRequestSchema.safeParse(parsed.body);
   if (!valid.success) return json({ error: "invalid_input" }, 400);
   const req = valid.data;
-  const { idempotencyKey, ...input } = req;
+  const { idempotencyKey } = req;
 
   // Read through RLS as the caller: an engagement the caller cannot see is the same 404 as
   // a missing id.
   const { data: engagement, error: engErr } = await client
     .from("engagements")
-    .select("id, organization_id, business_id, stage")
+    .select("id, organization_id, business_id, stage, status, assessment_id")
     .eq("id", req.engagementId)
     .maybeSingle();
   if (engErr) {
@@ -146,6 +148,22 @@ export const POST = handler("envoy-draft", async (request: Request) => {
 
   const replayed = await replay(client, req);
   if (replayed) return replayed;
+
+  // The partner's name, the plan title and the cadence are read here, through RLS, never
+  // from the body, so a draft cannot be addressed to an organisation or a plan that is
+  // not this engagement's. `concerns` stays the caller's: staff choose what Pulse context
+  // may be paraphrased to the partner.
+  const loaded = await loadEngagementFacts(client, engagement);
+  if (!loaded.ok) return loaded.response;
+  const { orgName, planTitle, cadence } = loaded.facts;
+  const input: EnvoyInput = {
+    engagementId: req.engagementId,
+    occasion: req.occasion,
+    orgName,
+    ...(planTitle ? { planTitle } : {}),
+    ...(cadence ? { cadence } : {}),
+    ...(req.concerns ? { concerns: req.concerns } : {}),
+  };
 
   // Before the first paid call: the caller's hourly model budget (`_budget.ts`). Only
   // checked when a model call is actually about to be made — with no key configured the

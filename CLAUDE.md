@@ -120,7 +120,7 @@ UI → `model/`/`observability/`/agent `model.ts`, and `lib/` → agents/UI.)*
 - `src/lib/` — cross-cutting infrastructure (`supabase.ts`, `demoStore.ts`, `api.ts`, `lessons.ts`), not agent
   logic. `supabase.ts` is the browser (anon, `VITE_`) client. `api.ts` is the SPA's `/api` caller:
   `postJson` (bearer token attached) and `withFallback`, which runs the agent's local
-  heuristic when the route fails (Pulse; Scout's fallback now runs inside the route). The only service-role client lives inside
+  heuristic when the route fails (built for Pulse, but no component calls it yet — Pulse has no UI consumer; Scout's fallback now runs inside the route). The only service-role client lives inside
   `src/observability/recorder.ts` and is never exported; `api/` routes act as the caller
   (anon key + the user's JWT, `api/_auth.ts`).
   The former `scoutRouting.ts`, `architectPlan.ts` and `architectScoring.ts` now

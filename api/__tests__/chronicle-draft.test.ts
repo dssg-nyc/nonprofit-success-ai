@@ -21,7 +21,10 @@ vi.mock('@supabase/supabase-js', () => ({
       const query = { table, filters: [] as Array<[string, unknown]> };
       db.queries.push(query);
       const builder = {
-        select: () => builder,
+        select: (_cols?: string, opts?: { count?: string; head?: boolean }) => {
+          if (opts?.head) query.filters.push(['__count', true]);
+          return builder;
+        },
         eq: (col: string, value: unknown) => {
           query.filters.push([col, value]);
           return builder;
@@ -34,6 +37,11 @@ vi.mock('@supabase/supabase-js', () => ({
         maybeSingle: async () => {
           const isStage = query.filters.some(([c, v]) => c === 'stage' && v === 'membership');
           return db.tables[isStage ? `${table}:membership` : table] ?? { data: null, error: null };
+        },
+        // A head count query resolves the builder itself (`await client.from(...).select(..., {head})`).
+        then: (resolve: (r: Result & { count: number | null }) => void) => {
+          const seed = db.tables[`${table}:count`] ?? { data: null, error: null };
+          resolve({ ...seed, count: typeof seed.data === 'number' ? seed.data : null });
         },
       };
       return builder;
@@ -81,6 +89,10 @@ const RUN_ID = 'aaaaaaaa-0000-0000-0000-000000000003';
 const BODY: ChronicleDraftRequest = {
   engagementId: ENGAGEMENT_ID,
   idempotencyKey: 'chronicle-submit-0001',
+};
+/** What the handler builds from the seeded rows (`_engagement.ts`), never from the body. */
+const INPUT: ChronicleInput = {
+  engagementId: ENGAGEMENT_ID,
   orgName: 'Borough Food Bank',
   status: 'completed',
   hasPlan: true,
@@ -88,9 +100,6 @@ const BODY: ChronicleDraftRequest = {
   objectives: ['Forecast weekly demand per site'],
   successCriteria: ['Forecast error under 15%'],
 };
-const INPUT = Object.fromEntries(
-  Object.entries(BODY).filter(([k]) => k !== 'idempotencyKey'),
-) as unknown as ChronicleInput;
 
 const DRAFT: ChronicleDraft = {
   engagementId: ENGAGEMENT_ID,
@@ -105,11 +114,21 @@ const DRAFT: ChronicleDraft = {
 
 const LESSON_ID = 'aaaaaaaa-0000-0000-0000-000000000004';
 
+const ASSESSMENT_ID = 'cccccccc-0000-0000-0000-000000000001';
 const ENGAGEMENT = {
   id: ENGAGEMENT_ID,
   organization_id: 'dddddddd-0000-0000-0000-000000000001',
   business_id: 'eeeeeeee-0000-0000-0000-000000000001',
   stage: 'membership',
+  status: 'completed',
+  assessment_id: ASSESSMENT_ID,
+};
+const CHARTER = {
+  title: 'Demand forecasting pilot',
+  objectives: INPUT.objectives,
+  successCriteria: INPUT.successCriteria,
+  cadence: 'fortnightly',
+  workstreams: [],
 };
 
 const post = (body: unknown, token: string | null = TOKEN) =>
@@ -129,6 +148,9 @@ beforeEach(() => {
     engagements: { data: ENGAGEMENT, error: null },
     organization_members: { data: { role: 'admin' }, error: null },
     'engagements:membership': { data: { id: 'ffffffff-0000-0000-0000-000000000001' }, error: null },
+    businesses: { data: { name: INPUT.orgName }, error: null },
+    'engagement_events:count': { data: INPUT.eventCount, error: null },
+    architect_assessments: { data: { charter: CHARTER }, error: null },
   };
   db.rpc = { data: { approval_id: APPROVAL_ID, draft_id: DRAFT_ID, lesson_id: LESSON_ID }, error: null };
   db.rpcCalls = [];
@@ -159,15 +181,61 @@ describe('POST /api/chronicle-draft — auth and input', () => {
     expect(agent.calls).toHaveLength(0);
   });
 
-  it('400 invalid_input when engagementId, orgName or status is missing', async () => {
-    for (const field of ['engagementId', 'orgName', 'status'] as const) {
-      const rest: Record<string, unknown> = { ...BODY };
-      delete rest[field];
-      const res = await post(rest);
+  it('400 invalid_input when engagementId is missing or not a guid', async () => {
+    for (const body of [{ idempotencyKey: BODY.idempotencyKey }, { ...BODY, engagementId: 'not-a-guid' }]) {
+      const res = await post(body);
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({ error: 'invalid_input' });
     }
     expect(agent.calls).toHaveLength(0);
+  });
+
+  // The facts a story is written from are rows, not request fields: a body that claims a
+  // completed, event-rich engagement changes nothing (the review finding of 2026-10-08).
+  it('ignores engagement facts sent in the body — readiness comes from the rows', async () => {
+    db.tables.engagements = { data: { ...ENGAGEMENT, status: 'in_progress' }, error: null };
+    const res = await post({ ...BODY, status: 'completed', hasPlan: true, eventCount: 50, orgName: 'Anything' });
+    expect(res.status).toBe(200);
+    expect((await res.json()).readiness).toBe('not_ready');
+    expect(agent.calls).toHaveLength(0);
+    expect(db.rpcCalls).toHaveLength(0);
+  });
+
+  it('builds the input from the business name, the event count and the linked charter', async () => {
+    await post(BODY);
+    expect(agent.calls).toEqual([INPUT]);
+    expect(db.queries.find((q) => q.table === 'businesses')?.filters).toEqual([['id', ENGAGEMENT.business_id]]);
+    expect(db.queries.find((q) => q.table === 'engagement_events')?.filters).toEqual([
+      ['__count', true],
+      ['engagement_id', ENGAGEMENT_ID],
+    ]);
+    expect(db.queries.find((q) => q.table === 'architect_assessments')?.filters).toEqual([['id', ASSESSMENT_ID]]);
+  });
+
+  it('no linked assessment reads as hasPlan false with no charter facts, and no charter query', async () => {
+    db.tables.engagements = { data: { ...ENGAGEMENT, assessment_id: null }, error: null };
+    db.tables['engagement_events:count'] = { data: 2, error: null };
+    await post(BODY);
+    expect(agent.calls).toEqual([
+      { engagementId: ENGAGEMENT_ID, orgName: INPUT.orgName, status: 'completed', hasPlan: false, eventCount: 2 },
+    ]);
+    expect(db.queries.some((q) => q.table === 'architect_assessments')).toBe(false);
+  });
+
+  it('a charter the caller cannot see, or that does not parse, still counts as a plan', async () => {
+    db.tables.architect_assessments = { data: null, error: null };
+    await post(BODY);
+    expect(agent.calls[0]).toMatchObject({ hasPlan: true });
+    expect(agent.calls[0]).not.toHaveProperty('objectives');
+  });
+
+  it('502 engagement_lookup_failed when a facts read errors, before the model call', async () => {
+    db.tables['engagement_events:count'] = { data: null, error: { code: '42501' } };
+    const res = await post(BODY);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: 'engagement_lookup_failed' });
+    expect(agent.calls).toHaveLength(0);
+    expect(db.rpcCalls).toHaveLength(0);
   });
 
   it('400 invalid_input for a missing idempotencyKey, with no lookup and no model call', async () => {
@@ -229,7 +297,8 @@ describe('POST /api/chronicle-draft — draft', () => {
   });
 
   it('not_ready is a 200 with null ids: no model call, no RPC, nothing saved', async () => {
-    const res = await post({ ...BODY, status: 'in_progress' });
+    db.tables.engagements = { data: { ...ENGAGEMENT, status: 'in_progress' }, error: null };
+    const res = await post(BODY);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       ...generateChronicleDraft({ ...INPUT, status: 'in_progress' }),
@@ -326,7 +395,7 @@ describe('POST /api/chronicle-draft — authority and unrecorded runs', () => {
     const [call] = db.rpcCalls;
     expect(call.args).not.toHaveProperty('p_agent_run_id');
     expect(call.args).toMatchObject({
-      p_payload: { source: 'model', model: 'gemini-test', prompt_version: 'chronicle-draft-0.05' },
+      p_payload: { source: 'model', model: 'gemini-test', prompt_version: 'chronicle-draft-0.06' },
     });
   });
 });

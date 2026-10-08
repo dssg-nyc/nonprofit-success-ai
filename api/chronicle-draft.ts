@@ -5,12 +5,13 @@ import type { Json } from "../src/lib/database.types";
 import { GatewayError } from "../src/model/errors";
 import { errorName, log } from "../src/observability/log";
 import { chronicleDraftRequestSchema, chronicleDraftResponseSchema } from "../src/schemas";
-import type { ChronicleDraft, ChronicleDraftRequest, ChronicleDraftResponse } from "../src/types";
+import type { ChronicleDraft, ChronicleDraftRequest, ChronicleDraftResponse, ChronicleInput } from "../src/types";
 import { authenticate } from "./_auth";
 import type { UserClient } from "./_auth";
 import { checkModelBudget } from "./_budget";
 import { modelKeyConfigured } from "./_env";
 import { parseJsonBody } from "./_http";
+import { loadEngagementFacts } from "./_engagement";
 import { handler } from "./_request";
 
 /**
@@ -27,8 +28,8 @@ import { handler } from "./_request";
  * Authority is the caller's, never an elevated key's: every query below runs on the
  * user-scoped client from `_auth.ts`. The completion gate is the RPC's, not this
  * handler's: it needs a `membership`-stage engagement on the business (lifecycle.md §5).
- * `readiness` is derived here from the request (`assessChronicleReadiness`), never
- * model-supplied.
+ * `readiness` is derived here (`assessChronicleReadiness`) from facts read through the
+ * caller's client (`_engagement.ts`) — never from the body, never model-supplied.
  */
 
 export const maxDuration = 30;
@@ -129,13 +130,13 @@ export const POST = handler("chronicle-draft", async (request: Request) => {
   const valid = chronicleDraftRequestSchema.safeParse(parsed.body);
   if (!valid.success) return json({ error: "invalid_input" }, 400);
   const req = valid.data;
-  const { idempotencyKey, ...input } = req;
+  const { idempotencyKey } = req;
 
   // Read through RLS as the caller: an engagement the caller cannot see is the same 404 as
   // a missing id.
   const { data: engagement, error: engErr } = await client
     .from("engagements")
-    .select("id, organization_id, business_id, stage")
+    .select("id, organization_id, business_id, stage, status, assessment_id")
     .eq("id", req.engagementId)
     .maybeSingle();
   if (engErr) {
@@ -163,6 +164,22 @@ export const POST = handler("chronicle-draft", async (request: Request) => {
 
   const replayed = await replay(client, req);
   if (replayed) return replayed;
+
+  // Every fact the story is written from is read here, through RLS, never from the body:
+  // readiness is derived from status, plan and event count, and a caller who could supply
+  // them could get a "ready" story for an engagement with nothing in it.
+  const loaded = await loadEngagementFacts(client, engagement);
+  if (!loaded.ok) return loaded.response;
+  const { status, orgName, hasPlan, eventCount, objectives, successCriteria } = loaded.facts;
+  const input: ChronicleInput = {
+    engagementId: req.engagementId,
+    status,
+    orgName,
+    hasPlan,
+    eventCount,
+    ...(objectives ? { objectives } : {}),
+    ...(successCriteria ? { successCriteria } : {}),
+  };
 
   // Nothing to write a story from: the empty draft, no model call, nothing saved.
   if (assessChronicleReadiness(input) === "not_ready") {

@@ -6,6 +6,9 @@ import type {
 
 export const THIN_EVENT_THRESHOLD = 3;
 
+const lowerFirst = (s: string): string =>
+  `${s.charAt(0).toLowerCase()}${s.slice(1)}`;
+
 export function assessChronicleReadiness(
   input: ChronicleInput,
 ): ChronicleReadiness {
@@ -25,17 +28,22 @@ export function generateChronicleDraft(input: ChronicleInput): ChronicleDraft {
       headline: "",
       narrative: "",
       outcomes: [],
+      successFactors: [],
+      failureFactors: [],
       hitlTier: "L3",
     };
   }
 
-  const outcomes = input.successCriteria?.length
-    ? [...input.successCriteria]
-    : (input.objectives ?? []);
-
   const objectiveLine = input.objectives?.length
-    ? `The work set out to ${input.objectives[0].charAt(0).toLowerCase()}${input.objectives[0].slice(1)}.`
-    : "The work was scoped with the organisation directly.";
+    ? `The work set out to ${lowerFirst(input.objectives[0])}.`
+    : null;
+
+  // Criteria are what success would have looked like, not what was achieved: they are
+  // stated as the definition, and `outcomes` stays empty (nothing in `ChronicleInput`
+  // records an achievement — roadmap D46).
+  const criteriaLine = input.successCriteria?.length
+    ? `Success was defined as: ${input.successCriteria.join("; ")}.`
+    : null;
 
   const evidenceLine =
     readiness === "thin"
@@ -49,9 +57,17 @@ export function generateChronicleDraft(input: ChronicleInput): ChronicleDraft {
     narrative: [
       `${input.orgName} completed an engagement with the DSSG volunteer programme.`,
       objectiveLine,
+      criteriaLine,
       evidenceLine,
-    ].join(" "),
-    outcomes,
+    ]
+      .filter((line): line is string => line !== null)
+      .join(" "),
+    // No achievement is recorded in the input, so none is claimed. A success criterion is
+    // a definition, not a result.
+    outcomes: [],
+    // No evidence to name causes from: the deterministic draft proposes none.
+    successFactors: [],
+    failureFactors: [],
     hitlTier: "L3",
   };
 }

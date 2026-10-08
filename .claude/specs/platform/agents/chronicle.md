@@ -66,9 +66,10 @@ Assembled from Supabase by the caller:
   basis for "did this engagement succeed." Success criteria are quoted in the narrative as
   the definition of success ("Success was defined as: …"); they are **not** outcomes. The
   template's `outcomes` is **empty** until an achieved-outcomes source exists on
-  `ChronicleInput` (roadmap D46), and the model is told the same (prompt
-  `chronicle-draft-0.05`: "Success criteria are not outcomes").
-  *(R17, 2026-10-08: run 1's model lane restated criteria as achieved outcomes.)*
+  `ChronicleInput` (roadmap D46). Since `chronicle-draft-0.06` the model is not asked
+  for outcomes at all: `outcomes` is omitted from `chronicleModelSchema` and set to `[]`
+  in code, so a restated criterion cannot reach the draft.
+  *(R17, 2026-10-08: run 1's model lane restated criteria as achieved outcomes under 0.05.)*
 - `eventCount` from `engagement_events` (0003_delivery) as the activity signal.
 
 ## §3 Outputs
@@ -189,7 +190,8 @@ This is registry rows **D15** (the edge) and **D21** (the artifact).
 
 ## Contract
 
-- **Input:** `ChronicleDraftRequest` — `engagementId` (guid), `idempotencyKey` (8-200 chars), `orgName`, `status`, `hasPlan`, `eventCount`, `objectives?`, `successCriteria?`
+- **Input:** `ChronicleDraftRequest` — `engagementId` (guid), `idempotencyKey` (8-200 chars) only (v4, 2026-10-08). `orgName`, `status`, `hasPlan`, `eventCount`, `objectives?` and `successCriteria?` are read by the route through RLS (`api/_engagement.ts`) into `ChronicleInput`; a caller can no longer supply the facts readiness is derived from.
+- **Model caps:** `headline` ≤200 and `narrative` ≤4,000 chars in `chronicleModelSchema`; `outcomes` is not model-generated.
 - **Output:** `ChronicleDraftResponse` — see §3
 - **Side effects:** On `thin` and `ready`, `submit_chronicle_draft()` (0004_drafts) writes, in one transaction, one `chronicle_drafts` row (with its factors), one pending L3 `story` approval, one audit event and the engagement's lesson candidate (upsert; a promoted lesson is left alone) and returns its `lessonId`; a replay with the same key returns the original, lesson included. `not_ready` writes nothing and makes no model or RPC call.
 - **Completion gate:** a `membership`-stage engagement row must exist for the same business; enforced in `submit_chronicle_draft()` (SQLSTATE 55000, mapped to 422).
@@ -205,7 +207,7 @@ This is registry rows **D15** (the edge) and **D21** (the artifact).
 - No delete on `chronicle_drafts` — rows are audit trail. Staff approves or rejects via status field; rejected drafts are retained.
 - `readiness` omitted from `chronicleModelSchema` — gate is deterministic, not model-supplied.
 - `not_ready` is a 200 response, not an error — "nothing to write yet" is a correct answer.
-- `outcomes` lists only what the record states was achieved. Nothing in `ChronicleInput` records an achievement today, so the template returns `[]` on every readiness and a criterion or objective never becomes an outcome (D46; gated by `chronicleGrounding` and `chronicleReadiness`). With no objectives the "set out to" sentence is omitted, never replaced by a stock phrase.
+- `outcomes` lists only what the record states was achieved. Nothing in `ChronicleInput` records an achievement today, so the template and the model path both return `[]` on every readiness (the model schema omits the field) and a criterion or objective never becomes an outcome (D46; gated by `chronicleGrounding` and `chronicleReadiness`). With no objectives the "set out to" sentence is omitted, never replaced by a stock phrase.
 
 ## Dependencies
 

@@ -21,7 +21,10 @@ vi.mock('@supabase/supabase-js', () => ({
       const query = { table, filters: [] as Array<[string, unknown]> };
       db.queries.push(query);
       const builder = {
-        select: () => builder,
+        select: (_cols?: string, opts?: { count?: string; head?: boolean }) => {
+          if (opts?.head) query.filters.push(['__count', true]);
+          return builder;
+        },
         eq: (col: string, value: unknown) => {
           query.filters.push([col, value]);
           return builder;
@@ -34,6 +37,11 @@ vi.mock('@supabase/supabase-js', () => ({
         maybeSingle: async () => {
           const isStage = query.filters.some(([c, v]) => c === 'stage' && v === 'membership');
           return db.tables[isStage ? `${table}:membership` : table] ?? { data: null, error: null };
+        },
+        // A head count query resolves the builder itself (`await client.from(...).select(..., {head})`).
+        then: (resolve: (r: Result & { count: number | null }) => void) => {
+          const seed = db.tables[`${table}:count`] ?? { data: null, error: null };
+          resolve({ ...seed, count: typeof seed.data === 'number' ? seed.data : null });
         },
       };
       return builder;
@@ -82,12 +90,15 @@ const BODY: EnvoyDraftRequest = {
   engagementId: ENGAGEMENT_ID,
   idempotencyKey: 'envoy-submit-0001',
   occasion: 'kickoff',
+};
+/** What the handler builds from the seeded rows (`_engagement.ts`) plus the body's occasion. */
+const INPUT: EnvoyInput = {
+  engagementId: ENGAGEMENT_ID,
+  occasion: 'kickoff',
   orgName: 'Borough Food Bank',
   planTitle: 'Demand forecasting pilot',
+  cadence: 'fortnightly',
 };
-const INPUT = Object.fromEntries(
-  Object.entries(BODY).filter(([k]) => k !== 'idempotencyKey'),
-) as unknown as EnvoyInput;
 
 const DRAFT: EnvoyDraft = {
   engagementId: ENGAGEMENT_ID,
@@ -97,12 +108,16 @@ const DRAFT: EnvoyDraft = {
   hitlTier: 'L3',
 };
 
+const ASSESSMENT_ID = 'cccccccc-0000-0000-0000-000000000001';
 const ENGAGEMENT = {
   id: ENGAGEMENT_ID,
   organization_id: 'dddddddd-0000-0000-0000-000000000001',
   business_id: 'eeeeeeee-0000-0000-0000-000000000001',
   stage: 'initial_meeting',
+  status: 'in_progress',
+  assessment_id: ASSESSMENT_ID,
 };
+const CHARTER = { title: INPUT.planTitle, objectives: [], successCriteria: [], cadence: INPUT.cadence, workstreams: [] };
 
 const post = (body: unknown, token: string | null = TOKEN) =>
   POST(
@@ -121,6 +136,9 @@ beforeEach(() => {
     engagements: { data: ENGAGEMENT, error: null },
     organization_members: { data: { role: 'admin' }, error: null },
     'engagements:membership': { data: { id: 'ffffffff-0000-0000-0000-000000000001' }, error: null },
+    businesses: { data: { name: INPUT.orgName }, error: null },
+    'engagement_events:count': { data: 3, error: null },
+    architect_assessments: { data: { charter: CHARTER }, error: null },
   };
   db.rpc = { data: { approval_id: APPROVAL_ID, draft_id: DRAFT_ID }, error: null };
   db.rpcCalls = [];
@@ -156,6 +174,36 @@ describe('POST /api/envoy-draft — auth and input', () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'invalid_input' });
     expect(agent.calls).toHaveLength(0);
+  });
+
+  // orgName, planTitle and cadence are rows, not request fields: a body that names another
+  // organisation or plan changes nothing (the review finding of 2026-10-08).
+  it('ignores orgName, planTitle and cadence sent in the body — they come from the rows', async () => {
+    await post({ ...BODY, orgName: 'Someone Else', planTitle: 'Other plan', cadence: 'daily' });
+    expect(agent.calls).toEqual([INPUT]);
+  });
+
+  it('passes concerns from the body and leaves plan fields out when there is no assessment', async () => {
+    db.tables.engagements = { data: { ...ENGAGEMENT, assessment_id: null }, error: null };
+    await post({ ...BODY, occasion: 'at_risk_follow_up', concerns: ['No session logged in 21 days'] });
+    expect(agent.calls).toEqual([
+      {
+        engagementId: ENGAGEMENT_ID,
+        occasion: 'at_risk_follow_up',
+        orgName: INPUT.orgName,
+        concerns: ['No session logged in 21 days'],
+      },
+    ]);
+    expect(db.queries.some((q) => q.table === 'architect_assessments')).toBe(false);
+  });
+
+  it('502 engagement_lookup_failed when the business row is missing, before the model call', async () => {
+    db.tables.businesses = { data: null, error: null };
+    const res = await post(BODY);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: 'engagement_lookup_failed' });
+    expect(agent.calls).toHaveLength(0);
+    expect(db.rpcCalls).toHaveLength(0);
   });
 
   it('400 invalid_input for a missing idempotencyKey, with no lookup and no model call', async () => {
