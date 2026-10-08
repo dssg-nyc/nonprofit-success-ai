@@ -1,0 +1,207 @@
+-- Shared fixtures and helpers for the pgTAP suite. Included by every tests/*.test.sql
+-- with `\ir _shared/fixtures.psql`; the .psql extension and the subdirectory keep
+-- `supabase test db` from running this file as a test of its own.
+--
+-- Opens the transaction. Each test file ends it with `rollback`, so the pgTAP extension,
+-- the `tests` schema and every row seeded here vanish with the file: nothing ships in a
+-- migration and nothing leaks between files. Every assertion that counts rows scopes
+-- itself to fixture ids, so rows left in the local database by other work (an eval run's
+-- agent_runs, say) cannot change a result.
+--
+-- THIS SUITE DOCUMENTS WHAT THE SCHEMA DOES TODAY, NOT WHAT IT SHOULD DO.
+-- 0001_core scopes access by organization membership (roles owner/admin/member). That is
+-- known to be the wrong access model: the decided one (.claude/specs/db/access-model.md)
+-- scopes volunteers by project assignment, with three roles (client/diplomat/admin). The
+-- redesign is C1 (.claude/specs/roadmap.md). Expectations that follow from the org model
+-- are commented as such, and the one marked "KNOWN WRONG — org model, replaced by C1"
+-- pins the behaviour C1 exists to remove — the redesign should flip it deliberately, not
+-- discover it.
+--
+-- Role switching mirrors what PostgREST does per request:
+--   anon           -> set role anon;          request.jwt.claims unset
+--   authenticated  -> set role authenticated; request.jwt.claims carries sub = user id
+--   service_role   -> set role service_role;  the recorder's key (bypasses RLS, not grants)
+-- `auth.uid()` reads that claim, so the helpers below are what make is_admin() and every
+-- owner-scoping policy behave as they will in production.
+
+
+begin;
+
+-- Test scaffolding, created inside the transaction and rolled back with it.
+create extension if not exists pgtap with schema extensions;
+
+create schema if not exists tests;
+
+-- The suite calls tests.* helpers while impersonating anon and authenticated (a fixture
+-- insert must run under the same role as the request it stands in for), so both need USAGE.
+grant usage on schema tests to anon, authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Fixtures
+--
+-- Rows are seeded as the superuser (before any `set role`), because RLS is forced on
+-- these tables and the policies under test would otherwise block the setup itself.
+-- ---------------------------------------------------------------------------
+
+\set alice_id   '''11111111-1111-1111-1111-111111111111'''
+\set bob_id     '''22222222-2222-2222-2222-222222222222'''
+\set admin_id   '''33333333-3333-3333-3333-333333333333'''
+\set outsider_id '''44444444-4444-4444-4444-444444444444'''
+\set volunteer_id '''77777777-7777-7777-7777-777777777777'''
+\set rival_id   '''88888888-8888-8888-8888-888888888888'''
+\set rival_org_id '''eeeeeeee-0000-0000-0000-000000000002'''
+\set anon_user_id '''99999999-9999-9999-9999-999999999999'''
+\set org_id     '''eeeeeeee-0000-0000-0000-000000000001'''
+
+-- auth.users inserts fire handle_new_user (provisioning migration), which creates a
+-- 'client' profile for each — so public.users is never inserted directly here.
+insert into auth.users (id, email) values
+  (:alice_id,     'alice@example.org'),
+  (:bob_id,       'bob@example.org'),
+  (:admin_id,     'admin@dssg.nyc'),
+  (:outsider_id,  'outsider@other.org'),
+  (:volunteer_id, 'volunteer@dssg.nyc'),
+  (:rival_id,     'owner@rival.org');
+
+-- An anonymous sign-in (the public intake form's session): no email, is_anonymous set.
+-- 0001_core makes handle_new_user skip the profile row for it.
+insert into auth.users (id, email, is_anonymous) values (:anon_user_id, null, true);
+
+-- The admin is promoted out-of-band, the same way a real admin is (role is immutable to
+-- every API role). Since 0001_core, is_admin() reads organization_members rather than
+-- users.role, so the membership below is what grants admin authority; the profile role is
+-- kept in step so the fixture matches a real staff account.
+alter table users disable trigger user;
+update users set role = 'admin' where id = :admin_id;
+alter table users enable trigger user;
+
+-- Organization and memberships (0001_core). The outsider is authenticated but in NO org, which
+-- is what every cross-org isolation assertion below leans on. The volunteer is a DSSG
+-- volunteer given the 'admin' org role — under 0001_core the only role that grants reading any
+-- engagement the user does not own (see the KNOWN WRONG assertion).
+-- The rival owns a second org: an admin by 0001_core's is_admin(), but of a different org,
+-- which is what the telemetry/approval org-scoping assertions lean on.
+insert into organizations (id, name) values
+  (:org_id,       'DSSG Test Org'),
+  (:rival_org_id, 'Rival Org');
+
+insert into organization_members (organization_id, user_id, role) values
+  (:org_id, :alice_id,     'member'),
+  (:org_id, :bob_id,       'member'),
+  (:org_id, :admin_id,     'owner'),
+  (:org_id, :volunteer_id, 'admin'),
+  (:rival_org_id, :rival_id, 'owner');
+
+insert into businesses (id, name, type, owner_id, organization_id) values
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'Alice Nonprofit', 'nonprofit', :alice_id, :org_id),
+  ('bbbbbbbb-0000-0000-0000-000000000001', 'Bob Nonprofit',   'nonprofit', :bob_id,   :org_id);
+
+insert into engagements (id, business_id, owner_id, stage, status, organization_id) values
+  ('aaaaaaaa-0000-0000-0000-000000000010',
+   'aaaaaaaa-0000-0000-0000-000000000001', :alice_id, 'initial_meeting', 'pending',   :org_id),
+  ('bbbbbbbb-0000-0000-0000-000000000010',
+   'bbbbbbbb-0000-0000-0000-000000000001', :bob_id,   'initial_meeting', 'completed', :org_id);
+
+insert into scout_intakes (
+  id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+  problem_description, current_systems, timeline, referral_source,
+  bucket, confidence, rationale, poc_score, clarity_score, foothold_score,
+  composite_signal, flags, hitl_tier
+) values (
+  'cccccccc-0000-0000-0000-000000000001',
+  'Seeded Org', 'Dana Reyes, Director', 'dana@example.org', 'We do good things.',
+  '400 clients/year', 'analyze_data', 'Cannot report outcomes.', 'Spreadsheets',
+  'Next quarter', 'Word of mouth',
+  'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2'
+);
+
+-- Helpers ------------------------------------------------------------------
+
+create or replace function tests.login_as(uid uuid) returns void
+language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims',
+                     json_build_object('sub', uid::text, 'role', 'authenticated')::text,
+                     true);
+  execute 'set local role authenticated';
+end;
+$$;
+
+-- An anonymous session, as GoTrue issues it: role `authenticated`, is_anonymous true.
+create or replace function tests.login_anonymous(uid uuid) returns void
+language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims',
+                     json_build_object('sub', uid::text, 'role', 'authenticated',
+                                       'is_anonymous', true)::text,
+                     true);
+  execute 'set local role authenticated';
+end;
+$$;
+
+create or replace function tests.logout() returns void
+language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', '', true);
+  execute 'set local role anon';
+end;
+$$;
+
+-- The recorder's identity. service_role has BYPASSRLS, so only privileges bound it.
+create or replace function tests.as_service() returns void
+language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims',
+                     json_build_object('role', 'service_role')::text,
+                     true);
+  execute 'set local role service_role';
+end;
+$$;
+
+-- Runs a statement and reports how many rows it actually affected.
+--
+-- This is the matcher for RLS denial of UPDATE/DELETE. A policy whose USING clause
+-- excludes a row makes that row invisible, so the statement matches nothing and succeeds
+-- silently — there is no exception for throws_ok to catch. Asserting 0 here proves both
+-- that the write was refused and that no data changed. A data-modifying CTE cannot be used
+-- in a subquery expression, hence the function.
+create or replace function tests.affected(stmt text) returns int
+language plpgsql as $$
+declare n int;
+begin
+  execute stmt;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+-- The same intake as a submit_scout_intake() payload (0007): the form fields plus the
+-- routing result, no tier, no review keys. Append jsonb with `||` to vary a field.
+create or replace function tests.intake_payload() returns jsonb
+language sql immutable as $$
+  select '{"org_name": "Payload Org", "contact_name_role": "Sam Lee, ED",
+           "contact_email": "sam@example.org", "mission": "Mission text.",
+           "scale": "100 clients/year", "primary_need": "build_tool",
+           "problem_description": "We need a dashboard.", "current_systems": "Sheets",
+           "timeline": "Q3", "referral_source": "Referral",
+           "bucket": "Tooling & Automation", "confidence": "Medium", "rationale": "Reasoning.",
+           "poc_score": 2, "clarity_score": 2, "foothold_score": 2,
+           "composite_signal": "Conditional", "flags": ["one flag"]}'::jsonb
+$$;
+
+-- A valid public intake payload, used by several tests.
+create or replace function tests.intake_values(intake_id uuid) returns void
+language plpgsql as $$
+begin
+  insert into scout_intakes (
+    id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+    problem_description, current_systems, timeline, referral_source,
+    rationale, poc_score, clarity_score, foothold_score, composite_signal, hitl_tier
+  ) values (
+    intake_id, 'New Org', 'Sam Lee, ED', 'sam@example.org', 'Mission text.',
+    '100 clients/year', 'build_tool', 'We need a dashboard.', 'Sheets', 'Q3', 'Referral',
+    'Reasoning.', 2, 2, 2, 'Conditional', 'L3'
+  );
+end;
+$$;

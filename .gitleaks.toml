@@ -1,0 +1,19 @@
+# gitleaks config — picked up by the pre-commit hook (detect secrets) and by any
+# `gitleaks protect --staged` run from the repo root. Extends the default rules; the
+# allowlist below names the two test-fixture shapes that trip them and nothing else.
+title = "nonprofit-success-ai"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures that look like secrets but are not"
+regexes = [
+  # Hand-built bearer tokens in api/__tests__: header {"alg":"HS256"}, a stub `sub`
+  # claim, and the literal word "signature" (or "sig") base64-encoded as the signature.
+  # Nothing verifies them; the handlers only forward them to a mocked Supabase client.
+  '''^eyJhbGciOiJIUzI1NiJ9\.[A-Za-z0-9_-]+\.c2ln(bmF0dXJl)?$''',
+  # pgTAP idempotency-key fixtures in supabase/tests: '<agent>-key-0001',
+  # 'chronicle-key-0015-a', 'envoy-key-unrecorded', 'tx-revert-0001'.
+  '''^[a-z]+-(key|budget|first|revert|scoping)(-\d{4}(-[a-z])?|-unrecorded)$''',
+]
