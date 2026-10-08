@@ -1,3 +1,11 @@
+import type { z } from 'zod';
+import type {
+  scoutApproveRequestSchema,
+  scoutApproveResponseSchema,
+  scoutIntakeRequestSchema,
+  scoutIntakeResponseSchema,
+  scoutResultSchema,
+} from '../schemas/scout';
 import type { WriteTimestamp } from './domain';
 
 export const SCOUT_BUCKETS = [
@@ -42,17 +50,22 @@ export interface ScoutRoutingInput {
   timeline: string;
 }
 
-export interface ScoutResult {
-  bucket: ScoutBucket | null;
-  confidence: ScoutConfidence;
-  rationale: string;
-  poc_score: 1 | 2 | 3;
-  clarity_score: 1 | 2 | 3;
-  foothold_score: 1 | 2 | 3;
-  composite_signal: ScoutCompositeSignal;
-  flags: string[];
-  hitlTier: ScoutHitlTier;
-}
+/**
+ * The routing result, inferred from its wire schema — one definition, so the type and
+ * the runtime check on `/api/route-intake` cannot drift. Type-only imports: `schemas/`
+ * imports `SCOUT_BUCKETS` from here at runtime, so a value import back would be a cycle.
+ */
+export type ScoutResult = z.infer<typeof scoutResultSchema>;
+
+/** The form as posted to `/api/route-intake` — the route's input, validated server-side. */
+export type ScoutIntakeRequest = z.input<typeof scoutIntakeRequestSchema>;
+/** The route's reply: the result as filed (tier derived by `submit_scout_intake`) plus the row id. */
+export type ScoutIntakeResponse = z.infer<typeof scoutIntakeResponseSchema>;
+
+/** `POST /api/scout-approve` — the Scout-approve command's input (lifecycle.md §4 row 1). */
+export type ScoutApproveRequest = z.input<typeof scoutApproveRequestSchema>;
+/** Its reply: the review as filed, the linked business and the `initial_meeting` transition. */
+export type ScoutApproveResponse = z.infer<typeof scoutApproveResponseSchema>;
 
 export interface ScoutIntake {
   id: string;

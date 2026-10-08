@@ -1,27 +1,18 @@
-export type ChronicleReadiness = 'ready' | 'thin' | 'not_ready';
+import type { z } from 'zod';
+import type {
+  chronicleDraftRequestSchema,
+  chronicleDraftResponseSchema,
+  chronicleDraftSchema,
+  chronicleInputSchema,
+} from '../schemas/chronicle';
 
-export interface ChronicleInput {
-  engagementId: string;
-  orgName: string;
-  /** Only a completed engagement can be chronicled. */
-  status: string;
-  /** Whether the engagement links to an Architect assessment. */
-  hasPlan: boolean;
-  /** How many events were recorded over the engagement's life. */
-  eventCount: number;
-  /** `ArchitectCharter.objectives`, when a plan exists. */
-  objectives?: string[];
-  /** `ArchitectCharter.successCriteria`, when a plan exists. */
-  successCriteria?: string[];
-}
+// Wire shapes for /api/chronicle-draft: inferred from src/schemas/chronicle.ts, never
+// hand-written beside it (CLAUDE.md "One definition per shape"). Type-only imports.
 
-export interface ChronicleDraft {
-  engagementId: string;
-  /** Derived by `assessChronicleReadiness()`, never model-supplied. */
-  readiness: ChronicleReadiness;
-  headline: string;
-  narrative: string;
-  outcomes: string[];
-  /** Constant by construction: impact stories are public-facing and always human-approved. */
-  hitlTier: 'L3';
-}
+export type ChronicleDraft = z.infer<typeof chronicleDraftSchema>;
+export type ChronicleReadiness = ChronicleDraft['readiness'];
+export type ChronicleDraftRequest = z.infer<typeof chronicleDraftRequestSchema>;
+/** The draft-generation input, built server-side from engagement rows (`api/_engagement.ts`). */
+export type ChronicleInput = z.infer<typeof chronicleInputSchema>;
+/** What `/api/chronicle-draft` returns: the draft, which path wrote it, and its ids (null if nothing saved). */
+export type ChronicleDraftResponse = z.infer<typeof chronicleDraftResponseSchema>;

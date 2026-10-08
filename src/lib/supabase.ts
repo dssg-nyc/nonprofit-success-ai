@@ -1,5 +1,7 @@
 import {createClient} from '@supabase/supabase-js';
 
+import type {Database} from './database.types';
+
 // Supabase client, following this repo's fail-fast env convention: a missing variable
 // fails at import with a named error.
 //
@@ -22,7 +24,9 @@ if (missing.length > 0) {
   );
 }
 
-export const supabase = createClient(
+// Typed by src/lib/database.types.ts, generated from the local stack (`make db-types`).
+// Regenerate it in the same change as any migration.
+export const supabase = createClient<Database>(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY,
 );
@@ -44,9 +48,13 @@ export interface AppUser {
 
 export type AppRole = 'client' | 'admin';
 
-const toAppUser = (u: {id: string; email?: string | null; user_metadata?: Record<string, unknown>} | null):
-  AppUser | null =>
-  u
+// An anonymous session (ScoutIntakeForm signs a visitor in so /api/route-intake can
+// require a token) is not a signed-in member: it has no profile row and no role, and
+// must not route the visitor into the portal. It reads as "nobody" here.
+const toAppUser = (
+  u: {id: string; email?: string | null; is_anonymous?: boolean; user_metadata?: Record<string, unknown>} | null,
+): AppUser | null =>
+  u && !u.is_anonymous
     ? {
         uid: u.id,
         email: u.email ?? null,
@@ -84,7 +92,7 @@ export function onAuthChange(callback: (user: AppUser | null) => void): () => vo
 
 /**
  * The signed-in user's role, from public.users. Returns null if there is no profile row —
- * which should not happen, since 0008_user_provisioning.sql creates one per signup, but a
+ * which should not happen, since the user_provisioning migration creates one per signup, but a
  * null role fails closed everywhere it is checked rather than defaulting to admin.
  */
 export async function fetchRole(): Promise<AppRole | null> {
@@ -94,34 +102,7 @@ export async function fetchRole(): Promise<AppRole | null> {
 }
 
 export async function signOut(): Promise<void> {
-  clearOrgCache();
   await supabase.auth.signOut();
-}
-
-// ---------------------------------------------------------------------------
-// Organization context
-//
-// MVP single-org model: an authenticated user belongs to exactly one organization. This
-// returns that org's id, which callers pass as `organization_id` on writes. The query goes
-// through RLS (org_members_select), so it can only ever return orgs the user belongs to.
-// ---------------------------------------------------------------------------
-
-let cachedOrgId: string | null = null;
-
-export async function getCurrentOrgId(): Promise<string | null> {
-  if (cachedOrgId) return cachedOrgId;
-  const {data} = await supabase
-    .from('organization_members')
-    .select('organization_id')
-    .limit(1)
-    .maybeSingle();
-  cachedOrgId = data?.organization_id ?? null;
-  return cachedOrgId;
-}
-
-/** Clear the cached org id (call on sign-out so a new session re-fetches). */
-export function clearOrgCache(): void {
-  cachedOrgId = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -208,8 +189,14 @@ function mapKeys<T>(value: unknown, transform: (key: string) => string): T {
   ) as T;
 }
 
-/** camelCase → snake_case, for values on their way into the database. */
-export const toColumns = <T = Record<string, unknown>>(value: unknown): T =>
+/**
+ * camelCase → snake_case, for values on their way into the database.
+ *
+ * Pass the table's write shape so the typed client checks it:
+ * `toColumns<TablesInsert<'businesses'>>({...})`. The key mapping is a runtime transform
+ * TypeScript cannot follow, so the caller names the shape; there is no unchecked default.
+ */
+export const toColumns = <T,>(value: unknown): T =>
   mapKeys<T>(value, toSnake);
 
 /** snake_case → camelCase, for rows on their way out of the database. */
