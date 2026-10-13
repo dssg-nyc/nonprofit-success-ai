@@ -105,15 +105,24 @@ describe("generateChronicleDraft — ready", () => {
     expect(result.narrative).toContain("Harbor Youth Collective");
   });
 
-  it("draws outcomes from the success criteria", () => {
-    expect(draft().outcomes).toEqual([
-      "Quarterly funder report produced in under a day",
-    ]);
+  it("states the success criteria as a definition, never as outcomes", () => {
+    const result = draft();
+    expect(result.narrative).toContain(
+      "Success was defined as: Quarterly funder report produced in under a day.",
+    );
+    expect(result.outcomes).toEqual([]);
   });
 
-  it("falls back to objectives when no success criteria were recorded", () => {
+  it("claims no outcomes from objectives either when no success criteria were recorded", () => {
     const result = draft({ successCriteria: undefined });
-    expect(result.outcomes).toEqual(READY.objectives);
+    expect(result.outcomes).toEqual([]);
+    expect(result.narrative).not.toContain("Success was defined as");
+  });
+
+  it("omits the objective sentence rather than inventing one when no objectives were recorded", () => {
+    const result = draft({ objectives: undefined });
+    expect(result.narrative).not.toContain("set out to");
+    expect(result.narrative).not.toContain("scoped with the organisation");
   });
 
   it("claims no outcomes when neither was recorded", () => {
@@ -144,6 +153,77 @@ describe("generateChronicleDraft — thin", () => {
     const result = draft({ hasPlan: false, eventCount: 8 });
     expect(result.readiness).toBe("thin");
     expect(result.narrative).toContain("provisional");
+  });
+
+  it.each([
+    ["by event count", { eventCount: 1 }],
+    ["by missing plan", { hasPlan: false, eventCount: 8 }],
+    ["with summaries", { eventCount: 2, eventSummaries: ["mapped the intake sheet"] }],
+  ] as Array<[string, Partial<ChronicleInput>]>)(
+    "thin %s says provisional within the first two sentences (R18)",
+    (_label, overrides) => {
+      const sentences = draft(overrides).narrative.split(/(?<=\.)\s+/);
+      expect(sentences.slice(0, 2).join(" ")).toMatch(/provisional|needs review/i);
+    },
+  );
+});
+
+describe("generateChronicleDraft — a completed record is never told as starting (R18)", () => {
+  it.each([
+    ["ready", {}],
+    ["thin by event count", { eventCount: 1 }],
+    ["thin by missing plan", { hasPlan: false, eventCount: 8 }],
+    ["thin with no material", { eventCount: 2, objectives: undefined, successCriteria: undefined }],
+  ] as Array<[string, Partial<ChronicleInput>]>)("%s", (_label, overrides) => {
+    const result = draft({ ...overrides, status: "completed" });
+    expect(result.narrative).not.toMatch(/\bbegan\b|\bbegins\b|\bis starting\b|\bongoing\b/i);
+    expect(result.narrative).toContain("completed an engagement");
+  });
+});
+
+describe("generateChronicleDraft — event summaries (R18, D48)", () => {
+  const SUMMARIES = [
+    "mapped the two intake spreadsheets",
+    "agreed the three figures the quarterly report needs",
+    "handed over a refresh checklist",
+  ];
+
+  it("quotes them verbatim, in order, as the second paragraph on a ready record", () => {
+    const result = draft({ eventCount: 3, eventSummaries: SUMMARIES });
+    const [first, second, ...rest] = result.narrative.split("\n\n");
+    expect(rest).toEqual([]);
+    expect(first).toContain("Success was defined as");
+    expect(first).not.toContain("recorded touchpoints");
+    expect(second).toBe(
+      "Over 3 recorded touchpoints the team mapped the two intake spreadsheets; agreed the three figures the quarterly report needs; handed over a refresh checklist.",
+    );
+  });
+
+  it("uses them on a thin record too, after the provisional marker", () => {
+    const result = draft({ eventCount: 2, eventSummaries: SUMMARIES.slice(0, 2) });
+    expect(result.readiness).toBe("thin");
+    const [first, second] = result.narrative.split("\n\n");
+    expect(first).toContain("This account is provisional");
+    expect(second).toBe(
+      "Over 2 recorded touchpoints the team mapped the two intake spreadsheets; agreed the three figures the quarterly report needs.",
+    );
+  });
+
+  it("adds nothing the summaries do not say", () => {
+    const result = draft({ eventCount: 3, eventSummaries: SUMMARIES });
+    const paragraph = result.narrative.split("\n\n")[1];
+    const quoted = paragraph.replace(/^Over 3 recorded touchpoints the team /, "").replace(/\.$/, "");
+    expect(quoted.split("; ")).toEqual(SUMMARIES);
+  });
+
+  it("treats an empty or blank list as absent", () => {
+    expect(draft({ eventSummaries: [] }).narrative).toBe(draft().narrative);
+    expect(draft({ eventSummaries: ["  "] }).narrative).toBe(draft().narrative);
+    expect(draft({ eventCount: 1, eventSummaries: [] }).narrative).not.toContain("recorded touchpoints");
+  });
+
+  it("is still suppressed on a not_ready record", () => {
+    expect(draft({ status: "in_progress", eventSummaries: SUMMARIES }).narrative).toBe("");
   });
 });
 
@@ -203,10 +283,25 @@ describe("chronicleModelSchema", () => {
     expect("engagementId" in chronicleModelSchema.shape).toBe(false);
   });
 
-  it("permits empty story fields, unlike Envoy", () => {
-    expect(() =>
-      chronicleModelSchema.parse({ headline: "", narrative: "", outcomes: [] }),
-    ).not.toThrow();
+  it("requires a headline and a narrative, and caps them", () => {
+    const story = { headline: "A story", narrative: "It happened.", successFactors: [], failureFactors: [] };
+    expect(chronicleModelSchema.safeParse(story).success).toBe(true);
+    expect(chronicleModelSchema.safeParse({ ...story, headline: "" }).success).toBe(false);
+    expect(chronicleModelSchema.safeParse({ ...story, narrative: "" }).success).toBe(false);
+    expect(chronicleModelSchema.safeParse({ ...story, headline: "h".repeat(201) }).success).toBe(false);
+    expect(chronicleModelSchema.safeParse({ ...story, narrative: "n".repeat(4_001) }).success).toBe(false);
+  });
+
+  it("does not ask the model for outcomes — nothing in the input records an achievement (D46)", () => {
+    expect(chronicleModelSchema.shape).not.toHaveProperty("outcomes");
+    const parsed = chronicleModelSchema.parse({
+      headline: "A story",
+      narrative: "It happened.",
+      outcomes: ["Reduced reporting time by 40%"],
+      successFactors: [],
+      failureFactors: [],
+    });
+    expect(parsed).not.toHaveProperty("outcomes");
   });
 
   it("accepts the story fields a model is asked to write", () => {
@@ -215,7 +310,45 @@ describe("chronicleModelSchema", () => {
         headline: "Faster funder reporting",
         narrative: "The organisation cut its reporting time.",
         outcomes: ["Reports produced in a day"],
+        successFactors: ["A named funder-report owner"],
+        failureFactors: [],
       }),
     ).not.toThrow();
+  });
+
+  const STORY = { headline: "h", narrative: "n", outcomes: [], successFactors: [], failureFactors: [] };
+
+  it("rejects more than ten factors", () => {
+    const eleven = Array.from({ length: 11 }, (_, i) => `factor ${i}`);
+    expect(chronicleModelSchema.safeParse({ ...STORY, successFactors: eleven }).success).toBe(false);
+    expect(chronicleModelSchema.safeParse({ ...STORY, failureFactors: eleven }).success).toBe(false);
+  });
+
+  it("accepts exactly ten factors", () => {
+    const ten = Array.from({ length: 10 }, (_, i) => `factor ${i}`);
+    expect(chronicleModelSchema.safeParse({ ...STORY, successFactors: ten }).success).toBe(true);
+  });
+
+  it("rejects an empty or over-long factor string", () => {
+    expect(chronicleModelSchema.safeParse({ ...STORY, successFactors: [""] }).success).toBe(false);
+    expect(chronicleModelSchema.safeParse({ ...STORY, failureFactors: ["x".repeat(301)] }).success).toBe(false);
+  });
+
+  it("requires both factor lists", () => {
+    const missing: Partial<typeof STORY> = { ...STORY };
+    delete missing.successFactors;
+    expect(chronicleModelSchema.safeParse(missing).success).toBe(false);
+  });
+});
+
+describe("the deterministic fallback proposes no factors", () => {
+  it.each([
+    ["ready", {}],
+    ["thin", { eventCount: 1 }],
+    ["not_ready", { status: "in_progress" }],
+  ] as Array<[string, Partial<ChronicleInput>]>)("%s returns empty factor lists", (_label, overrides) => {
+    const result = draft(overrides);
+    expect(result.successFactors).toEqual([]);
+    expect(result.failureFactors).toEqual([]);
   });
 });

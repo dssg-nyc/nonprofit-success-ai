@@ -5,3 +5,4 @@ export * from './pulse';
 export * from './envoy';
 export * from './chronicle';
 export * from './approval';
+export * from './engagement';

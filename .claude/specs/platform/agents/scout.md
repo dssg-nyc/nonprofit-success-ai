@@ -1,11 +1,15 @@
 # Scout Agent
 **Plate:** C3.1 in docs/nonprofit-success-system-design.html
-**Status:** BUILT, NOT WIRED
+**Status:** see `roadmap.md` D1, D7, D23 (built), D14, D26, D42 (open) — build state lives only in the registry and in CLAUDE.md
 **PRD sections:** §5, §6, §7, §9 CF1
 
-> Engineering note: routing logic exists in `src/lib/scoutRouting.ts` and
-> `src/components/ScoutIntakeForm.tsx` but is not wired to a Vercel Function or Supabase.
-> `src/agents/scout/` does not exist yet — current code is under `src/lib/`.
+> Engineering note: the deterministic router is `src/agents/scout/routing.ts`, the model
+> path `src/agents/scout/model.ts`, served by `api/route-intake.ts`. `ScoutIntakeForm.tsx`
+> POSTs the whole form there (`ScoutIntakeRequest`); the route routes it (model, else the
+> heuristic with the flag "Routed by the deterministic fallback — model unavailable
+> (<code>)", which the review queue shows) and files it through `submit_scout_intake()`
+> (0007) — the browser never writes `scout_intakes`. `scout_routing_pass_rate` is gated at
+> 1.0 over 21 cases.
 
 ## Responsibility
 
@@ -33,7 +37,7 @@ CSA later expands on).
 
 ### Three readiness dimensions
 
-Scored from the intake answers (`src/lib/scoutRouting.ts`):
+Scored from the intake answers (`src/agents/scout/routing.ts`):
 
 - **POC score** — is there a named point of contact who can actually unblock work.
 - **Clarity score** — how well-formed the org's own ask is.
@@ -41,8 +45,14 @@ Scored from the intake answers (`src/lib/scoutRouting.ts`):
 
 ### Routing algorithm
 
-`routeScoutIntake()` in `src/lib/scoutRouting.ts` is the deterministic fallback and runs
-the same three-step process the model call also produces:
+`routeScoutIntake()` in `src/agents/scout/routing.ts` is the deterministic fallback and runs
+the same three-step process the model path also produces. On the model path
+(`src/agents/scout/model.ts`, prompt `scout-routing-0.06` — the tiebreak, foothold floor and confidence rule in the heuristic's own words, R17; 0.06 states the floor as a prohibition above the tiebreak, adds a worked example per shape run 2 missed, and has the rationale name the intake detail instead of quoting a score, R18) only step 1 is the model's: code
+scores readiness first (`scoreReadiness()`, the same rubric as the fallback) and hands the
+three scores and the signal to the model as facts; the model returns bucket, confidence,
+rationale and flags; `enforceRoutingRules()` then nulls a `something_else` bucket and caps a
+re-bucket at Low confidence before the tier is derived. *(0.02 asked the model to score
+readiness: 7 of its 10 fixture misses were a `Ready` the rubric did not give.)*
 
 1. **Bucket assignment** — Q6 sets the bucket hypothesis; Q7 free-text cross-checks via
    keyword match; Q5/Q8 break ties when Q7 is ambiguous.
@@ -54,7 +64,7 @@ the same three-step process the model call also produces:
 
 ### The composite rule — POC is decisive in both directions
 
-`compositeSignal(poc, clarity, foothold)` in `src/lib/scoutRouting.ts`, evaluated in this
+`compositeSignal(poc, clarity, foothold)` in `src/agents/scout/routing.ts`, evaluated in this
 order:
 
 ```ts
@@ -101,7 +111,7 @@ pinned by golden fixtures. Closes D10.
   moves forward.
 
 The prior `scout-build-spec.md` §3 described a third tier (L4, auto-decline for very-low-
-signal intakes). This was not implemented — `src/lib/scoutRouting.ts` has no third queue
+signal intakes). This was not implemented — `src/agents/scout/routing.ts` has no third queue
 and its own comment confirms an L2/L3 split only. Carried as a dropped requirement in the
 trace.
 
@@ -148,7 +158,7 @@ rather than defaulted to one.
 
 ## §3 Deterministic fallback
 
-`src/lib/scoutRouting.ts` is the required deterministic fallback for intake routing. It is
+`src/agents/scout/routing.ts` is the required deterministic fallback for intake routing. It is
 not a stub waiting to be replaced — `/api` falls back to it when the real model call
 fails, and it stays in the path permanently. The fallback must produce the identical output
 shape as the model path — a drop-in swap, not a degraded path.
@@ -163,18 +173,23 @@ Target: moves to `src/agents/scout/routing.ts` with tests. No tests exist yet.
   (High/Medium/Low/null), `rationale`, `poc_score`, `clarity_score`, `foothold_score`
   (each 1|2|3), `composite_signal` (Ready/Conditional/Not Ready), `flags[]`,
   `hitlTier` (L2|L3)
-- **Side effects:** Writes one `scout_intakes` row (intake fields + computed output
-  fields); review fields written later by admin.
+- **Side effects:** `submit_scout_intake()` (0007) writes one `scout_intakes` row
+  (intake fields + computed output fields) and fills the routing provenance columns
+  (`routing_source` `ai`/`derived`, `routing_run_id`, `routing_model`,
+  `routing_prompt_version`, 0001_core) from the linked `agent_runs` row; review fields
+  are written later by admin. The route answers `{ ...ScoutResult, intakeId, routingSource }`.
 
 ## Rules
 
-- `hitlTier` is derived server-side: `L2` iff `confidence === 'High' && composite_signal === 'Ready'`; `L3` otherwise. The model schema must never include `hitlTier` as a field to generate.
-- `composite_signal` is derived from the three scores, not generated by the model. Floor rule: any score of 1 → Conditional, regardless of sum.
+- `hitlTier` is derived server-side: `L2` iff `confidence === 'High' && composite_signal === 'Ready'`; `L3` otherwise. The model schema must never include `hitlTier` as a field to generate. The tier that is *filed* is derived again inside `submit_scout_intake()` from the linked `agent_runs` row (service-role written): `L2` only if that run is a Scout success recorded as `L2` and the result is still High + Ready; everything else, including every fallback-routed intake, is `L3`. Neither the browser nor the route can pass a tier.
+- `composite_signal` is derived from the three scores, not generated by the model, and since prompt 0.03 the three scores are not generated by the model either (`scoreReadiness()` in `routing.ts`; `scoutModelSchema` omits them). Evaluated as in the composite rule above: POC = 1 with sum > 3 → Not Ready; otherwise any score of 1 → Conditional.
+- A bucket other than the stated need's default is never High confidence (the description-wins rule gives it Low). `enforceRoutingRules()` in `model.ts` caps such an answer at Low with a flag, so a re-bucket cannot reach `L2` whatever the model returns.
 - `something_else` primary_need bypasses auto-bucket entirely: `bucket = null`, `confidence = null`, `hitlTier = 'L3'` always.
-- Intake fields are public write-once (submitted by the nonprofit rep). Review fields (`reviewStatus`, `reviewAction`, `finalBucket`, `reviewedBy`, etc.) are admin-only update.
+- `/api/route-intake` requires a Supabase bearer token. The applicant has no account, so `ScoutIntakeForm` signs them in anonymously first (Supabase Auth, rate-limited per IP; no `users` profile is created — 0001_core) and the SPA treats that session as signed out. No token, or a failed route → nothing is filed and the form shows an error; the applicant is never thanked for an application that does not exist. Each session also has an hourly model-call budget (`check_model_budget()`, 0007): past `MODEL_CALLS_PER_HOUR` the intake is still filed, routed by the deterministic fallback with a `model_budget_exceeded` flag — the applicant is never turned away over a quota they cannot see; only the staff routes answer 429.
+- Intake fields are written once, through `submit_scout_intake()` only — `anon` and `authenticated` have no insert grant on `scout_intakes`. Review fields (`reviewStatus`, `reviewAction`, `finalBucket`, `reviewedBy`, etc.) are admin-only update. `reviewStatus` is `pending` → `needs_info` (parked while the admin asks the applicant something; no action or bucket) → `reviewed` (`approved`/`edited` only through `approve_scout_intake()`; `redirected` = declined, a direct update). A declined intake can be reopened by the same function with `p_reopen` (0010), which is how a declined intake re-enters the pipeline.
 - Deterministic fallback must produce the identical output shape as the model path — a drop-in swap, not a degraded path.
 - No new Firebase surface area. Screens must retarget to `scout_intakes` (Supabase), not `demoStore`.
-- `composite_signal` and `hitlTier` are **derived, never model-supplied** — even once the real model call replaces the deterministic bucket/confidence heuristic, routing tier and readiness stay computed from the model's structured output, not asserted by it.
+- `composite_signal`, the three readiness scores and `hitlTier` are **derived, never model-supplied** — the model call replaces only the deterministic bucket/confidence heuristic; readiness and routing tier stay computed in code, not asserted by the model.
 - The transcript (meeting intelligence path) must never appear in logs — not in request construction, error paths, or retries.
 - Meeting intelligence: `stop_reason === 'refusal'` and `stop_reason === 'max_tokens'` are hard failures; produce no `extracted_facts` rows rather than an incomplete set.
 - Action items without a `due_date` surface to staff without a reminder; no default date is assigned.
@@ -183,7 +198,7 @@ Target: moves to `src/agents/scout/routing.ts` with tests. No tests exist yet.
 
 - **Imports:** `src/types.ts` (ScoutBucket, PrimaryNeed, ScoutConfidence, ScoutCompositeSignal, ScoutHitlTier); future: `src/model/` gateway, `src/observability/recorder.ts`
 - **Imported by:** Public intake form component; `ScoutReviewQueue` component (staff-facing)
-- **Data:** `scout_intakes` table (`supabase/migrations/0001_init.sql`); `meetings` and `extracted_facts` tables (meeting intelligence); `agent_runs` table (`_deferred/0004_telemetry.sql`)
+- **Data:** `scout_intakes` and `agent_runs` tables (`0001_core.sql`); `submit_scout_intake()` and `check_model_budget()` (`0007_scout_intake_and_budget.sql`); `meetings` and `extracted_facts` tables (meeting intelligence, not built)
 
 ## Delta rows
 
@@ -229,12 +244,12 @@ Cited from [`roadmap.md`](../../roadmap.md) — this spec does not mint numbers.
 
 | Old requirement | Source | Now at | Status |
 |---|---|---|---|
-| Five-bucket routing (Advisory as first-tier) | `scout-design.md` §Buckets | §1 / `src/lib/scoutRouting.ts` | Carried |
+| Five-bucket routing (Advisory as first-tier) | `scout-design.md` §Buckets | §1 / `src/agents/scout/routing.ts` | Carried |
 | Three readiness dimensions (POC, clarity, foothold) | `scout-design.md` §Scoring | §1 | Carried |
 | Q7-wins rule, Conditional tiebreaker | `scout-build-spec.md` §2 | §1 | Carried |
 | Tally intake form | `scout-build-spec.md` §1 | §1 — retargeted to `ScoutIntakeForm.tsx` | Carried, retargeted |
 | n8n IF node (tier routing) | `scout-build-spec.md` §3 | §1 — retargeted to `deriveHitlTier()` | Carried, retargeted |
-| L4 auto-decline tier | `scout-build-spec.md` §3 | §1 | Dropped — not implemented in `src/lib/scoutRouting.ts`; no third queue exists in shipped code |
+| L4 auto-decline tier | `scout-build-spec.md` §3 | §1 | Dropped — not implemented in `src/agents/scout/routing.ts`; no third queue exists in shipped code |
 | Anthropic API extraction call | `scout-build-spec.md` §Anthropic call spec | §2 — retargeted to `api/route-intake.ts` via `generateObject` | Carried, retargeted |
 | n8n node sequence | `scout-build-spec.md` | §2 | Carried, retargeted to Vercel Functions |
 | Confidence levels table | `scout-build-spec.md` | §1 | Carried |
@@ -244,3 +259,12 @@ Cited from [`roadmap.md`](../../roadmap.md) — this spec does not mint numbers.
 | Transcript-not-logged constraint | prior n8n meeting-intelligence flow (implicit in node handling) | §2 | Carried, made explicit |
 | Calendar-reminder downstream logic | prior n8n meeting-intelligence flow downstream nodes | §2 Downstream | Carried |
 | `compositeSignal()` Not-Ready-unreachable bug | (none — found reading shipped code) | §"The composite rule" | Changed — fixed 2026-08-21 by porting the decisive-POC rule from the prototype's `scout/routing.ts`. The fork had already resolved this with rationale and golden fixtures; the answer was neither option this spec originally posed |
+
+## Open: score definitions vs code (found writing R4 fixtures, 2026-10-06)
+
+- **POC:** this spec defines it as a named contact; the code also gives POC 2 for a concrete
+  timeline with no role.
+- **Foothold:** this spec defines it as DSSG's existing relationship; the code scores the
+  org's current systems (`REAL_SYSTEMS_SIGNAL`).
+
+Fixtures avoid both gaps. Decide which is right, then add the cases.

@@ -18,7 +18,12 @@ export interface PlanGenerationInput {
   q18_past_blockers: string;
 }
 
-const WORKSTREAM_DEFS: Record<
+/**
+ * The required workstream each flagged dimension becomes. Exported so the grounding
+ * grader (`evals/graders/heuristic/grounding.ts`) can check that every required
+ * workstream traces to a flag or to `DATA_FOUNDATIONS`.
+ */
+export const WORKSTREAM_DEFS: Record<
   "data_infrastructure" | "governance",
   CharterWorkstream
 > = {
@@ -26,45 +31,87 @@ const WORKSTREAM_DEFS: Record<
     name: "Data Integration & Hygiene",
     required: true,
     description:
-      "Connect siloed systems, standardize collection across programs, and establish baseline data quality. Required workstream — flagged Foundational on the Data Infrastructure dimension.",
+      "Connect siloed systems, standardize collection across programs, and establish baseline data quality. Required workstream — flagged on the Data Infrastructure dimension.",
   },
   governance: {
     name: "Reporting Automation",
     required: true,
     description:
-      "Stand up a regular, semi-automated reporting rhythm to funders and the board. Required workstream — flagged Foundational on the Governance dimension.",
+      "Name an owner for every recurring funder and board report, write down the reporting calendar and the data each report draws on, then automate the most manual one. Required workstream — flagged on the Governance dimension.",
   },
 };
 
-const BUCKET_DELIVERABLES: Record<
+/**
+ * The build_basics workstream when nothing is flagged: the plan's phases describe
+ * collection, storage and a first summary, so the charter names that work rather than
+ * carrying an empty list (run 1, 2026-10-08: a zero-flag Foundational charter listed no
+ * workstreams and the judge failed it on completeness).
+ */
+export const DATA_FOUNDATIONS: CharterWorkstream = {
+  name: "Data Foundations",
+  required: true,
+  description:
+    "Stand up the collection, storage and first summary the plan describes.",
+};
+
+/**
+ * What kind of thing each bucket's deliverable is. The last success criterion of a
+ * ship_deliverable / accelerate charter is chosen by kind, so a roadmap or a model is
+ * never promised "a recurring report from the new pipeline" (run 2, 2026-10-08: 8 of the
+ * 11 architectCharter judge failures quoted that criterion on Advisory and ML shapes).
+ */
+export type DeliverableKind = "pipeline" | "dashboard" | "roadmap" | "model";
+
+export const BUCKET_DELIVERABLES: Record<
   ScoutBucket,
-  { name: string; description: string }
+  { name: string; description: string; kind: DeliverableKind }
 > = {
   "Data Infrastructure": {
     name: "Unified Data Pipeline",
     description:
       "Consolidate program data into a single, documented pipeline the org can maintain.",
+    kind: "pipeline",
   },
   "Analytics & Insight": {
     name: "Board-Facing Insight Report",
     description:
       "A repeatable quarterly analysis of program outcomes, built on the org's own data.",
+    // A repeatable analysis is a pipeline with a report at the end of it.
+    kind: "pipeline",
   },
   "ML / Predictive": {
     name: "Predictive Risk-Model Prototype",
     description:
       "A first working model on historical data, with an honest evaluation of what it can and can't predict.",
+    kind: "model",
   },
   "Tooling & Automation": {
     name: "Operational Dashboard v1",
     description:
-      "A live dashboard replacing the org's most painful manual reporting workflow.",
+      "A live dashboard for the workflow the assessment names as most manual.",
+    kind: "dashboard",
   },
   "Advisory / Strategy": {
     name: "Data-Strategy Roadmap",
     description:
       "A prioritized, right-sized roadmap for the org's next 12 months of data investment.",
+    kind: "roadmap",
   },
+};
+
+/**
+ * The deliverable-specific success criterion: the one claim the charter makes about the
+ * deliverable working, phrased for what the deliverable is. Exported so the grounding
+ * grader can hold a charter to the criterion its deliverable kind supports.
+ */
+export const DELIVERABLE_CRITERION: Record<DeliverableKind, string> = {
+  pipeline:
+    "One recurring report produced from the new pipeline without manual steps",
+  dashboard:
+    "One recurring report produced from the new pipeline without manual steps",
+  roadmap: "Roadmap adopted by the board with a named owner per initiative",
+  model:
+    "Model evaluated against a held-out period with its error stated to the org",
 };
 
 export function generateNinetyDayPlan(
@@ -109,7 +156,8 @@ export function generateNinetyDayPlan(
           ],
         },
       ],
-      workstreams: flaggedWorkstreams,
+      workstreams:
+        flaggedWorkstreams.length > 0 ? flaggedWorkstreams : [DATA_FOUNDATIONS],
     };
   }
 
@@ -141,7 +189,7 @@ export function generateNinetyDayPlan(
           window: "Days 61–90",
           title: "Clear the Flags",
           milestones: [
-            "Verify both dimensions now operate at Developing level",
+            "Confirm each flagged dimension has a named owner and a written procedure in use",
             "Hand off documentation and the reporting rhythm to org staff",
             "Charter Phase 2 — the deferred project — if flags have cleared",
           ],
@@ -239,7 +287,11 @@ export function generateNinetyDayPlan(
         ],
       },
     ],
+    // Spec §2 step 4: a Foundational Governance score is a required workstream at every
+    // composite level. Established can still carry one (di=3, gov=1 reaches 17 points),
+    // and the charter's risks already name it as non-skippable — so the plan must too.
     workstreams: [
+      ...flaggedWorkstreams,
       {
         name: deliverable.name,
         required: false,
@@ -249,13 +301,31 @@ export function generateNinetyDayPlan(
   };
 }
 
+/**
+ * How many of `generateCharter()`'s risks are structural: the cross-check, the DI
+ * override note and one per required workstream, always first and in that order. They
+ * restate rubric outcomes, so model enrichment may not reword them
+ * (`agents/architect/model.ts` `mergeEnrichment()`); the org-stated risks after them are
+ * prose and may be reworded.
+ */
+export function structuralRiskCount(maturity: MaturityResult): number {
+  return (
+    (maturity.crossCheckFlag ? 1 : 0) +
+    (maturity.overrideApplied ? 1 : 0) +
+    maturity.flaggedDimensions.length
+  );
+}
+
 export function generateCharter(input: PlanGenerationInput): ArchitectCharter {
   const { orgName, bucket, maturity } = input;
   const plan = generateNinetyDayPlan(input);
   const deliverable = BUCKET_DELIVERABLES[bucket];
 
   const scopeByLevel: Record<string, string> = {
-    Foundational: `Infrastructure and data-hygiene engagement. This charter scopes the basics — systematic collection, a stable home for data, and a first internal summary. No analysis or modeling is promised in this window.`,
+    // Only a flagged dimension is "required" in the prose: Data Foundations stands in
+    // when nothing is flagged, and calling it required reads as a flag the assessment
+    // never raised (run 2, 2026-10-08).
+    Foundational: `Infrastructure and data-hygiene engagement. This charter scopes the basics — systematic collection, a stable home for data, and a first internal summary. The plan's three phases (map and stabilize, standardize, prove the habit) are the core work${maturity.flaggedDimensions.length > 0 ? `, with the required ${plan.workstreams.map((w) => w.name).join(" and ")} workstream${plan.workstreams.length > 1 ? "s" : ""} running inside them` : ""}. No analysis or modeling is promised in this window.`,
     Developing: maturity.remediationOnly
       ? `Remediation-only engagement. Both flagged workstreams (${plan.workstreams.map((w) => w.name).join(" and ")}) are the deliverable for this 90-day window; the ${deliverable.name} is deferred to Phase 2.`
       : `One scoped ${bucket} project: the ${deliverable.name}, shipped within the 90-day window${maturity.flaggedDimensions.length > 0 ? `, with the required ${WORKSTREAM_DEFS[maturity.flaggedDimensions[0]].name} workstream running alongside` : ""}.`,
@@ -313,14 +383,21 @@ export function generateCharter(input: PlanGenerationInput): ArchitectCharter {
           ]
         : plan.shape === "remediation_only"
           ? [
-              "Both flagged dimensions verifiably operating at Developing level",
+              "Each flagged dimension has a named owner and a written procedure in use",
               "Documentation and reporting rhythm handed off to staff",
               "Phase 2 charter ready if flags cleared",
             ]
           : [
-              `${deliverable.name} delivered and in real use by day 90`,
+              // The override means some source data is not integrated yet: promise the
+              // deliverable on what is, not on data the engagement cannot rely on.
+              maturity.overrideApplied
+                ? `${deliverable.name} delivered by day 90 on the data that is already integrated; anything that needs the still-siloed sources waits for Phase 2`
+                : `${deliverable.name} delivered and in real use by day 90`,
               "Org staff trained to own the deliverable independently",
-              "A measurable improvement the org can cite to funders",
+              ...(maturity.flaggedDimensions.includes("governance")
+                ? ["Every recurring funder and board report has a named owner and a documented data source"]
+                : []),
+              DELIVERABLE_CRITERION[deliverable.kind],
             ],
     cadence:
       maturity.compositeLevel === "Foundational"

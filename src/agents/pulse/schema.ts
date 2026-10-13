@@ -1,13 +1,7 @@
-import { z } from 'zod';
+import type { z } from 'zod';
+import { pulseSignalSchema } from '../../schemas/pulse';
 
-export const pulseSignalSchema = z.object({
-  engagementId: z.string(),
-  status: z.enum(['on_track', 'at_risk', 'stalled']),
-  reasons: z.array(z.string()),
-  daysSinceLastEvent: z.number().nullable().nonoptional(),
-  daysInStage: z.number(),
-  hasPlan: z.boolean(),
-  hitlTier: z.literal('L2'),
-});
+// The wire schema lives in src/schemas (agents import schemas, never the reverse).
+export { pulseSignalSchema };
 
 export type PulseSignalPayload = z.infer<typeof pulseSignalSchema>;

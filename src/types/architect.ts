@@ -1,19 +1,63 @@
+import type { z } from 'zod';
+import type {
+  architectCharterSchema,
+  architectPlanRequestSchema,
+  architectPlanResponseSchema,
+  budgetSpeedSchema,
+  charterWorkstreamSchema,
+  collectionScopeSchema,
+  compositeLevelSchema,
+  csaAnswersSchema,
+  csaFullAnswersSchema,
+  csaToolSchema,
+  decisionEmpowermentSchema,
+  flaggedDimensionSchema,
+  integrationFamiliaritySchema,
+  maturityResultSchema,
+  maturityScoreSchema,
+  ninetyDayPhaseSchema,
+  ninetyDayPlanSchema,
+  ninetyDayPlanShapeSchema,
+  qualityConfidenceSchema,
+  reportingAutomationSchema,
+  staffConfidenceSchema,
+  systemIntegrationSchema,
+} from '../schemas/architect';
 import type { WriteTimestamp } from './domain';
 import type { ScoutBucket, ScoutConfidence, ScoutCompositeSignal } from './scout';
 
-export type MaturityScore = 1 | 2 | 3;
-export type CompositeLevel = 'Foundational' | 'Developing' | 'Established';
-export type FlaggedDimension = 'data_infrastructure' | 'governance';
+// Wire shapes for /api/architect-plan: inferred from src/schemas/architect.ts, never
+// hand-written beside it (CLAUDE.md "One definition per shape"). Type-only import, so
+// the schemas -> types constant imports do not form a runtime cycle.
 
-export type CollectionScope = 'systematic' | 'partial' | 'not_systematic';
-export type SystemIntegration = 'own_island' | 'some_share' | 'most_share_auto';
-export type IntegrationFamiliarity = 'not_familiar' | 'somewhat_familiar' | 'very_familiar';
-export type QualityConfidence = 'not_confident' | 'mixed' | 'very_confident';
-export type DecisionEmpowerment = 'not_from_data' | 'leadership_managers' | 'anyone_with_access';
-export type ReportingAutomation = 'none_manual' | 'semi_automated' | 'mostly_automated';
-export type StaffConfidence = 'low_comfort' | 'some_adhoc' | 'dedicated_staff';
-export type BudgetSpeed = 'case_by_case' | 'requires_approval' | 'fast';
-export type CsaTool = 'spreadsheets' | 'crm_case_tool' | 'reporting_analytics' | 'forms_surveys' | 'accounting' | 'other';
+export type MaturityScore = z.infer<typeof maturityScoreSchema>;
+export type CompositeLevel = z.infer<typeof compositeLevelSchema>;
+export type FlaggedDimension = z.infer<typeof flaggedDimensionSchema>;
+
+export type CollectionScope = z.infer<typeof collectionScopeSchema>;
+export type SystemIntegration = z.infer<typeof systemIntegrationSchema>;
+export type IntegrationFamiliarity = z.infer<typeof integrationFamiliaritySchema>;
+export type QualityConfidence = z.infer<typeof qualityConfidenceSchema>;
+export type DecisionEmpowerment = z.infer<typeof decisionEmpowermentSchema>;
+export type ReportingAutomation = z.infer<typeof reportingAutomationSchema>;
+export type StaffConfidence = z.infer<typeof staffConfidenceSchema>;
+export type BudgetSpeed = z.infer<typeof budgetSpeedSchema>;
+export type CsaTool = z.infer<typeof csaToolSchema>;
+
+/** The nine scored CSA answers. */
+export type CsaAnswers = z.infer<typeof csaAnswersSchema>;
+/** All eighteen CSA answers, scored and narrative. */
+export type CsaFullAnswers = z.infer<typeof csaFullAnswersSchema>;
+
+export type MaturityResult = z.infer<typeof maturityResultSchema>;
+export type CharterWorkstream = z.infer<typeof charterWorkstreamSchema>;
+export type ArchitectCharter = z.infer<typeof architectCharterSchema>;
+export type NinetyDayPlanShape = z.infer<typeof ninetyDayPlanShapeSchema>;
+export type NinetyDayPhase = z.infer<typeof ninetyDayPhaseSchema>;
+export type NinetyDayPlan = z.infer<typeof ninetyDayPlanSchema>;
+
+export type ArchitectPlanRequest = z.infer<typeof architectPlanRequestSchema>;
+export type ArchitectPlanResponse = z.infer<typeof architectPlanResponseSchema>;
 
 export const CSA_OPTIONS = {
   q4_collection_scope: [
@@ -66,39 +110,6 @@ export const CSA_TOOL_OPTIONS: { value: CsaTool; label: string }[] = [
   { value: 'accounting', label: 'Accounting software (QuickBooks, etc.)' },
   { value: 'other', label: 'Other' },
 ];
-
-export interface CharterWorkstream {
-  name: string;
-  required: boolean;
-  description: string;
-}
-
-export interface ArchitectCharter {
-  title: string;
-  background: string;
-  scopeStatement: string;
-  objectives: string[];
-  workstreams: CharterWorkstream[];
-  risks: string[];
-  successCriteria: string[];
-  cadence: string;
-}
-
-export type NinetyDayPlanShape = 'build_basics' | 'ship_deliverable' | 'remediation_only' | 'accelerate';
-
-export interface NinetyDayPhase {
-  window: 'Days 1–30' | 'Days 31–60' | 'Days 61–90';
-  title: string;
-  milestones: string[];
-}
-
-export interface NinetyDayPlan {
-  shape: NinetyDayPlanShape;
-  headline: string;
-  phases: NinetyDayPhase[];
-  workstreams: CharterWorkstream[];
-  phase2Note?: string;
-}
 
 export interface ArchitectAssessment {
   id: string;

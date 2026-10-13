@@ -1,11 +1,12 @@
 # Vercel AI SDK — conventions for this repo
 
-Package: `ai` (^7.x) + `@ai-sdk/google` (^4.x). Model: Gemini 2.5 Flash via Google provider.
+Packages: `ai` (^7.x) + `@ai-sdk/google` (^4.x) + `@ai-sdk/openai` (^4.x). Default model:
+`gemini-3.5-flash-lite` (`DEFAULT_MODEL` in `src/model/gateway.ts`; env `GATEWAY_MODEL` overrides).
 
 ## The gateway pattern
 
 All model calls go through `src/model/gateway.ts:callModel()`. Never import
-`generateObject` or `generateText` directly in an endpoint or agent module.
+`generateText` (or any `ai` call) directly in an endpoint or agent module.
 
 ```typescript
 import { callModel } from '../src/model/gateway';
@@ -13,8 +14,8 @@ import { callModel } from '../src/model/gateway';
 const { object, runId } = await callModel({
   agent: 'scout',           // AgentName — recorded in agent_runs
   schema: scoutModelSchema, // Zod schema — the SDK validates the response
-  prompt: buildRoutingPrompt(input),
-  promptVersion: 'scout-routing-v1',
+  prompt: buildRoutingPrompt(input, readiness),
+  promptVersion: 'scout-routing-0.04', // SCOUT_ROUTING_PROMPT_VERSION, agents/scout/model.ts
   engagementId: input.engagementId,   // optional, for telemetry
   organizationId: input.organizationId, // optional, for telemetry
 });
@@ -23,7 +24,8 @@ const { object, runId } = await callModel({
 ### What the gateway does
 
 1. Checks for model key (throws `GatewayError` with code `model_key_missing` if absent)
-2. Calls `generateObject()` with the Zod schema
+2. Calls `generateText()` with `output: Output.object({ schema })`, on the provider
+   `providerOf(modelId)` picks — `gpt-*` / `o<digit>*` ids go to OpenAI, everything else to Gemini
 3. On success: writes `agent_runs` telemetry via `recordRun()`, returns `{ object, runId }`
 4. On failure: classifies error via `classifyModelError()`, records the failed run, throws `GatewayError`
 
@@ -35,19 +37,18 @@ const { object, runId } = await callModel({
 
 ## Structured output with Zod
 
-Always use `generateObject` (via the gateway), never `generateText` + manual parsing.
-The SDK validates the model response against the Zod schema at parse time.
+Always use structured output (`generateText` + `Output.object`, via the gateway), never
+free text + manual parsing. The SDK validates the model response against the Zod schema
+at parse time.
 
 ```typescript
-import { z } from 'zod';
-
-export const scoutModelSchema = z.object({
-  bucket: z.enum(['data_foundations', 'capacity_building', ...]),
-  confidence: z.enum(['High', 'Medium', 'Low']),
-  rationale: z.string(),
-  poc_score: z.number().min(0).max(2),
-  // Never include hitlTier or composite_signal here —
-  // these are derived server-side, not model output
+// agents/scout/schema.ts — the wire schema (schemas/scout.ts) minus what code derives
+export const scoutModelSchema = scoutResultSchema.omit({
+  hitlTier: true,         // guardrails/hitl.ts deriveHitlTier()
+  composite_signal: true, // routing.ts scoreReadiness()
+  poc_score: true,        // each score is 1..3, derived in routing.ts
+  clarity_score: true,
+  foothold_score: true,
 });
 ```
 
@@ -68,7 +69,9 @@ The gateway classifies errors into `GatewayErrorCode`:
 | `model_key_missing` | 503 | No key configured — supported state, not a bug |
 | `model_call_failed` | 502 | Generic model failure |
 | `model_timeout` | 504 | Deadline exceeded |
-| `model_rate_limited` | 429 | Rate limit hit |
+| `model_rate_limited` | 429 | Per-minute rate limit hit (retryable) |
+| `model_quota_exhausted` | 429 | Per-day quota exhausted — not retryable until the reset |
+| `model_unavailable` | 503 | Provider overloaded ("high demand") — transient |
 | `model_parse_error` | 502 | Model returned something the schema couldn't parse |
 
 Endpoints catch `GatewayError` and return `err.toResponse()`:
@@ -90,7 +93,8 @@ endpoint; if it gets a non-2xx (no result body), it falls back to the heuristic.
 The heuristic produces a usable result with no network call.
 
 - Scout: `routeScoutIntake()` in `src/agents/scout/routing.ts`
-- Envoy: `generateEnvoyDraft()` in `src/agents/envoy/schema.ts`
+- Architect: `generateNinetyDayPlan()` / `generateCharter()` in `src/agents/architect/plan.ts`
+- Envoy: `generateEnvoyDraft()` in `src/agents/envoy/draft.ts`
 - Chronicle: `generateChronicleDraft()` in `src/agents/chronicle/draft.ts`
 
 A missing model key is a **supported state**: local dev has no key and the fallback
@@ -118,4 +122,5 @@ export function buildRoutingPrompt(input: ScoutRoutingInput): string {
 - `useChat` / `useCompletion` — no client-side AI SDK hooks
 - `tool()` / function calling — no tool use yet
 - Multi-step agents — each endpoint is a single model call
-- `@ai-sdk/openai` or `@ai-sdk/anthropic` — Google-only for now
+- `@ai-sdk/anthropic` — agents run on Google; `@ai-sdk/openai` is used, but only for the
+  eval judges (default `gpt-5.4-nano`, `src/evals/graders/judges/base.ts`; `EVAL_JUDGE_MODEL` overrides)

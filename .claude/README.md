@@ -215,8 +215,7 @@ Key files:
 | Path | What it defines |
 |---|---|
 | `design-system.md` | Root doc — scope, direction decision, container model, execution semantics |
-| `design-scope.md` | Initiative framing (output of `/design-initiative`) |
-| `design-requirements.md` | PRD (output of `/design-product`) |
+| *(archived)* `design-scope.md`, `design-requirements.md` | Outputs of `/design-initiative` and `/design-product` for the current initiative — frozen, moved to `.claude/docs/archive/specs/` 2026-10-08; the shared copies are the HTML under `docs/`. A new initiative writes fresh ones here |
 | `roadmap.md` | The delta registry — every `D{n}`/`C{n}` change-decision ID; other specs cite it, none mint their own |
 | `crm/*.md` | Data model, access model, lifecycle state machine, Supabase conventions |
 | `platform/agents/*.md` | One spec per product agent (scout, architect, pulse, envoy, chronicle) — a contract for the agent the portal is being extended with, not the `.claude/agents/` tooling subagents below |

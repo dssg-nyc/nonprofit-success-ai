@@ -38,8 +38,9 @@ no further use — delete them then. Two conditions first:
 2. **Strip the citations too**, or accept that 98 `-- rules:NN` comments in `0001_init.sql`
    point at a file nobody can open.
 
-The applied Supabase schema has **6 tables**: `users`, `businesses`, `engagements` (from
+The firestore.rules port is **6 tables**: `users`, `businesses`, `engagements` (from
 `0001_init.sql`), `scout_intakes`, `architect_assessments` (also `0001`), and
-`engagement_events` (from `0002`). Nine more tables (`agent_runs`, `tool_calls`,
-`approvals`, `audit_events`, `documents`, `milestones`, `tasks`, `organizations`,
-`organization_members`) are drafted in `migrations/_deferred/` and are **not yet applied**.
+`engagement_events` (from `0002`). Twelve more tables have no firestore.rules origin:
+`agent_runs`, `tool_calls`, `approvals`, `audit_events`, `documents`, `milestones`,
+`tasks`, `organizations`, `organization_members` (from `0003`–`0007`), `communications`,
+`chronicle_drafts` (`0012`) and `lessons` (`0015`).

@@ -4,7 +4,8 @@ name: CD
 # Vercel's own Git integration must be disabled (Ignored Build Step → exit 0)
 # to avoid competing deploys.
 #
-# Requires repo secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID.
+# Requires repo secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID; optionally
+# VERCEL_AUTOMATION_BYPASS_SECRET so the post-deploy health check can reach a protected preview.
 # Runtime config (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) is NOT set here —
 # vercel pull fetches it from the Vercel project's environment variables.
 
@@ -14,19 +15,63 @@ on:
   pull_request:
 
 jobs:
+  # Deploy only after the full CI gate passes. `needs:` cannot reach a job in another
+  # workflow file, so CI is called here as a reusable workflow (ci.yml: workflow_call).
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   deploy:
+    needs: ci
+    # Dependabot-triggered runs get no repo secrets, so VERCEL_TOKEN would be empty.
+    # Dependency bumps don't need a preview; CI alone gates them.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
       - name: Deploy
-        run: vercel deploy ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }} --yes
+        id: deploy
+        # The CLI prints the deployment URL alone on stdout (progress goes to stderr).
+        run: |
+          url=$(vercel deploy ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }} --yes)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed: $url"
+      # The deploy is not done until the functions answer. /api/health probes Supabase
+      # Auth with the deployment's own env, so a project whose variables are missing or
+      # wrong fails here (503) instead of on the first visitor's intake. A preview behind
+      # Vercel Deployment Protection answers 302/401 to anyone without the bypass secret
+      # (VERCEL_AUTOMATION_BYPASS_SECRET, from the project's protection settings); the
+      # header is sent only when the secret is set. Without it the check cannot see the
+      # function at all, so a protected preview is skipped with a warning rather than
+      # failed — a 302 says nothing about the deployment's health. Production is never
+      # protected, so `--prod` deploys are always checked for real.
+      - name: Check /api/health
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PROD: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          body=$(mktemp)
+          for attempt in 1 2 3 4 5 6; do
+            status=$(curl -sS -o "$body" -w '%{http_code}' \
+              ${BYPASS:+-H "x-vercel-protection-bypass: $BYPASS"} \
+              "$URL/api/health" || echo 000)
+            echo "attempt $attempt: HTTP $status $(head -c 300 "$body")"
+            [ "$status" = "200" ] && exit 0
+            if [ -z "$BYPASS" ] && [ "$PROD" != "true" ] && { [ "$status" = "302" ] || [ "$status" = "401" ]; }; then
+              echo "::warning::preview is behind Vercel Deployment Protection and VERCEL_AUTOMATION_BYPASS_SECRET is not set — /api/health not checked. Add the secret (project → Deployment Protection → Protection Bypass for Automation) to check previews."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::/api/health did not answer 200 (last status $status) — see api/README.md › Testing › Deploy check"
+          exit 1

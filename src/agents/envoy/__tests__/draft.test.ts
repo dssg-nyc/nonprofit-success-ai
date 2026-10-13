@@ -111,19 +111,24 @@ describe("at_risk_follow_up", () => {
   it("frames the concerns as a question, not an accusation", () => {
     const body = draft({ occasion: "at_risk_follow_up", concerns }).body;
     expect(body).toContain("rather ask than assume");
+    expect(body).toContain('Has anything changed on your side regarding "no activity in 18 days"?');
+    expect(body).not.toContain("We noticed");
   });
 
-  it("owns the gap when no concerns were supplied", () => {
+  it("asks an open question when no concerns were supplied", () => {
     const body = draft({
       occasion: "at_risk_follow_up",
       concerns: undefined,
     }).body;
-    expect(body).toContain("missed an update on our side");
+    expect(body).toContain("Is there anything you need from us right now?");
+    expect(body).not.toContain("We may have");
   });
 
   it("does not manufacture a concern when none was supplied", () => {
     const body = draft({ occasion: "at_risk_follow_up", concerns: [] }).body;
-    expect(body).toContain("missed an update on our side");
+    expect(body).toContain("Is there anything you need from us right now?");
+    expect(body).not.toContain("We noticed");
+    expect(body).not.toContain("missed an update");
   });
 });
 
@@ -157,6 +162,14 @@ describe("envoyModelSchema", () => {
     expect(() =>
       envoyModelSchema.parse({ subject: "Kicking off", body: "" }),
     ).toThrow();
+  });
+
+  // Bounded on the model-facing schema only: an over-long answer is a parse error and the
+  // template is saved; a stored draft reads back through the wire schema uncapped.
+  it("caps the subject at 200 and the body at 4,000 characters", () => {
+    expect(envoyModelSchema.safeParse({ subject: "s".repeat(201), body: "ok" }).success).toBe(false);
+    expect(envoyModelSchema.safeParse({ subject: "ok", body: "b".repeat(4_001) }).success).toBe(false);
+    expect(envoyModelSchema.safeParse({ subject: "s".repeat(200), body: "b".repeat(4_000) }).success).toBe(true);
   });
 });
 

@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { supabase, toColumns, handleSupabaseError, OperationType } from '../../lib/supabase';
+import { supabase } from '../../lib/supabase';
+import { ApiError, postJson } from '../../lib/api';
+import { accessToken } from '../../lib/session';
+import { scoutIntakeResponseSchema } from '../../schemas';
 import { PrimaryNeed, PRIMARY_NEED_OPTIONS } from '../../types';
-import { routeScoutIntake } from '../../agents/scout/routing';
+import type { ScoutIntakeRequest } from '../../types';
 import { motion } from 'motion/react';
-import { CheckCircle2, Compass } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Compass } from 'lucide-react';
 
 interface ScoutIntakeFormProps {
   isDemo?: boolean;
@@ -27,6 +30,7 @@ export default function ScoutIntakeForm({ isDemo }: ScoutIntakeFormProps) {
   const [form, setForm] = useState(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<{ message: string; requestId: string | null } | null>(null);
 
   const update = (field: keyof typeof initialForm, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -35,43 +39,45 @@ export default function ScoutIntakeForm({ isDemo }: ScoutIntakeFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setError(null);
 
-    const result = routeScoutIntake({
-      scale: form.scale,
-      primary_need: form.primary_need,
-      primary_need_other: form.primary_need_other || undefined,
-      problem_description: form.problem_description,
-      current_systems: form.current_systems,
-      contact_name_role: form.contact_name_role,
-      timeline: form.timeline,
-    });
-
+    // Demo mode never calls the API — it works with no server and no model key.
     if (isDemo) {
       setSubmitting(false);
       setSubmitted(true);
       return;
     }
 
-    try {
-      // Insert runs as `anon` when nobody is signed in — scout_intakes_insert_public allows
-      // that, but only for a row that is genuinely new: review_status 'pending' with the
-      // review fields unset. A submitter cannot pre-approve their own intake.
-      //
-      // `submitted_at` is left to the column default rather than sent from the browser, so
-      // the timestamp is the server's, not whatever the client's clock says.
-      const { error } = await supabase.from('scout_intakes').insert(
-        toColumns({
-          ...form,
-          primary_need_other: form.primary_need === 'something_else' ? form.primary_need_other : '',
-          ...result,
-          reviewStatus: 'pending',
-        }),
-      );
+    // The whole form goes to the route, which routes it (model, or the deterministic
+    // heuristic when the model fails — the intake then carries a flag for the reviewer)
+    // and files it through `submit_scout_intake`. The browser never writes the row: the
+    // review tier is derived in the database from the recorded run, so nothing a client
+    // sends can pre-approve its own intake. How the intake was triaged is not the
+    // applicant's concern — the submitted screen is the same either way.
+    //
+    // The route requires a bearer token so model quota is spent only by sessions Supabase
+    // Auth has issued and rate-limited. A visitor has no account, so the form signs them
+    // in anonymously first. With no token, or a failed route, nothing was filed and the
+    // applicant is told so, rather than shown a thank-you for an application that does
+    // not exist.
+    const intake: ScoutIntakeRequest = {
+      ...form,
+      primary_need_other: form.primary_need === 'something_else' ? form.primary_need_other : undefined,
+    };
 
-      if (error) handleSupabaseError(error, OperationType.CREATE, 'scout_intakes');
+    try {
+      const token = await accessToken(supabase.auth, { anonymous: true });
+      if (!token) throw new ApiError('unauthorized', null);
+      await postJson('/api/route-intake', intake, scoutIntakeResponseSchema, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       setSubmitted(true);
     } catch (err) {
-      handleSupabaseError(err, OperationType.CREATE, 'scout_intakes');
+      const code = err instanceof ApiError ? err.code : 'client_error';
+      if (!(err instanceof ApiError)) console.error('scout intake: unexpected client error', err);
+      // The request id is the handler's log key: quoting it in a report turns "it
+      // failed" into the exact line in the function logs.
+      setError({ message: submitErrorMessage(code), requestId: err instanceof ApiError ? err.requestId : null });
     } finally {
       setSubmitting(false);
     }
@@ -227,6 +233,21 @@ export default function ScoutIntakeForm({ isDemo }: ScoutIntakeFormProps) {
             />
           </Field>
 
+          {error && (
+            <div
+              role="alert"
+              className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium"
+            >
+              <AlertCircle size={18} className="shrink-0 mt-0.5" />
+              <span>
+                {error.message}
+                {error.requestId && (
+                  <span className="block mt-1 text-xs font-normal text-red-500">Reference: {error.requestId}</span>
+                )}
+              </span>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={submitting}
@@ -242,6 +263,22 @@ export default function ScoutIntakeForm({ isDemo }: ScoutIntakeFormProps) {
       </motion.div>
     </div>
   );
+}
+
+/** What the applicant reads when nothing was filed. The code is the route's `error` field. */
+function submitErrorMessage(code: string): string {
+  switch (code) {
+    case 'model_budget_exceeded':
+      return "You've submitted several applications in the last hour. Please wait a little while and try again.";
+    case 'invalid_input':
+    case 'invalid_intake':
+      return 'Some answers could not be accepted — please check each field is filled in and not overly long, then resubmit.';
+    case 'unauthorized':
+    case 'network_error':
+      return "We couldn't reach the server. Please check your connection and try again.";
+    default:
+      return "Something went wrong and your application was not saved. Please try again, or email us if the problem continues.";
+  }
 }
 
 const inputClass = 'w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dssg-blue focus:border-transparent transition-all outline-none';

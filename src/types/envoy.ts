@@ -1,36 +1,18 @@
-export type EnvoyOccasion =
-  | 'kickoff'
-  | 'check_in'
-  | 'milestone_reached'
-  | 'at_risk_follow_up'
-  | 'wrap_up';
+import type { z } from 'zod';
+import type {
+  envoyDraftRequestSchema,
+  envoyDraftResponseSchema,
+  envoyDraftSchema,
+  envoyInputSchema,
+} from '../schemas/envoy';
 
-export interface EnvoyInput {
-  engagementId: string;
-  occasion: EnvoyOccasion;
-  /** Partner organisation name, used in the salutation. */
-  orgName: string;
-  /** Charter title, when the engagement has a linked assessment. */
-  planTitle?: string;
-  /** `ArchitectCharter.cadence` — shapes how the draft frames next contact. */
-  cadence?: string;
-  /**
-   * For `at_risk_follow_up`, the Pulse reasons behind the signal. Envoy quotes staff-facing
-   * context back into a partner-facing draft, so the caller passes only what it is willing
-   * to have paraphrased to the partner.
-   */
-  concerns?: string[];
-}
+// Wire shapes for /api/envoy-draft: inferred from src/schemas/envoy.ts, never hand-written
+// beside it (CLAUDE.md "One definition per shape"). Type-only imports, so no runtime cycle.
 
-export interface EnvoyDraft {
-  engagementId: string;
-  occasion: EnvoyOccasion;
-  subject: string;
-  body: string;
-  /**
-   * Constant by construction: every Envoy output is partner-facing, so it is always
-   * drafted for a human to approve and never sent unattended. Kept explicit so a future
-   * version that earns an L2 case has somewhere to put it.
-   */
-  hitlTier: 'L3';
-}
+export type EnvoyDraft = z.infer<typeof envoyDraftSchema>;
+export type EnvoyOccasion = EnvoyDraft['occasion'];
+export type EnvoyDraftRequest = z.infer<typeof envoyDraftRequestSchema>;
+/** The draft-generation input: the request's occasion and concerns plus facts read server-side (`api/_engagement.ts`). */
+export type EnvoyInput = z.infer<typeof envoyInputSchema>;
+/** What `/api/envoy-draft` returns: the saved draft, which path wrote it, and its ids. */
+export type EnvoyDraftResponse = z.infer<typeof envoyDraftResponseSchema>;

@@ -1,37 +1,19 @@
-import {
-  ArchitectAssessment,
+import type {
   CompositeLevel,
+  CsaAnswers,
   FlaggedDimension,
+  MaturityResult,
   MaturityScore,
   ScoutBucket,
 } from "../../types";
 
-export type CsaScoredAnswers = Pick<
-  ArchitectAssessment,
-  | "q4_collection_scope"
-  | "q6_system_integration"
-  | "q7_integration_familiarity"
-  | "q8_quality_confidence"
-  | "q11_decision_empowerment"
-  | "q13_reporting_automation"
-  | "q14_tools"
-  | "q15_staff_confidence"
-  | "q16_budget_speed"
->;
-
-export interface MaturityResult {
-  di_score: MaturityScore;
-  gov_score: MaturityScore;
-  tooling_score: MaturityScore;
-  dc_score: MaturityScore;
-  tc_score: MaturityScore;
-  points: number;
-  compositeLevel: CompositeLevel;
-  overrideApplied: boolean;
-  flaggedDimensions: FlaggedDimension[];
-  remediationOnly: boolean;
-  crossCheckFlag: string | null;
-}
+/**
+ * The scoring input and output are wire shapes since `/api/architect-plan` returns the
+ * maturity result — both are inferred from `src/schemas/architect.ts` and re-exported
+ * here under the names this module's importers already use.
+ */
+export type CsaScoredAnswers = CsaAnswers;
+export type { MaturityResult };
 
 function scoreDataInfrastructure(a: CsaScoredAnswers): MaturityScore {
   if (

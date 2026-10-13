@@ -1,0 +1,54 @@
+import { describe, expect, it } from "vitest";
+import { SCHEMA_VERSIONS, chronicleDraftRequestSchema, chronicleInputSchema } from "../../../schemas";
+
+const VALID = {
+  engagementId: "5c007eed-b2b0-54aa-bdd7-5df7797b2536",
+  idempotencyKey: "chronicle-submit-0001",
+};
+
+const FACTS = {
+  engagementId: VALID.engagementId,
+  orgName: "Borough Food Bank",
+  status: "completed",
+  hasPlan: true,
+  eventCount: 4,
+};
+
+describe("chronicleDraftRequestSchema", () => {
+  it("accepts a minimal request", () => {
+    expect(chronicleDraftRequestSchema.safeParse(VALID).success).toBe(true);
+  });
+
+  it("rejects a short idempotency key", () => {
+    expect(chronicleDraftRequestSchema.safeParse({ ...VALID, idempotencyKey: "short" }).success).toBe(false);
+  });
+
+  it("strips engagement facts a caller sends — they are read server-side (api/_engagement.ts)", () => {
+    const parsed = chronicleDraftRequestSchema.parse({ ...VALID, ...FACTS, eventCount: 50 });
+    expect(parsed).toEqual(VALID);
+  });
+
+  it("is on wire version v4 (v4: the request lost every engagement fact to the server)", () => {
+    expect(SCHEMA_VERSIONS["chronicle-draft"]).toBe("v4");
+  });
+});
+
+describe("chronicleInputSchema", () => {
+  it("accepts the facts the route builds", () => {
+    expect(chronicleInputSchema.safeParse(FACTS).success).toBe(true);
+  });
+
+  it("accepts up to ten event summaries of up to 200 characters, and rejects more (D48)", () => {
+    const ten = Array.from({ length: 10 }, (_, i) => `touchpoint ${i}`);
+    expect(chronicleInputSchema.safeParse({ ...FACTS, eventSummaries: ten }).success).toBe(true);
+    expect(chronicleInputSchema.safeParse({ ...FACTS, eventSummaries: [...ten, "one more"] }).success).toBe(false);
+    expect(chronicleInputSchema.safeParse({ ...FACTS, eventSummaries: ["x".repeat(200)] }).success).toBe(true);
+    expect(chronicleInputSchema.safeParse({ ...FACTS, eventSummaries: ["x".repeat(201)] }).success).toBe(false);
+    expect(chronicleInputSchema.parse(FACTS)).not.toHaveProperty("eventSummaries");
+  });
+
+  it("rejects a negative or fractional event count", () => {
+    expect(chronicleInputSchema.safeParse({ ...FACTS, eventCount: -1 }).success).toBe(false);
+    expect(chronicleInputSchema.safeParse({ ...FACTS, eventCount: 1.5 }).success).toBe(false);
+  });
+});
