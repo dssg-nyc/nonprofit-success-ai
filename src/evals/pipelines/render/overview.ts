@@ -5,6 +5,7 @@ import { dumbbellCell, groupedBars, legend, lineChart, sparklineCell } from './c
 import type { BarGroup, BarValue } from './charts';
 import { laneRateOf, shortStamp, shortVersion, TREND_WINDOW, withCurrent } from './keyed';
 import { readinessSummary } from './readiness';
+import { skippedLanes } from './scenarios';
 import { AGENT_ROLES, CALIBRATION_FLOOR, callout, escapeHtml, fmtTimestamp, frame, gateBadge, gatedLaneKey, JUDGE_TRUST_AGREEMENT, laneCounts, laneGraded, laneTarget, laneTone, laneValue, metricLink, nameOf, pairedLanes, passedOf, pct, plural, runScope, sectionHead, toneFor } from './views';
 import type { Lane, MetricView, RenderInput, Tone } from './views';
 
@@ -181,9 +182,11 @@ export function renderRoster(views: MetricView[], report: EvalReport): string {
     const cell = (v: BarValue | null, target?: number) => (v ? `<td class="ov t-${toneFor(v.rate, target)}"><b>${pct(v.rate)}</b> <span class="n">${v.n}</span></td>` : '<td class="ov none" title="No such path on this agent">Not applicable</td>');
     const gateText = gated.length === 0 ? '<span class="muted">none gated</span>' : failedGates ? `<span class="t-bad">${failedGates} of ${gated.length} failing</span>` : `<span class="t-good">${gated.length} of ${gated.length} pass</span>`;
     const judgeText = judged.length === 0 ? '<span class="muted">Not applicable</span>' : report.calibration ? `${trusted} of ${judged.length} trusted` : '<span class="muted">not calibrated</span>';
-    return `<tr class="${failedGates ? 'failing' : ''}"><th scope="row"><a href="#${escapeHtml(agent.toLowerCase())}">${escapeHtml(agent)}</a><small>${escapeHtml(AGENT_ROLES[agent] ?? '')}</small></th><td class="num">${mine.length}</td>${cell(fallback, 0.9)}${cell(model, 0.9)}<td>${gateText}</td><td>${judgeText}</td><td class="num">${failing ? `<span class="t-bad">${failing}</span>` : '0'}</td></tr>`;
+    const skipped = skippedLanes(mine);
+    const skippedText = skipped.length ? `<span class="t-warn">${escapeHtml(skipped.map((x) => x.replace(/ skipped$/, '')).join(' · '))}</span>` : '<span class="muted">nothing</span>';
+    return `<tr class="${failedGates ? 'failing' : ''}"><th scope="row"><a href="#${escapeHtml(agent.toLowerCase())}">${escapeHtml(agent)}</a><small>${escapeHtml(AGENT_ROLES[agent] ?? '')}</small></th><td class="num">${mine.length}</td>${cell(fallback, 0.9)}${cell(model, 0.9)}<td>${gateText}</td><td>${judgeText}</td><td class="why">${skippedText}</td><td class="num">${failing ? `<span class="t-bad">${failing}</span>` : '0'}</td></tr>`;
   });
-  return `<div class="fields-wrap"><table class="fields roster"><thead><tr><th>Agent</th><th>Metrics</th><th>Fallback</th><th>Model</th><th>Gates</th><th>Judges</th><th>Failing cases</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  return `<div class="fields-wrap"><table class="fields roster"><thead><tr><th>Agent</th><th>Metrics</th><th>Fallback</th><th>Model</th><th>Gates</th><th>Judges</th><th>Not evaluated</th><th>Failing cases</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
 const PATH_SERIES = [

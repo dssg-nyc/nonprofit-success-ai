@@ -142,8 +142,11 @@ export const ninetyDayPlanSchema = z.object({
 // ---- /api/architect-plan ----------------------------------------------------------
 
 /**
- * `z.guid()`, not `z.uuid()`: v4's `uuid()` enforces the RFC version nibble, which the
- * seeded fixture ids (`cccccccc-0000-0000-0000-000000000001`) do not carry.
+ * `z.guid()`, not `z.uuid()`: Zod v4's `uuid()` enforces the RFC version and variant
+ * nibbles. Postgres `uuid` columns accept any 128-bit layout, and the ids the schema
+ * must agree with are whatever the database holds — test fixtures are deterministic
+ * UUIDv5 hashes, production rows `gen_random_uuid()` v4 — so the wire check is the
+ * same as the column's: a GUID shape, not a version.
  */
 export const architectPlanRequestSchema = z.object({
   scoutIntakeId: z.guid(),

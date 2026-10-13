@@ -46,11 +46,11 @@ const { POST } = await import('../scout-approve');
 const { scoutApproveResponseSchema } = await import('../../src/schemas');
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzdGFmZi0xIn0.c2lnbmF0dXJl';
-const INTAKE_ID = 'abcd0008-0000-0000-0000-0000000000a1';
-const ORG_ID = 'dddddddd-0000-0000-0000-000000000001';
-const BUSINESS_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
-const ENGAGEMENT_ID = 'aaaaaaaa-0000-0000-0000-000000000002';
-const EVENT_ID = 'aaaaaaaa-0000-0000-0000-000000000003';
+const INTAKE_ID = '365db816-43ef-5e82-899b-421e623d66d0';
+const ORG_ID = '1e238853-fb3e-52a8-bed4-954ab17a8a5d';
+const BUSINESS_ID = '52c36b93-0c74-5222-b593-86c0c5ec460a';
+const ENGAGEMENT_ID = 'b9dbb27e-99ef-5699-9131-bffc84050f64';
+const EVENT_ID = '443dded6-f9ab-5606-a710-39ad1fefad7d';
 
 const BODY = { intakeId: INTAKE_ID, idempotencyKey: 'approve-0001' };
 
@@ -130,6 +130,28 @@ describe('POST /api/scout-approve — auth and input', () => {
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: 'forbidden' });
     expect(db.rpcCalls).toHaveLength(0);
+  });
+
+  it('422 organization_required before the RPC when the caller is staff in several orgs and none is named', async () => {
+    db.tables.organization_members = {
+      data: [{ organization_id: ORG_ID, role: 'owner' }, { organization_id: BUSINESS_ID, role: 'admin' }],
+      error: null,
+    };
+    const res = await post(BODY);
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: 'organization_required' });
+    expect(db.rpcCalls).toHaveLength(0);
+  });
+
+  it('proceeds with several memberships when the caller names the organization', async () => {
+    db.tables.organization_members = {
+      data: [{ organization_id: ORG_ID, role: 'owner' }],
+      error: null,
+    };
+    const res = await post({ ...BODY, organizationId: ORG_ID });
+    expect(res.status).toBe(201);
+    const membership = db.queries.find((q) => q.table === 'organization_members');
+    expect(membership?.filters).toContainEqual(['organization_id', ORG_ID]);
   });
 
   it("scopes the membership check to the intake's organization when it has one", async () => {

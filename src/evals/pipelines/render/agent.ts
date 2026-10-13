@@ -1,38 +1,19 @@
+/**
+ * An agent's tab: one verdict line derived from the data, a summary card per metric with
+ * its checks, then the scenario explorer (`scenarios.ts`). The check table and the
+ * fallback-vs-model comparison also serve the Calibration tab.
+ */
+
 import { JUDGE_PROMPT_VERSION } from '../../graders/judges/base';
 import type { MetricDefinition } from '../../registry';
-import { groupedBars, legend, renderScatter } from './charts';
-import type { BarGroup, BarSeries } from './charts';
-import { renderCases } from './cases';
+import { renderScatter } from './charts';
 import type { CaseBlob } from './cases';
-import { AGENT_ROLES, CALIBRATION_FLOOR, escapeHtml, frame, gateBadge, gatedLaneKey, JUDGE_TRUST_AGREEMENT, LANE_LABEL, laneCounts, laneOfGrade, laneTarget, laneTone, laneValue, metricLink, nameOf, pairedLanes, pct, plural, sectionHead, toneFor } from './views';
+import { checkRates, renderCompactChecks } from './checks';
+import type { CheckCell } from './checks';
+import { renderScenarios, skippedLanes } from './scenarios';
+import { AGENT_ROLES, CALIBRATION_FLOOR, escapeHtml, gateBadge, gatedLaneKey, JUDGE_TRUST_AGREEMENT, laneCounts, laneTarget, laneTone, laneValue, metricLink, nameOf, pairedLanes, passedOf, pct, plural, sectionHead, toneFor } from './views';
 import type { EvalReport } from '../../types';
-import type { Lane, LaneKey, MetricView, Tone } from './views';
-
-
-export interface CheckCell {
-  passed: number;
-  n: number;
-}
-
-/** Per metric → per check (field or rubric dimension) → per path, the pass count over graded verdicts. */
-export function checkRates(view: MetricView): Map<string, Record<'template' | 'model', CheckCell>> {
-  const out = new Map<string, Record<'template' | 'model', CheckCell>>();
-  const laneByKey = new Map(view.lanes.map((l) => [l.key, l]));
-  for (const row of view.rows) {
-    for (const g of row.grades) {
-      if (g.status !== 'graded') continue;
-      const lane = laneByKey.get(laneOfGrade(g));
-      if (!lane) continue;
-      for (const [dim, v] of Object.entries(g.dimensions)) {
-        const cell = out.get(dim) ?? { template: { passed: 0, n: 0 }, model: { passed: 0, n: 0 } };
-        cell[lane.path].n += 1;
-        if (v >= 1) cell[lane.path].passed += 1;
-        out.set(dim, cell);
-      }
-    }
-  }
-  return out;
-}
+import type { Lane, MetricView, Tone } from './views';
 
 export function checkCell(cell: CheckCell, target: number | undefined): string {
   if (cell.n === 0) return '<td class="none">Not evaluated</td>';
@@ -135,7 +116,7 @@ export function renderComparison(views: MetricView[]): string {
     const { template, model } = pairedLanes(v);
     return template && model && template.rate !== null && model.rate !== null && model.rate < template.rate;
   });
-  const lede = `${measured.length ? `The model path is behind the fallback on <strong>${behind.length} of ${measured.length}</strong> measured metrics. ` : '<strong>The model path was not measured this run.</strong> '}Same test cases, two ways of producing the answer. <strong>Template</strong> is the deterministic fallback (no AI). <strong>Model</strong> is the same agent asking Gemini. A gap means the model disagrees with the spec where the fallback does not. The thin line marks a gate target.`;
+  const lede = `${measured.length ? `The model path is behind the fallback on <strong>${behind.length} of ${measured.length}</strong> measured metrics. ` : '<strong>The model path was not measured this run.</strong> '}Same test cases, two ways of producing the answer. <strong>Fallback</strong> is the deterministic path (no AI). <strong>Model</strong> is the same agent asking Gemini. A gap means the model disagrees with the spec where the fallback does not. The thin line marks a gate target.`;
   return `<section class="section-block" aria-labelledby="cmp-h">
     ${sectionHead('cmp-h', 'Calibration', 'Where does the model fall short of the fallback?', lede)}
     <div class="cmp">${rows.join('')}</div>
@@ -149,7 +130,9 @@ export function renderComparison(views: MetricView[]): string {
   </section>`;
 }
 
-
+// ---------------------------------------------------------------------------------------
+// Metric cards
+// ---------------------------------------------------------------------------------------
 
 export function howGraded(view: MetricView): string {
   const parts: string[] = [];
@@ -188,128 +171,107 @@ export function renderLaneStat(view: MetricView, lane: Lane): string {
   </div>`;
 }
 
-type PathCells = Record<'template' | 'model', CheckCell>;
-
-const isCell = (x: unknown): x is { passed: number; graded: number } =>
-  typeof x === 'object' && x !== null && typeof (x as { passed?: unknown }).passed === 'number' && typeof (x as { graded?: unknown }).graded === 'number';
-
-/**
- * Per-dimension counts from the summary when a later grader wrote them (`dimensions`,
- * keyed by dimension then lane or path); null on a run that predates them, and then the
- * rates come from the graded rows instead, so an old run still renders.
- */
-export function summaryDimensions(view: MetricView): Map<string, PathCells> | null {
-  const dims = (view.summary as { dimensions?: unknown }).dimensions;
-  if (!dims || typeof dims !== 'object') return null;
-  const out = new Map<string, PathCells>();
-  // Keyed lane -> dimension -> { passed, graded }.
-  for (const [lane, byDim] of Object.entries(dims as Record<string, unknown>)) {
-    if (!byDim || typeof byDim !== 'object') return null;
-    const path = lane === 'heuristic' || lane === 'judge' ? 'template' : 'model';
-    for (const [dim, cell] of Object.entries(byDim as Record<string, unknown>)) {
-      if (!isCell(cell)) return null;
-      const cells = out.get(dim) ?? { template: { passed: 0, n: 0 }, model: { passed: 0, n: 0 } };
-      cells[path].passed += cell.passed;
-      cells[path].n += cell.graded;
-      out.set(dim, cells);
-    }
-  }
-  return out.size ? out : null;
+/** A lane's verdict in words: how many passed of those graded, or why there is no count. */
+export function laneVerdict(lane: Lane): string {
+  if (!lane.ran) return 'Not evaluated';
+  if (lane.n === 0) return 'No cases';
+  if (lane.n - lane.errored === 0) return 'Evaluation error';
+  return `${passedOf(lane)} passed`;
 }
 
-/** Dimension × path bars for one metric, weakest dimension first, with a one-line reading. */
-export function renderDimChart(view: MetricView): string {
-  const rates = summaryDimensions(view) ?? checkRates(view);
-  if (rates.size === 0) return '';
-  const paths = (['template', 'model'] as const).filter((p) => [...rates.values()].some((c) => c[p].n > 0));
-  if (paths.length === 0) return '';
-  const series: BarSeries[] = paths.map((p) => ({ key: p, label: p === 'template' ? 'Fallback' : 'Model' }));
-  const worst = (c: PathCells) => Math.min(...paths.filter((p) => c[p].n > 0).map((p) => c[p].passed / c[p].n));
-  const groups: BarGroup[] = [...rates.entries()]
-    .sort((a, b) => worst(a[1]) - worst(b[1]))
-    .map(([dim, c]) => ({ label: dim, values: paths.map((p) => (c[p].n ? { rate: c[p].passed / c[p].n, n: `${c[p].passed}/${c[p].n}` } : null)) }));
-  const first = groups[0];
-  const weakest = first ? [...rates.entries()].find(([d]) => d === first.label) : undefined;
-  const why = weakest
-    ? worst(weakest[1]) >= 1
-      ? 'Every check holds on every path.'
-      : `Weakest check: <code>${escapeHtml(weakest[0])}</code> at ${paths.map((p) => `${pct(weakest[1][p].n ? weakest[1][p].passed / weakest[1][p].n : null)} on the ${p === 'template' ? 'fallback' : 'model'}`).join(', ')}${view.gate.target !== undefined ? ` against a ${pct(view.gate.target)} gate` : ''}.`
-    : '';
-  const kind = view.def.judgeCls ? 'rubric dimension' : 'compared field';
-  return `<div class="dim-chart"><figure><figcaption>Pass rate per ${kind}, by path</figcaption>${groupedBars(groups, series, { target: view.gate.target, caption: `${nameOf(view)}: pass rate per ${kind} on each path` })}${legend(series)}</figure><p class="dim-why">${why}</p></div>`;
+/** The lane a metric's verdict is read from: the gated lane when it ran, else the first fallback lane that did. */
+export function verdictLane(view: MetricView): Lane | undefined {
+  const gated = view.lanes.find((l) => l.key === gatedLaneKey(view.summary));
+  if (gated?.ran) return gated;
+  return view.lanes.find((l) => l.path === 'template' && l.ran) ?? gated ?? view.lanes[0];
 }
 
+/** One summary card: name and gate, the verdict in words, what the metric checks, its checks, then the graded detail behind a disclosure. */
 export function renderMetric(view: MetricView): string {
   const { summary, def } = view;
+  const lead = verdictLane(view);
+  const others = view.lanes.filter((l) => l !== lead && l.ran);
+  const verdict = lead
+    ? `<b class="t-${laneTone(view, lead)}">${laneVerdict(lead)}</b> <span class="muted">on the ${lead.path === 'template' ? 'fallback' : 'model'}${lead.kind === 'judge' ? ' by the judge' : ''}</span>${others
+        .map((l) => ` · <span class="t-${laneTone(view, l)}">${l.path === 'model' ? 'Model' : 'Fallback'}${l.kind === 'judge' ? ' (judge)' : ''}: ${laneVerdict(l)}</span>`)
+        .join('')}`
+    : '<b class="t-none">Not evaluated</b>';
   return `<section class="metric" id="${escapeHtml(summary.metric)}">
     <header class="metric-head">
       <h3>${escapeHtml(nameOf(view))} <code class="mname">${escapeHtml(summary.metric)}</code></h3>${gateBadge(view.gate)}
     </header>
-    <p class="checks"><span class="muted">Checks:</span> ${escapeHtml(def.description)}</p>
-    <div class="stats">${view.lanes.map((l) => renderLaneStat(view, l)).join('')}</div>
-    <p class="how">${howGraded(view)} <span class="muted">${escapeHtml(view.gate.detail)}</span>${
-      def.fixture ? ` <span class="muted">Cases come from <code>${escapeHtml(def.fixture)}.jsonl</code>.</span>` : ''
-    }</p>
-    ${renderDimChart(view)}
-    ${renderRubric(def)}
+    <p class="metric-verdict">${verdict}</p>
+    <p class="checks">${escapeHtml(def.description)}</p>
+    ${renderCompactChecks(view)}
+    <details class="technical"><summary>How it is graded</summary>
+      <div class="stats">${view.lanes.map((l) => renderLaneStat(view, l)).join('')}</div>
+      <p class="how">${howGraded(view)} <span class="muted">${escapeHtml(view.gate.detail)}</span>${
+        def.fixture ? ` <span class="muted">Cases come from <code>${escapeHtml(def.fixture)}.jsonl</code>.</span>` : ''
+      }</p>
+      ${renderRubric(def)}
+    </details>
   </section>`;
 }
 
-/** One filter row per tab: verdict chips, the lane and dimension a case lost on, free text. */
-export function renderFilterBar(views: MetricView[]): string {
-  const lanes = new Map<LaneKey, string>();
-  const dims = new Set<string>();
+/** Architect grades two different fixtures; its cards sit in two groups. Other agents have one. */
+const GROUP_LABEL: Record<string, string> = { architectScoring: 'Assessment scoring', architectCharter: 'Plan quality' };
+
+export function renderMetricGroups(views: MetricView[]): string {
+  const groups = new Map<string, MetricView[]>();
   for (const v of views) {
-    for (const l of v.lanes) lanes.set(l.key, l.label);
-    for (const d of checkRates(v).keys()) dims.add(d);
+    const key = v.def.fixture ?? v.summary.metric;
+    groups.set(key, [...(groups.get(key) ?? []), v]);
   }
-  const chip = (key: string, label: string) => `<button type="button" class="chip" data-filter="${key}" aria-pressed="${key === 'all'}">${label}</button>`;
-  const opt = (value: string, label: string) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
-  return `<div class="filter-bar" data-filter-bar>
-    <div class="chips">${chip('all', 'All')}${chip('fail', 'Failing')}${chip('errored', 'Errored')}${chip('pass', 'Passing')}</div>
-    <label>Lost on <select data-lane><option value="">any lane</option>${[...lanes].map(([k, l]) => opt(k, l)).join('')}</select></label>
-    ${dims.size ? `<label>Dimension <select data-dim><option value="">any</option>${[...dims].sort().map((d) => opt(d, d)).join('')}</select></label>` : ''}
-    <input type="search" placeholder="Find a case id or note" aria-label="Find a case">
-    <span class="shown" data-shown></span>
-  </div>`;
+  if (groups.size < 2) return views.map(renderMetric).join('');
+  return [...groups.entries()].map(([key, vs]) => `<h3 class="group-h">${escapeHtml(GROUP_LABEL[key] ?? key)}</h3>${vs.map(renderMetric).join('')}`).join('');
 }
 
-/** The claim an agent's run supports, and what it does not. */
-export function agentFrame(agent: string, views: MetricView[], report: EvalReport): string {
-  const gated = views.filter((v) => v.gate.kind !== 'ungated');
-  const failed = gated.filter((v) => v.gate.kind !== 'passed');
-  const claim = gated.length === 0
-    ? `${escapeHtml(agent)} has no gated metric yet: its rates are reported, none certifies a deploy.`
-    : failed.length
-      ? `<span class="t-bad">${escapeHtml(agent)} would not ship</span>: ${failed.map((v) => `${escapeHtml(nameOf(v))} — ${escapeHtml(v.gate.detail)}`).join('; ')}.`
-      : `<span class="t-good">${escapeHtml(agent)}’s fallback is certified</span>: ${gated.length === 1 ? 'its gated metric passes' : `all ${gated.length} gated metrics pass`} on this run’s fixtures.`;
-  const model = views.filter((v) => v.lanes.some((l) => l.path === 'model' && l.ran && l.rate !== null));
+// ---------------------------------------------------------------------------------------
+// The tab
+// ---------------------------------------------------------------------------------------
+
+type VerdictKind = 'passed' | 'attention' | 'unknown';
+
+/** The one line an agent's tab leads with, derived from its fallback verdicts and gates. */
+export function agentVerdict(agent: string, views: MetricView[]): { kind: VerdictKind; text: string } {
+  const fallback = views.map((v) => ({ v, lane: v.lanes.find((l) => l.path === 'template' && l.ran && l.n - l.errored > 0) })).filter((x): x is { v: MetricView; lane: Lane } => x.lane !== undefined);
+  const part = (x: { v: MetricView; lane: Lane }) => `${escapeHtml(nameOf(x.v))}: ${passedOf(x.lane)}`;
+  const failing = fallback.filter((x) => x.v.gate.kind === 'failed' || (x.lane.rate !== null && x.lane.rate < 1));
+  if (failing.length) return { kind: 'attention', text: `${escapeHtml(agent)} · <span class="t-bad">Needs attention</span> — ${failing.map(part).join(' · ')}` };
+  if (fallback.length === 0) return { kind: 'unknown', text: `${escapeHtml(agent)} · <span class="t-none">Not evaluated</span>` };
+  return { kind: 'passed', text: `${escapeHtml(agent)} · <span class="t-good">Fallback checks passed</span> — ${fallback.map(part).join(' · ')}` };
+}
+
+/** What the run counted and what it left unverified, in plain numbers. */
+export function agentLead(agent: string, views: MetricView[], report: EvalReport): string {
+  const scenarios = new Set(views.flatMap((v) => v.rows.map((r) => r.caseId))).size;
+  const completed = views.reduce((a, v) => a + v.lanes.filter((l) => l.ran).reduce((b, l) => b + (l.n - l.errored), 0), 0);
+  const skipped = skippedLanes(views);
   const judged = views.filter((v) => v.def.judgeCls);
-  const untrusted = judged.filter((v) => {
+  const judgesRan = judged.filter((v) => v.lanes.some((l) => l.kind === 'judge' && l.ran));
+  const untrusted = judgesRan.filter((v) => {
     const j = report.calibration?.judges.find((x) => x.judge === v.summary.metric);
     return !j || j.n - j.nErrored < CALIBRATION_FLOOR || j.agreement === null || j.agreement < JUDGE_TRUST_AGREEMENT;
   });
-  const caveats = [
-    report.modelCallsRan ? (model.length ? 'Model-path rates are reported at a 90% bar and never gated.' : 'The model path measured nothing for this agent.') : 'The model path did not run, so nothing here says how the model behaves.',
-    judged.length ? (untrusted.length ? `${untrusted.length === judged.length ? 'Its judge rates are' : `${plural(untrusted.length, 'judge rate')} are`} indicative: the judge is not yet trusted at ${pct(JUDGE_TRUST_AGREEMENT)}+ on ${CALIBRATION_FLOOR}+ labelled outputs.` : 'Its judges are trusted on this run’s calibration sample.') : '',
+  const modelRan = views.some((v) => v.lanes.some((l) => l.path === 'model' && l.ran && l.rate !== null));
+  const unverified = [
+    modelRan ? '' : 'model behavior',
+    judged.length === 0 ? '' : judgesRan.length === 0 ? 'prose quality (no judge ran)' : untrusted.length ? `prose quality (${untrusted.length === judgesRan.length ? 'judge' : `${untrusted.length} of ${judgesRan.length} judges`} not yet trusted at ${pct(JUDGE_TRUST_AGREEMENT)}+ on ${CALIBRATION_FLOOR}+ labelled outputs)` : '',
   ].filter(Boolean);
-  return frame(claim, caveats.join(' '));
+  return `${escapeHtml(AGENT_ROLES[agent] ?? '')} <strong>${plural(scenarios, 'scenario')}</strong>, <strong>${plural(completed, 'completed check result')}</strong>${skipped.length ? `; ${skipped.join('; ')}` : ''}.${
+    unverified.length ? ` <span class="still">Still unverified: ${unverified.join(' and ')}.</span>` : ''
+  }${modelRan ? ' Model-path rates are reported at a 90% bar and never gated.' : ''}`;
 }
 
-/** An agent's tab: what it does, its metrics, then every case behind one filter bar. */
+/** An agent's tab: the verdict line, a card per metric, then every scenario behind one filter bar. */
 export function renderAgentTab(agent: string, views: MetricView[], report: EvalReport, blob: CaseBlob): string {
-  const failing = views.reduce((a, v) => a + v.rows.filter((r) => r.grades.some((g) => g.status === 'graded' && !g.isCorrect)).length, 0);
-  const cases = views
-    .map((v) => `<div class="cases-head"><h3>Cases — ${escapeHtml(nameOf(v))}</h3><code class="mname">${escapeHtml(v.summary.metric)}</code> ${gateBadge(v.gate)}</div>${renderCases(v, blob)}`)
-    .join('');
-  const lead = `${escapeHtml(AGENT_ROLES[agent] ?? '')} ${plural(views.length, 'metric')}, ${plural(views.reduce((a, v) => a + v.rows.length, 0), 'graded case')}${failing ? `, <span class="t-bad">${failing} with a failing verdict</span>` : ''}.`;
-  return `<section class="section-block agent" id="agent-${escapeHtml(agent.toLowerCase())}" aria-labelledby="agent-${escapeHtml(agent.toLowerCase())}-h">
-    ${sectionHead(`agent-${agent.toLowerCase()}-h`, agent, `Is ${agent} ready to ship behind its gate?`, lead)}
-    ${agentFrame(agent, views, report)}
-    ${views.map(renderMetric).join('')}
-    <h3 id="cases-${escapeHtml(agent.toLowerCase())}">Cases, failing first</h3>
-    <p class="muted">Each case shows what the fixture expected, what every lane produced and, for a judge, its reasoning. Lanes: ${[...new Set(views.flatMap((v) => v.lanes.map((l) => l.key)))].map((k) => `<strong>${escapeHtml(LANE_LABEL[k])}</strong>`).join(', ')}.</p>
-    ${renderFilterBar(views)}
-    ${cases}
+  const slug = escapeHtml(agent.toLowerCase());
+  const verdict = agentVerdict(agent, views);
+  return `<section class="section-block agent verdict-${verdict.kind}" id="agent-${slug}" aria-labelledby="agent-${slug}-h">
+    <div class="section-header"><span class="num">${escapeHtml(agent)}</span>
+    <h2 id="agent-${slug}-h">${verdict.text}</h2>
+    <p class="lead">${agentLead(agent, views, report)}</p></div>
+    ${renderMetricGroups(views)}
+    ${renderScenarios(agent, views, blob)}
   </section>`;
 }

@@ -204,10 +204,23 @@ export function runFacts(report: EvalReport, history: RunHistoryEntry[]): string
   return `<div class="run">${facts.join('')}</div>`;
 }
 
+/** Names what changed between this run and the one it is compared with, when a Δ would not be like for like. */
+export function comparisonWarning(report: EvalReport, prev: RunHistoryEntry): string {
+  const run = report.run;
+  if (!run) return '';
+  const prompts = Object.entries(run.promptVersions)
+    .filter(([k, v]) => prev.promptVersions[k] !== undefined && prev.promptVersions[k] !== v)
+    .map(([k, v]) => `${k} ${shortVersion(prev.promptVersions[k] ?? '')} → ${shortVersion(v)}`);
+  const fixtures = run.fixtures && prev.fixtures ? Object.keys(run.fixtures).filter((k) => prev.fixtures?.[k] !== undefined && prev.fixtures[k] !== run.fixtures?.[k]) : [];
+  if (!prompts.length && !fixtures.length) return '';
+  const parts = [prompts.length ? `prompts changed (${prompts.join(', ')})` : '', fixtures.length ? `${fixtures.length === 1 ? 'a fixture file' : `${fixtures.length} fixture files`} changed (${fixtures.join(', ')})` : ''].filter(Boolean);
+  return ` <span class="t-warn">Not like for like: ${escapeHtml(parts.join(' and '))} — a Δ there reflects the change as much as the agent.</span>`;
+}
+
 /** One sentence on what every Δ on the scoreboard is measured against. */
 export function runClaim(report: EvalReport, history: RunHistoryEntry[]): string {
   const prev = previousKeyedRun(report, history);
-  if (prev) return `This run is measured against <code>${escapeHtml(prev.id)}</code>; every Δ on the scoreboard is that comparison, marked † where the fixture changed in between.`;
+  if (prev) return `This run is measured against <code>${escapeHtml(prev.id)}</code>; every Δ on the scoreboard is that comparison, marked † where the fixture changed in between.${comparisonWarning(report, prev)}`;
   return withCurrent(report, history).length
     ? 'This is the first keyed run, so the scoreboard carries no Δ yet.'
     : 'An unkeyed run (fallback only) is not recorded in the experiment log and carries no Δ.';

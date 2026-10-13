@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import type { Database } from '../database.types';
 import { fetchPromotedLessons, promoteLesson } from '../lessons';
 
-const LESSON_ID = 'aaaaaaaa-0000-0000-0000-000000000004';
-const APPROVAL_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
+const LESSON_ID = 'ae15935c-e245-5846-acf1-4bb6455268bb';
+const APPROVAL_ID = '52c36b93-0c74-5222-b593-86c0c5ec460a';
 
 /** A hand-rolled client: records the calls and answers with canned results. */
 function stub(result: { data: unknown; error: unknown }) {

@@ -28,11 +28,13 @@ Every response carries `x-request-id` (see Observability).
 
 ### What each route does
 
-**`health`** — `{ ok, modelKeyConfigured, supabase }`. `supabase` is `ok`,
-`unreachable` (Auth's `/health` did not answer 2xx within 3s) or `unconfigured` (no URL
-or anon key). `ok` is true only when Supabase is `ok`; otherwise the status is 503, so
-an uptime check sees the dependency, not only the function. The model key is reported,
-never required: a deployment without one serves every route from the fallbacks.
+**`health`** — `{ ok, supabase }`. `supabase` is `ok`, `unreachable` (Auth's `/health`
+did not answer 2xx within 3s) or `unconfigured` (no URL or anon key). `ok` is the
+function running; the status is 503 unless Supabase is `ok`, so an uptime check sees the
+dependency, not only the function. The body says nothing about the model key: the route
+is unauthenticated, and whether a deployment can call a model is not a fact to hand to
+anyone who asks. A deployment without one serves every route from the fallbacks and logs
+`model_key_missing` on each call.
 
 **`route-intake`** — Scout, end to end. Takes the whole public form
 (`ScoutIntakeRequest`), routes it — the model for bucket and rationale, else the
@@ -110,10 +112,14 @@ Every handler follows the same ladder, in this order:
    before any model quota is spent (the RPC re-checks as the authority).
 5. **Replay.** If the `idempotencyKey` was seen, the original result is read back.
 6. **Budget** (`_budget.ts`), only when a model key is configured. `check_model_budget()`
-   (0007) counts the caller's calls this clock hour; over `MODEL_CALLS_PER_HOUR` it is
-   429 `model_budget_exceeded` with `Retry-After`, and no call is made. Any other error
-   from the budget RPC is logged (`route_failure`, step `budget`) and the request
-   continues — a budget is never the reason a healthy request fails.
+   (0007) counts the caller's calls this clock hour; over
+   `MODEL_CALLS_PER_HOUR` the staff routes answer 429 `model_budget_exceeded` with
+   `Retry-After` and make no call, while `route-intake` files the intake from the
+   deterministic fallback (flag `model_budget_exceeded`, tier L3) — the public form never
+   turns an applicant away over quota. 42501 (the database cannot identify the caller) is
+   401 `unauthorized`. Any other error is logged (`route_failure`, step `budget`: `error`
+   for a missing function, i.e. 0007 not applied, `warn` for a transient one) and the
+   request continues — a budget is never the reason a healthy request fails.
 7. **Model call** through `src/model/gateway.ts` (25s budget, one retry on 429,
    structured output). Every route catches `GatewayError` and builds the fallback.
 8. **One RPC** that writes the domain row, the approval and the audit event in a
@@ -260,7 +266,8 @@ What it covers today (21 tests): `health` 200 + `supabase: ok`; `route-intake` 4
 `agent_runs` row filed as `L2` + `ai` with model and prompt version carried over / a
 run recorded as `L3` filed as `L3` **whatever the result says** / a `fallback` run
 refused by the RPC (`invalid_intake`, nothing filed) / a gateway error filed with no
-run / the hourly budget spent on the real counter and `429` with `Retry-After`;
+run / the hourly budget spent on the real counter and the next intake filed from the
+fallback (`model_budget_exceeded` flag, no run);
 `pulse-health` as staff, as a session RLS hides the row from (404), and with no token;
 `engagement-transition` the attested advance `initial_meeting → budget_check` (source
 row completed, target opened, event detail carries `guard_deferred: contract`, replay

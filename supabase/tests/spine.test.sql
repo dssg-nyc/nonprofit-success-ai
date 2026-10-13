@@ -26,24 +26,24 @@ select lives_ok(
   $$ insert into agent_runs (id, agent, organization_id, engagement_id, model,
                              prompt_version, status, input_tokens, output_tokens,
                              hitl_tier, duration_ms)
-     values ('ffffffff-0000-0000-0000-000000000001', 'scout',
-             'eeeeeeee-0000-0000-0000-000000000001',
-             'aaaaaaaa-0000-0000-0000-000000000010',
+     values ('37500687-f06e-5b63-9ce5-7c391d74a0a5', 'scout',
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1',
+             '53939e32-79f1-50fa-afcc-87e61809fc30',
              'gemini-2.5-flash', 'scout@1', 'success', 120, 40, 'L3', 150) $$,
   'service_role CAN insert an agent_run (the recorder write)'
 );
 
 select lives_ok(
   $$ insert into agent_runs (id, agent, model, status, error_code, duration_ms)
-     values ('ffffffff-0000-0000-0000-000000000003',
+     values ('c32ac2ed-17c0-5f24-9d30-c6b1fccf6bc3',
              'scout', 'gemini-2.5-flash', 'fallback', 'timeout', 9000) $$,
   'service_role CAN insert a fallback run with null engagement and org (Scout pre-intake)'
 );
 
 select lives_ok(
   $$ insert into tool_calls (id, agent_run_id, tool, duration_ms)
-     values ('ffffffff-0000-0000-0000-000000000002',
-             'ffffffff-0000-0000-0000-000000000001', 'generateObject', 100) $$,
+     values ('d66f4e24-4a49-545e-a7d2-a51dda8d2afd',
+             '37500687-f06e-5b63-9ce5-7c391d74a0a5', 'generateObject', 100) $$,
   'service_role CAN insert a tool_call'
 );
 
@@ -131,7 +131,7 @@ select throws_ok(
 
 select throws_ok(
   $$ insert into tool_calls (agent_run_id, tool, duration_ms)
-     values ('ffffffff-0000-0000-0000-000000000001', 'test', 50) $$,
+     values ('37500687-f06e-5b63-9ce5-7c391d74a0a5', 'test', 50) $$,
   '42501',
   null,
   'a non-admin cannot insert tool_calls (service-role only)'
@@ -155,14 +155,14 @@ select tests.login_as(:admin_id);
 
 select results_eq(
   $$ select count(*)::int from agent_runs
-       where id in ('ffffffff-0000-0000-0000-000000000001', 'ffffffff-0000-0000-0000-000000000003') $$,
+       where id in ('37500687-f06e-5b63-9ce5-7c391d74a0a5', 'c32ac2ed-17c0-5f24-9d30-c6b1fccf6bc3') $$,
   $$ values (2) $$,
   'an admin CAN read agent_runs'
 );
 
 select results_eq(
   $$ select count(*)::int from tool_calls
-       where agent_run_id in ('ffffffff-0000-0000-0000-000000000001', 'ffffffff-0000-0000-0000-000000000002') $$,
+       where agent_run_id in ('37500687-f06e-5b63-9ce5-7c391d74a0a5', 'd66f4e24-4a49-545e-a7d2-a51dda8d2afd') $$,
   $$ values (1) $$,
   'an admin CAN read tool_calls'
 );
@@ -190,10 +190,10 @@ select tests.as_service();
 select lives_ok(
   $$ insert into approvals (id, organization_id, agent, agent_run_id, entity_type,
                             entity_id, hitl_tier, status)
-     values ('ffffffff-0000-0000-0000-000000000010',
-             'eeeeeeee-0000-0000-0000-000000000001', 'envoy',
-             'ffffffff-0000-0000-0000-000000000001', 'communication',
-             'aaaaaaaa-0000-0000-0000-000000000010', 'L3', 'pending') $$,
+     values ('36fbe6cb-cee8-5290-8c8c-fe11bbd602c0',
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1', 'envoy',
+             '37500687-f06e-5b63-9ce5-7c391d74a0a5', 'communication',
+             '53939e32-79f1-50fa-afcc-87e61809fc30', 'L3', 'pending') $$,
   'service_role CAN open an approval linked to an agent_run'
 );
 
@@ -219,7 +219,7 @@ select is_empty(
 select is(
   tests.affected(
     $$ update approvals set status = 'approved'
-        where id = 'ffffffff-0000-0000-0000-000000000010' $$),
+        where id = '36fbe6cb-cee8-5290-8c8c-fe11bbd602c0' $$),
   0,
   'a non-admin cannot update approval status (admin-only)'
 );
@@ -227,7 +227,7 @@ select is(
 select tests.login_as(:admin_id);
 
 select results_eq(
-  $$ select count(*)::int from approvals where id = 'ffffffff-0000-0000-0000-000000000010' $$,
+  $$ select count(*)::int from approvals where id = '36fbe6cb-cee8-5290-8c8c-fe11bbd602c0' $$,
   $$ values (1) $$,
   'an admin CAN read approvals'
 );
@@ -235,7 +235,7 @@ select results_eq(
 -- 0001_core: the update must name the caller as reviewer and carry reviewed_at.
 select throws_ok(
   $$ update approvals set status = 'approved'
-      where id = 'ffffffff-0000-0000-0000-000000000010' $$,
+      where id = '36fbe6cb-cee8-5290-8c8c-fe11bbd602c0' $$,
   '42501', null,
   'an admin cannot decide an approval without naming a reviewer (0001_core)'
 );
@@ -244,7 +244,7 @@ select throws_ok(
   $$ update approvals set status = 'approved',
          reviewer_id = '11111111-1111-1111-1111-111111111111',
          reviewed_at = now()
-     where id = 'ffffffff-0000-0000-0000-000000000010' $$,
+     where id = '36fbe6cb-cee8-5290-8c8c-fe11bbd602c0' $$,
   '42501', null,
   'an admin cannot record another user as the reviewer (0001_core)'
 );
@@ -252,7 +252,7 @@ select throws_ok(
 select throws_ok(
   $$ update approvals set status = 'approved',
          reviewer_id = '33333333-3333-3333-3333-333333333333'
-     where id = 'ffffffff-0000-0000-0000-000000000010' $$,
+     where id = '36fbe6cb-cee8-5290-8c8c-fe11bbd602c0' $$,
   '42501', null,
   'an admin cannot decide an approval without reviewed_at (0001_core)'
 );
@@ -261,7 +261,7 @@ select lives_ok(
   $$ update approvals set status = 'approved',
          reviewer_id = '33333333-3333-3333-3333-333333333333',
          reviewed_at = now()
-     where id = 'ffffffff-0000-0000-0000-000000000010' $$,
+     where id = '36fbe6cb-cee8-5290-8c8c-fe11bbd602c0' $$,
   'an admin CAN approve a pending approval (status transition)'
 );
 
@@ -269,7 +269,7 @@ select lives_ok(
 select results_eq(
   $$ select count(*)::int from agent_runs ar
        join approvals ap on ap.agent_run_id = ar.id
-      where ap.status = 'approved' and ap.id = 'ffffffff-0000-0000-0000-000000000010' $$,
+      where ap.status = 'approved' and ap.id = '36fbe6cb-cee8-5290-8c8c-fe11bbd602c0' $$,
   $$ values (1) $$,
   'agent_runs joins to approvals on agent_run_id (override-rate query shape)'
 );
@@ -289,10 +289,10 @@ select tests.as_service();
 
 select lives_ok(
   $$ insert into audit_events (id, organization_id, actor_id, action, entity_type, entity_id)
-     values ('ffffffff-0000-0000-0000-000000000020',
-             'eeeeeeee-0000-0000-0000-000000000001',
+     values ('4b34e610-b52f-5d13-a32f-1c02fdbb142d',
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1',
              '33333333-3333-3333-3333-333333333333', 'approval.approved',
-             'communication', 'aaaaaaaa-0000-0000-0000-000000000010') $$,
+             'communication', '53939e32-79f1-50fa-afcc-87e61809fc30') $$,
   'service_role CAN append an audit_event'
 );
 
@@ -315,7 +315,7 @@ select is_empty(
 select tests.login_as(:admin_id);
 
 select results_eq(
-  $$ select count(*)::int from audit_events where id = 'ffffffff-0000-0000-0000-000000000020' $$,
+  $$ select count(*)::int from audit_events where id = '4b34e610-b52f-5d13-a32f-1c02fdbb142d' $$,
   $$ values (1) $$,
   'an admin CAN read audit_events'
 );
@@ -326,21 +326,21 @@ select tests.login_as(:rival_id);
 
 select results_eq(
   $$ select count(*)::int from agent_runs
-     where organization_id = 'eeeeeeee-0000-0000-0000-000000000001' $$,
+     where organization_id = 'b07a14e0-a781-53ba-a553-3e3aa287acf1' $$,
   $$ values (0) $$,
   'an admin of another org cannot read this org''s agent_runs'
 );
 
 select results_eq(
   $$ select count(*)::int from approvals
-     where organization_id = 'eeeeeeee-0000-0000-0000-000000000001' $$,
+     where organization_id = 'b07a14e0-a781-53ba-a553-3e3aa287acf1' $$,
   $$ values (0) $$,
   'an admin of another org cannot read this org''s approvals'
 );
 
 select results_eq(
   $$ select count(*)::int from audit_events
-     where organization_id = 'eeeeeeee-0000-0000-0000-000000000001' $$,
+     where organization_id = 'b07a14e0-a781-53ba-a553-3e3aa287acf1' $$,
   $$ values (0) $$,
   'an admin of another org cannot read this org''s audit_events'
 );
@@ -377,18 +377,18 @@ select tests.login_as(:alice_id);
 
 select lives_ok(
   $$ insert into milestones (id, engagement_id, organization_id, title)
-     values ('ffffffff-0000-0000-0000-000000000030',
-             'aaaaaaaa-0000-0000-0000-000000000010',
-             'eeeeeeee-0000-0000-0000-000000000001', 'Kick-off') $$,
+     values ('f935a519-af82-55fc-b54b-486f77a34db8',
+             '53939e32-79f1-50fa-afcc-87e61809fc30',
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1', 'Kick-off') $$,
   'an owner CAN create a milestone on their engagement (0003_delivery)'
 );
 
 select lives_ok(
   $$ insert into tasks (id, milestone_id, engagement_id, organization_id, title)
-     values ('ffffffff-0000-0000-0000-000000000031',
-             'ffffffff-0000-0000-0000-000000000030',
-             'aaaaaaaa-0000-0000-0000-000000000010',
-             'eeeeeeee-0000-0000-0000-000000000001', 'Gather data sources') $$,
+     values ('a880dd47-a383-57aa-8a3a-cfacd93c2efd',
+             'f935a519-af82-55fc-b54b-486f77a34db8',
+             '53939e32-79f1-50fa-afcc-87e61809fc30',
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1', 'Gather data sources') $$,
   'an owner CAN create a task on their milestone (0003_delivery)'
 );
 
@@ -424,15 +424,15 @@ select tests.login_as(:alice_id);
 
 select lives_ok(
   $$ insert into documents (id, organization_id, engagement_id, source, title)
-     values ('ffffffff-0000-0000-0000-000000000040',
-             'eeeeeeee-0000-0000-0000-000000000001',
-             'aaaaaaaa-0000-0000-0000-000000000010', 'upload', 'Data inventory') $$,
+     values ('af2b65e0-bf81-5adf-9eb0-c40f956ec21f',
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1',
+             '53939e32-79f1-50fa-afcc-87e61809fc30', 'upload', 'Data inventory') $$,
   'a member CAN add a document to their org (0003_delivery: documents_insert_own)'
 );
 
 select throws_ok(
   $$ insert into documents (id, organization_id, source, title)
-     values ('ffffffff-0000-0000-0000-000000000041', null, 'upload', 'Orphan') $$,
+     values ('62562a83-b6cd-5579-bf8b-9819ee9781e4', null, 'upload', 'Orphan') $$,
   '42501',
   null,
   'a document cannot be added outside the caller''s orgs (0003_delivery: documents_insert_own)'
@@ -474,12 +474,12 @@ insert into agent_runs (agent, organization_id, model, status, input_tokens, out
   ('pulse', :org_id, 'test-model', 'error',    null, null, 1000, null, '2020-02-02 13:00:00+00');
 
 insert into approvals (organization_id, agent, entity_type, entity_id, hitl_tier, status, reviewed_at) values
-  (:org_id, 'pulse', 'intake', 'abcd0016-0000-0000-0000-000000000001', 'L2', 'approved', '2020-02-02 14:00:00+00'),
-  (:org_id, 'pulse', 'intake', 'abcd0016-0000-0000-0000-000000000002', 'L2', 'approved', '2020-02-02 14:05:00+00'),
-  (:org_id, 'pulse', 'intake', 'abcd0016-0000-0000-0000-000000000003', 'L2', 'rejected', '2020-02-02 14:10:00+00'),
-  (:org_id, 'pulse', 'intake', 'abcd0016-0000-0000-0000-000000000004', 'L2', 'pending',  null),
-  (:org_id, 'pulse', 'intake', 'abcd0016-0000-0000-0000-000000000005', 'L2', 'expired',  '2020-02-02 14:15:00+00'),
-  (:org_id, 'envoy', 'communication', 'abcd0016-0000-0000-0000-000000000006', 'L3', 'approved', '2020-02-03 09:00:00+00');
+  (:org_id, 'pulse', 'intake', 'f67620d2-52bc-571e-aefd-bbb2876268a3', 'L2', 'approved', '2020-02-02 14:00:00+00'),
+  (:org_id, 'pulse', 'intake', '9ad09295-8e03-5651-9245-b0824e05910b', 'L2', 'approved', '2020-02-02 14:05:00+00'),
+  (:org_id, 'pulse', 'intake', '770fc47f-fab5-54c9-896b-4889951cb195', 'L2', 'rejected', '2020-02-02 14:10:00+00'),
+  (:org_id, 'pulse', 'intake', '942d5996-a3c8-50c5-bc57-fd3ae04239a5', 'L2', 'pending',  null),
+  (:org_id, 'pulse', 'intake', '50a6c3c4-da99-5986-a6d5-415bf7abd645', 'L2', 'expired',  '2020-02-02 14:15:00+00'),
+  (:org_id, 'envoy', 'communication', 'e5e2fb92-ca57-57fb-a832-341e30a9b5c8', 'L3', 'approved', '2020-02-03 09:00:00+00');
 
 select has_view('public', 'agent_run_metrics', 'the agent_run_metrics view exists (0006_views)');
 

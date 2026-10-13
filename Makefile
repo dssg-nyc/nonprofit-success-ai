@@ -33,9 +33,11 @@ build:  ## Production build
 gate: type-check lint test build
 
 # --- Evals --------------------------------------------------------------------
-# Heuristic graders always run. Judges run only when OPENAI_API_KEY is exported in the
-# calling shell, the agents' model paths only when GOOGLE_GENERATIVE_AI_API_KEY is (never
-# read from a file here); without its key each prints `skipped`, not 0. Output: src/evals/reports/output/
+# Heuristic graders always run. Judges run only when OPENAI_API_KEY is set, the agents'
+# model paths only when GOOGLE_GENERATIVE_AI_API_KEY is; without its key each prints
+# `skipped`, not 0. The eval targets source the git-ignored .env (same shell, same
+# process) and pass --require-keys, so `make eval` is keyed whenever .env is and stops
+# before grading (exit 1, no run written) when a key is missing. Output: src/evals/reports/output/
 # (git-ignored): runs/<id>/ per run (never overwritten), copied up as the latest summary.json,
 # graded.jsonl, calls.jsonl, calibration.jsonl; report.html is written beside its run too
 # (EVAL_RUN=<id> make eval-report renders an older one). Keyed runs also append to the tracked
@@ -49,13 +51,22 @@ gate: type-check lint test build
 # run over code that does not type-check, lint, test or build measures nothing worth
 # keeping. `eval` renders the report in the same step so report.html is never stale.
 
-eval: gate  ## Gate, then grade every metric (judges + model path when a key is exported), render the report and the review CSVs
-	npm run eval:grade -- $(if $(EVAL_ONLY),--only $(EVAL_ONLY))
+# Exports .env, then .env.local (`vercel env pull` writes that one), into the recipe's
+# shell when present; a missing file is not an error, later files win.
+WITH_ENV = set -a; [ -f .env ] && . ./.env; [ -f .env.local ] && . ./.env.local; set +a;
+
+# Model-path calls per case on a keyed run: 3 so the page can report model `agreement`
+# (rates use the first sample). Override: EVAL_MODEL_SAMPLES=1 make eval for a cheap run.
+EVAL_MODEL_SAMPLES ?= 3
+export EVAL_MODEL_SAMPLES
+
+eval: gate  ## Gate, then grade every metric (judges + model path when .env or the shell holds the keys), render the report and the review CSVs
+	$(WITH_ENV) npm run eval:grade -- --require-keys $(if $(EVAL_ONLY),--only $(EVAL_ONLY))
 	npm run eval:report
 	npm run eval:review
 
 eval-gate: gate  ## Gate, then grade and exit non-zero on any targets.yaml miss (what CI will run)
-	npm run eval:grade -- --gate
+	$(WITH_ENV) npm run eval:grade -- --require-keys --gate
 	npm run eval:report
 
 eval-report: ## Render report.html (scoreboard, trend across runs, judge calibration) from the last grade run, or EVAL_RUN=<id>
@@ -140,6 +151,7 @@ db-test:  ## Run the pgTAP RLS suite (supabase/tests/*.test.sql); fails on zero 
 # Auth sessions, RLS and RPCs; only the model is mocked. Keys come from the stack itself,
 # never from a file, and the model key is dropped from the environment so a developer's
 # exported key can never reach a real model from a test. Fails on zero tests, like db-test.
+# NO_COLOR: under CI vitest colours its summary, which hid "Tests N passed" from the grep below.
 api-test:  ## Run the api/ integration suite against the local Supabase stack (make db-start first)
 	@env=$$($(SUPABASE) status -o env 2>/dev/null); \
 	[ -n "$$env" ] || { echo "api-test: local stack not running (make db-start)"; exit 1; }; \
@@ -147,7 +159,7 @@ api-test:  ## Run the api/ integration suite against the local Supabase stack (m
 	url=$$(pick API_URL); anon=$$(pick ANON_KEY); service=$$(pick SERVICE_ROLE_KEY); \
 	[ -n "$$url" ] && [ -n "$$anon" ] && [ -n "$$service" ] || { echo "api-test: could not read API_URL/ANON_KEY/SERVICE_ROLE_KEY from supabase status"; exit 1; }; \
 	out=$$(mktemp); \
-	env -u GOOGLE_GENERATIVE_AI_API_KEY -u MODEL_CALLS_PER_HOUR \
+	env -u GOOGLE_GENERATIVE_AI_API_KEY -u MODEL_CALLS_PER_HOUR NO_COLOR=1 \
 	  SUPABASE_URL="$$url" SUPABASE_ANON_KEY="$$anon" SUPABASE_SERVICE_ROLE_KEY="$$service" \
 	  npm run test:api >$$out 2>&1; status=$$?; cat $$out; \
 	if [ $$status -ne 0 ]; then rm -f $$out; exit $$status; fi; \

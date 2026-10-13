@@ -64,7 +64,7 @@ const RESULT: ScoutResult = {
   hitlTier: 'L2',
 };
 
-const INTAKE_ID = 'dddddddd-0000-0000-0000-000000000001';
+const INTAKE_ID = '1e238853-fb3e-52a8-bed4-954ab17a8a5d';
 const filed = (hitl_tier: 'L2' | 'L3', routing_source: 'ai' | 'derived') => ({
   data: { intake_id: INTAKE_ID, hitl_tier, routing_source },
   error: null,
@@ -199,10 +199,17 @@ describe('POST /api/route-intake', () => {
     expect(body.hitlTier).toBe('L3');
   });
 
-  it('keeps primary_need_other only for something_else', async () => {
+  it('keeps primary_need_other only for something_else, and the model sees the same value as the row', async () => {
     agent.respond = async () => ({ result: RESULT, runId: 'run-1' });
-    await post(JSON.stringify({ ...INTAKE, primary_need: 'something_else', primary_need_other: 'A chatbot' }));
+    await post(JSON.stringify({ ...INTAKE, primary_need: 'something_else', primary_need_other: ' A chatbot ' }));
     expect(submitCalls()[0].args.p_intake).toMatchObject({ primary_need_other: 'A chatbot' });
+    expect(agent.calls[0]).toMatchObject({ primary_need: 'something_else', primary_need_other: 'A chatbot' });
+
+    agent.calls = [];
+    db.rpcCalls = [];
+    await post(JSON.stringify({ ...INTAKE, primary_need_other: 'stray text under a fixed need' }));
+    expect(submitCalls()[0].args.p_intake).toMatchObject({ primary_need_other: '' });
+    expect(agent.calls[0]).toMatchObject({ primary_need_other: undefined });
   });
 
   describe('the deterministic fallback', () => {
@@ -259,23 +266,40 @@ describe('POST /api/route-intake', () => {
       expect(db.rpcCalls[0]).toEqual({ fn: 'check_model_budget', args: { p_limit: 5 } });
     });
 
-    it('429 model_budget_exceeded with Retry-After once the hour is spent; no model call, no row', async () => {
+    // The public form never refuses an applicant over quota: the hour spent, the intake
+    // is still filed, routed by the heuristic, flagged for the reviewer, with no run id.
+    it('once the hour is spent files the heuristic result (model_budget_exceeded), no model call', async () => {
       db.rpcResults.check_model_budget = { data: null, error: { code: '53400' } };
+      db.rpcResults.submit_scout_intake = filed('L3', 'derived');
       agent.respond = async () => ({ result: RESULT, runId: 'run-1' });
       const res = await post(JSON.stringify(INTAKE));
-      expect(res.status).toBe(429);
-      expect(await res.json()).toEqual({ error: 'model_budget_exceeded' });
-      expect(Number(res.headers.get('Retry-After'))).toBeGreaterThan(0);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.hitlTier).toBe('L3');
+      expect(body.flags.at(-1)).toContain('model_budget_exceeded');
+      expect(agent.calls).toHaveLength(0);
+      const [call] = submitCalls();
+      expect(call.args).not.toHaveProperty('p_agent_run_id');
+    });
+
+    it('401 unauthorized when the budget RPC cannot identify the caller (42501); nothing filed', async () => {
+      db.rpcResults.check_model_budget = { data: null, error: { code: '42501' } };
+      agent.respond = async () => ({ result: RESULT, runId: 'run-1' });
+      const res = await post(JSON.stringify(INTAKE));
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'unauthorized' });
       expect(agent.calls).toHaveLength(0);
       expect(submitCalls()).toHaveLength(0);
     });
 
-    it('fails open, logged, when the budget RPC itself errors', async () => {
+    it('fails open, logged as an error, when the budget function is missing (42883)', async () => {
       db.rpcResults.check_model_budget = { data: null, error: { code: '42883' } };
       agent.respond = async () => ({ result: RESULT, runId: 'run-1' });
       const res = await post(JSON.stringify(INTAKE));
       expect(res.status).toBe(200);
-      expect(logged()).toContainEqual(expect.objectContaining({ event: 'route_failure', step: 'budget' }));
+      expect(logged()).toContainEqual(
+        expect.objectContaining({ level: 'error', event: 'route_failure', step: 'budget', code: '42883' }),
+      );
     });
   });
 

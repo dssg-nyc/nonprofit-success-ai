@@ -68,8 +68,13 @@ describe('parseArgs', () => {
     const args = parseArgs([], metrics);
     expect(args.only).toBeNull();
     expect(args.noJudges).toBe(false);
+    expect(args.requireKeys).toBe(false);
     expect(args.gate).toBe(false);
     expect(args.label).toMatch(/scout/);
+  });
+
+  it('--require-keys is off unless passed, so a plain grade still skips lanes quietly', () => {
+    expect(parseArgs(['--require-keys'], metrics).requireKeys).toBe(true);
   });
 
   it('--only narrows the run to the named metrics, deduplicated, and labels it by them', () => {

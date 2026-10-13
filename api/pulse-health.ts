@@ -7,7 +7,9 @@ import { handler } from "./_request";
 
 export const maxDuration = 10;
 
-const engagementIdSchema = z.string().uuid();
+// `z.guid()` like every other route: accepts any RFC 9562 layout, so DB-generated v4 ids and
+// hashed test ids validate the same way.
+const engagementIdSchema = z.guid();
 
 /**
  * GET /api/pulse-health?engagementId=<uuid> — Pulse's staff-facing health signal.

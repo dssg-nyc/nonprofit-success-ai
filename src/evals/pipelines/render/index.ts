@@ -27,28 +27,36 @@ function show(tab) {
     if (a.getAttribute('href') === '#' + tab.id.slice(4)) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
   });
 }
-// One filter bar per agent tab, over every case on that tab: verdict, lane lost on,
-// dimension lost on, free text.
+// One filter bar per agent tab, over every scenario on that tab: verdict, group, lane
+// lost on, check lost on, free text. "Needs attention" (failing or errored) is the default;
+// a tab with nothing to attend to shows its all-clear line and a button to open the rest.
 document.querySelectorAll('[data-filter-bar]').forEach(function (bar) {
   var tab = bar.closest('.tab') || document;
-  var chips = bar.querySelectorAll('[data-filter]');
+  var chips = tab.querySelectorAll('[data-filter]');
+  var group = bar.querySelector('[data-group]');
   var lane = bar.querySelector('[data-lane]');
   var dim = bar.querySelector('[data-dim]');
   var input = bar.querySelector('input[type=search]');
   var shown = bar.querySelector('[data-shown]');
   var boxes = tab.querySelectorAll('[data-cases]');
-  var filter = 'all';
-  // Free text searches the id and everything in the summary row (note, verdicts).
+  var filter = 'attention';
+  // Free text searches the id and everything in the summary row (title, note, verdicts).
   function text(it) { if (!it.searchText) it.searchText = (it.getAttribute('data-search') + ' ' + it.firstElementChild.textContent).toLowerCase(); return it.searchText; }
+  function stateOk(it) {
+    var s = it.getAttribute('data-state');
+    return filter === 'all' || (filter === 'attention' ? s === 'fail' || s === 'errored' : s === filter);
+  }
   function apply() {
     var q = (input.value || '').toLowerCase().trim();
+    var g = group ? group.value : '';
     var l = lane ? lane.value : '';
     var d = dim ? dim.value : '';
     var total = 0, kept = 0;
     boxes.forEach(function (box) {
       var n = 0;
       box.querySelectorAll('.case').forEach(function (it) {
-        var ok = (filter === 'all' || it.getAttribute('data-state') === filter)
+        var ok = stateOk(it)
+          && (!g || it.getAttribute('data-group') === g)
           && (!l || (' ' + (it.getAttribute('data-lanes') || '') + ' ').indexOf(' ' + l + ' ') !== -1)
           && (!d || (' ' + (it.getAttribute('data-dims') || '') + ' ').indexOf(' ' + d + ' ') !== -1)
           && (!q || text(it).indexOf(q) !== -1);
@@ -56,19 +64,23 @@ document.querySelectorAll('[data-filter-bar]').forEach(function (bar) {
         total++;
         if (ok) n++;
       });
+      var clear = box.querySelector('[data-all-clear]');
+      var allClear = n === 0 && filter === 'attention' && !g && !l && !d && !q;
+      if (clear) clear.hidden = !allClear;
       var empty = box.querySelector('.no-match');
-      if (empty) empty.hidden = n > 0;
+      if (empty) empty.hidden = n > 0 || allClear;
       kept += n;
     });
-    if (shown) shown.textContent = kept + ' of ' + total + ' cases shown';
+    if (shown) shown.textContent = kept + ' of ' + total + ' scenarios shown';
   }
   chips.forEach(function (c) {
     c.addEventListener('click', function () {
       filter = c.getAttribute('data-filter');
-      chips.forEach(function (x) { x.setAttribute('aria-pressed', String(x === c)); });
+      chips.forEach(function (x) { if (x.hasAttribute('aria-pressed')) x.setAttribute('aria-pressed', String(x.getAttribute('data-filter') === filter)); });
       apply();
     });
   });
+  if (group) group.addEventListener('change', apply);
   if (lane) lane.addEventListener('change', apply);
   if (dim) dim.addEventListener('change', apply);
   input.addEventListener('input', apply);

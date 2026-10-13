@@ -49,10 +49,15 @@ export const POST = handler("route-intake", async (request: Request) => {
   const valid = scoutIntakeRequestSchema.safeParse(parsed.body);
   if (!valid.success) return json({ error: "invalid_input" }, 400);
   const intake = valid.data;
+  // Normalised once, used twice: the free-text need only means something beside
+  // `something_else`, so the model and the row see the same value — never a stray
+  // string under a fixed need, never a `undefined` the model sees but the row drops.
+  const primaryNeedOther =
+    intake.primary_need === "something_else" ? (intake.primary_need_other ?? "").trim() : "";
   const input: ScoutRoutingInput = {
     scale: intake.scale,
     primary_need: intake.primary_need as ScoutRoutingInput["primary_need"],
-    primary_need_other: intake.primary_need_other || undefined,
+    primary_need_other: primaryNeedOther || undefined,
     problem_description: intake.problem_description,
     current_systems: intake.current_systems,
     contact_name_role: intake.contact_name_role,
@@ -61,20 +66,27 @@ export const POST = handler("route-intake", async (request: Request) => {
 
   // The model routes when it can; on any failure the heuristic does, and the intake
   // carries a flag saying so. The flag is for the reviewer (the review queue shows it),
-  // not the applicant — the submitted screen is the same either way.
+  // not the applicant — the submitted screen is the same either way. A spent budget is
+  // one more such failure: the public form must never turn an applicant away over a
+  // quota they cannot see, so the intake is still filed, routed by the heuristic. Only a
+  // caller the database cannot identify (401) is refused.
   let result: ScoutResult;
   let runId: string | null = null;
   if (modelKeyConfigured()) {
     const budget = await checkModelBudget(client);
-    if (!budget.ok) return budget.response;
-    try {
-      ({ result, runId } = await routeScoutIntakeWithModel(input));
-    } catch (err) {
-      if (!(err instanceof GatewayError)) {
-        log("error", "route_failure", { agent: "scout", step: "routing", errorName: errorName(err) });
+    if (!budget.ok) {
+      if (budget.status !== 429) return budget.response;
+      result = fallback(input, "model_budget_exceeded");
+    } else {
+      try {
+        ({ result, runId } = await routeScoutIntakeWithModel(input));
+      } catch (err) {
+        if (!(err instanceof GatewayError)) {
+          log("error", "route_failure", { agent: "scout", step: "routing", errorName: errorName(err) });
+        }
+        const code = err instanceof GatewayError ? err.code : "model_call_failed";
+        result = fallback(input, code);
       }
-      const code = err instanceof GatewayError ? err.code : "model_call_failed";
-      result = fallback(input, code);
     }
   } else {
     result = fallback(input, "model_key_missing");
@@ -83,7 +95,7 @@ export const POST = handler("route-intake", async (request: Request) => {
   const { data, error: rpcErr } = await client.rpc("submit_scout_intake", {
     p_intake: {
       ...intake,
-      primary_need_other: intake.primary_need === "something_else" ? (intake.primary_need_other ?? "") : "",
+      primary_need_other: primaryNeedOther,
       bucket: result.bucket,
       confidence: result.confidence,
       rationale: result.rationale,

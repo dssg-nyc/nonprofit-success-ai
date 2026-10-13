@@ -42,7 +42,7 @@ export function judgeCard(j: JudgeSummary, rows: CalibrationResult[]): string {
   const fill = j.agreement === null ? 0 : Math.round(j.agreement * 100);
   const plot = rows.length ? stripPlot(j.judge, rows, JUDGE_PASS_THRESHOLD) : '';
   const counts = rows.length
-    ? `<span class="${c.lenient ? 't-bad' : ''}">${c.lenient} lenient</span> · <span class="${c.harsh ? 't-warn' : ''}">${c.harsh} harsh</span>${c.errored ? ` · <span class="t-err">${c.errored} errored</span>` : ''}`
+    ? `<span class="${c.lenient ? 't-bad' : ''}">${c.lenient} false pass${c.lenient === 1 ? '' : 'es'} (lenient)</span> · <span class="${c.harsh ? 't-warn' : ''}">${c.harsh} false failure${c.harsh === 1 ? '' : 's'} (harsh)</span>${c.errored ? ` · <span class="t-err">${c.errored} errored</span>` : ''}`
     : `${graded} graded${j.nErrored ? ` · <span class="t-err">${j.nErrored} errored</span>` : ''}`;
   return `<div class="judge-card tone-${tone}">
     <h3>${escapeHtml(j.judge)} <span class="pill ${trusted ? 'pass' : atFloor ? 'fail' : 'borderline'}">${trusted ? 'trusted' : atFloor ? 'not trusted' : 'under the floor'}</span></h3>

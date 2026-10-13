@@ -86,20 +86,25 @@ export const POST = handler("scout-approve", async (request: Request) => {
   if (!intake) return json({ error: "intake_not_found" }, 404);
 
   // Staff authority in the organization the engagement lands in, checked here so the
-  // answer is a 403 before anything is written. The RPC re-checks (42501) as the authority.
+  // answer is a 403 before anything is written. When neither the intake nor the caller
+  // names an organization the RPC picks the caller's only staff org, or refuses with
+  // `organization_required` when there are several — so the pre-check mirrors that
+  // exactly: with no org to scope to, it reads up to two staff memberships and answers
+  // 403 (none) or 422 (several) itself. The RPC re-checks (42501 / 22023) as the authority.
   const organizationId = intake.organization_id ?? req.organizationId ?? null;
   let membership = client
     .from("organization_members")
-    .select("role")
+    .select("organization_id, role")
     .eq("user_id", auth.userId)
     .in("role", ["admin", "owner"]);
   if (organizationId) membership = membership.eq("organization_id", organizationId);
-  const { data: roles, error: memberErr } = await membership.limit(1);
+  const { data: roles, error: memberErr } = await membership.limit(organizationId ? 1 : 2);
   if (memberErr) {
     log("error", "route_failure", { step: "membership_lookup", code: memberErr.code });
     return json({ error: "approve_failed" }, 502);
   }
   if (!roles || roles.length === 0) return json({ error: "forbidden" }, 403);
+  if (!organizationId && roles.length > 1) return json({ error: "organization_required" }, 422);
 
   const { data: result, error: rpcErr } = await client.rpc("approve_scout_intake", {
     p_intake_id: req.intakeId,

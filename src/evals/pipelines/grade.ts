@@ -3,6 +3,7 @@
  *
  *   npm run eval:grade                    # heuristics + judges (if available)
  *   npm run eval:grade -- --no-judges     # heuristics only (no judges, no model path)
+ *   npm run eval:grade -- --require-keys  # exit non-zero before grading unless both keys are set (what `make eval` passes)
  *   npm run eval:grade -- --gate          # exit non-zero on target miss
  *   npm run eval:grade -- --label "judge anchors"   # name the experiment (or EVAL_LABEL); default: the prompt versions
  *   npm run eval:grade -- --only chronicleDraft,chronicleReadiness   # grade these metrics only (a scoped run, see below)
@@ -53,6 +54,8 @@ const EXPERIMENT_LOG = resolve(EVALS_ROOT, 'experiments', 'log.jsonl');
 
 export interface Args {
   noJudges: boolean;
+  /** Stop before grading when a key is missing, instead of silently skipping that lane. */
+  requireKeys: boolean;
   gate: boolean;
   label: string | null;
   /**
@@ -84,6 +87,7 @@ export function parseArgs(argv: string[], metrics: Record<string, unknown> = MET
   const only = parseOnly(argv, metrics);
   return {
     noJudges: argv.includes('--no-judges'),
+    requireKeys: argv.includes('--require-keys'),
     gate: argv.includes('--gate'),
     // Unlabelled runs are named by the prompt versions they measured; a scoped run by what it graded.
     label: label || (only ? `only ${only.join(', ')}` : versionLabel()),
@@ -249,6 +253,15 @@ async function runGrading(args: Args): Promise<void> {
   // OpenAI, agents on Google by default); --no-judges opts out of both.
   const judgesRan = !args.noJudges && judgesAvailable();
   const modelRan = !args.noJudges && hasModelKey();
+  if (args.requireKeys && !args.noJudges && !(judgesRan && modelRan)) {
+    const missing = [
+      ...(judgesRan ? [] : [`${PROVIDER_KEYS[providerOf(judgeModel())]} (judge ${judgeModel()})`]),
+      ...(modelRan ? [] : [`${PROVIDER_KEYS[providerOf(defaultModel())]} (agent ${defaultModel()})`]),
+    ];
+    console.error(`error: --require-keys and ${missing.join(', ')} not set. Nothing graded.`);
+    removeSink();
+    process.exit(1);
+  }
   if (!args.noJudges && !judgesRan) {
     console.log(
       `Judges skipped: ${PROVIDER_KEYS[providerOf(judgeModel())]} not set for judge model ${judgeModel()}. ` +

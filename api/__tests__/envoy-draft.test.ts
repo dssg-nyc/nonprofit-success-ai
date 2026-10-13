@@ -81,10 +81,10 @@ const { envoyDraftResponseSchema } = await import('../../src/schemas');
 const { generateEnvoyDraft } = await import('../../src/agents/envoy/draft');
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzdGFmZi0xIn0.c2lnbmF0dXJl';
-const ENGAGEMENT_ID = 'bbbbbbbb-0000-0000-0000-000000000001';
-const APPROVAL_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
-const DRAFT_ID = 'aaaaaaaa-0000-0000-0000-000000000002';
-const RUN_ID = 'aaaaaaaa-0000-0000-0000-000000000003';
+const ENGAGEMENT_ID = '5c007eed-b2b0-54aa-bdd7-5df7797b2536';
+const APPROVAL_ID = '52c36b93-0c74-5222-b593-86c0c5ec460a';
+const DRAFT_ID = 'b9dbb27e-99ef-5699-9131-bffc84050f64';
+const RUN_ID = '443dded6-f9ab-5606-a710-39ad1fefad7d';
 
 const BODY: EnvoyDraftRequest = {
   engagementId: ENGAGEMENT_ID,
@@ -108,11 +108,11 @@ const DRAFT: EnvoyDraft = {
   hitlTier: 'L3',
 };
 
-const ASSESSMENT_ID = 'cccccccc-0000-0000-0000-000000000001';
+const ASSESSMENT_ID = '0d73afe2-648b-54bc-8111-033b3e08bb8c';
 const ENGAGEMENT = {
   id: ENGAGEMENT_ID,
-  organization_id: 'dddddddd-0000-0000-0000-000000000001',
-  business_id: 'eeeeeeee-0000-0000-0000-000000000001',
+  organization_id: '1e238853-fb3e-52a8-bed4-954ab17a8a5d',
+  business_id: 'b07a14e0-a781-53ba-a553-3e3aa287acf1',
   stage: 'initial_meeting',
   status: 'in_progress',
   assessment_id: ASSESSMENT_ID,
@@ -135,7 +135,7 @@ beforeEach(() => {
   db.tables = {
     engagements: { data: ENGAGEMENT, error: null },
     organization_members: { data: { role: 'admin' }, error: null },
-    'engagements:membership': { data: { id: 'ffffffff-0000-0000-0000-000000000001' }, error: null },
+    'engagements:membership': { data: { id: '37500687-f06e-5b63-9ce5-7c391d74a0a5' }, error: null },
     businesses: { data: { name: INPUT.orgName }, error: null },
     'engagement_events:count': { data: 3, error: null },
     architect_assessments: { data: { charter: CHARTER }, error: null },

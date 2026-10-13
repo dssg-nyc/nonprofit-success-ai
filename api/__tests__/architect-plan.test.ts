@@ -10,7 +10,7 @@ type Result = { data: unknown; error: { code?: string; message?: string; status?
 const db = vi.hoisted(() => ({
   user: { data: { user: { id: 'user-1' } }, error: null } as Result,
   tables: {} as Record<string, Result>,
-  rpc: { data: 'aaaaaaaa-0000-0000-0000-000000000001', error: null } as Result,
+  rpc: { data: '52c36b93-0c74-5222-b593-86c0c5ec460a', error: null } as Result,
   rpcCalls: [] as Array<{ fn: string; args: Record<string, unknown> }>,
   budget: { data: 19, error: null } as Result,
   budgetCalls: [] as Array<Record<string, unknown>>,
@@ -72,8 +72,8 @@ const { buildTemplate } = await import('../../src/agents/architect/model');
 const { scoreAssessment } = await import('../../src/agents/architect/scoring');
 const { architectPlanResponseSchema } = await import('../../src/schemas');
 
-const INTAKE_ID = 'cccccccc-0000-0000-0000-000000000001';
-const APPROVAL_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
+const INTAKE_ID = '0d73afe2-648b-54bc-8111-033b3e08bb8c';
+const APPROVAL_ID = '52c36b93-0c74-5222-b593-86c0c5ec460a';
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEifQ.c2lnbmF0dXJl';
 
 const ANSWERS: ArchitectPlanRequest['answers'] = {
@@ -108,7 +108,7 @@ const INTAKE = {
   org_name: 'Borough Food Bank',
   final_bucket: 'Data Infrastructure',
   review_status: 'reviewed',
-  organization_id: 'dddddddd-0000-0000-0000-000000000001',
+  organization_id: '1e238853-fb3e-52a8-bed4-954ab17a8a5d',
 };
 
 const post = (body: unknown, token: string | null = TOKEN) =>
@@ -149,7 +149,7 @@ beforeEach(() => {
   agent.calls = [];
   agent.respond = async () => {
     const t = buildTemplate(genInput());
-    return { charter: { ...t.charter, background: 'Model-written background.' }, plan: t.plan, runId: 'bbbbbbbb-0000-0000-0000-000000000001' };
+    return { charter: { ...t.charter, background: 'Model-written background.' }, plan: t.plan, runId: '5c007eed-b2b0-54aa-bdd7-5df7797b2536' };
   };
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -245,7 +245,7 @@ describe('POST /api/architect-plan — draft', () => {
       source: 'model',
       hitlTier: 'L3',
       approvalId: APPROVAL_ID,
-      runId: 'bbbbbbbb-0000-0000-0000-000000000001',
+      runId: '5c007eed-b2b0-54aa-bdd7-5df7797b2536',
     });
     expect(body.charter.background).toBe('Model-written background.');
     expect(body.maturity).toEqual(scoreAssessment(ANSWERS, 'Data Infrastructure'));
@@ -254,7 +254,7 @@ describe('POST /api/architect-plan — draft', () => {
     expect(call.fn).toBe('submit_architect_draft');
     expect(call.args).toMatchObject({
       p_idempotency_key: BODY.idempotencyKey,
-      p_agent_run_id: 'bbbbbbbb-0000-0000-0000-000000000001',
+      p_agent_run_id: '5c007eed-b2b0-54aa-bdd7-5df7797b2536',
       p_payload: {
         scout_intake_id: INTAKE_ID,
         q4_collection_scope: 'partial',
@@ -267,7 +267,7 @@ describe('POST /api/architect-plan — draft', () => {
 
   it("gateway error → 200 source 'fallback': the template is saved, linked to the gateway's one run", async () => {
     const err = new GatewayError('model_timeout', 504, 'timed out');
-    err.runId = 'bbbbbbbb-0000-0000-0000-00000000000f';
+    err.runId = '9d3aba26-56e2-5d71-88ce-dd926f2aaf77';
     agent.respond = async () => {
       throw err;
     };
@@ -367,7 +367,7 @@ describe('POST /api/architect-plan — idempotent replay', () => {
       entity_id: INTAKE_ID,
       agent: 'architect',
       entity_type: 'charter',
-      agent_run_id: 'bbbbbbbb-0000-0000-0000-000000000002',
+      agent_run_id: '8774468b-2d88-54bd-8b55-2ac6a06e0951',
       status: 'pending',
       ...over,
     },
@@ -385,7 +385,7 @@ describe('POST /api/architect-plan — idempotent replay', () => {
     expect(body).toMatchObject({
       approvalId: APPROVAL_ID,
       source: 'model',
-      runId: 'bbbbbbbb-0000-0000-0000-000000000002',
+      runId: '8774468b-2d88-54bd-8b55-2ac6a06e0951',
     });
     expect(agent.calls).toHaveLength(0);
     expect(db.rpcCalls).toHaveLength(0);
@@ -402,7 +402,7 @@ describe('POST /api/architect-plan — idempotent replay', () => {
   });
 
   it('400 for a key already used for a different draft', async () => {
-    db.tables.approvals = prior({ entity_id: 'cccccccc-0000-0000-0000-000000000099' });
+    db.tables.approvals = prior({ entity_id: 'f62da308-3577-541b-8f42-8c92db54fb40' });
     const res = await post(BODY);
     expect(res.status).toBe(400);
     expect(agent.calls).toHaveLength(0);

@@ -1,6 +1,6 @@
 # gitleaks config — picked up by the pre-commit hook (detect secrets) and by any
 # `gitleaks protect --staged` run from the repo root. Extends the default rules; the
-# allowlist below names the two test-fixture shapes that trip them and nothing else.
+# allowlist below names the three test-fixture shapes that trip them and nothing else.
 title = "nonprofit-success-ai"
 
 [extend]
@@ -16,4 +16,8 @@ regexes = [
   # pgTAP idempotency-key fixtures in supabase/tests: '<agent>-key-0001',
   # 'chronicle-key-0015-a', 'envoy-key-unrecorded', 'tx-revert-0001'.
   '''^[a-z]+-(key|budget|first|revert|scoping)(-\d{4}(-[a-z])?|-unrecorded)$''',
+  # Fixture row ids: deterministic UUIDv5 hashes (version nibble 5, RFC variant), shared
+  # by supabase/tests and the api/ + src/ unit tests. Next to an idempotency-key literal
+  # their entropy reads as an API key; a real credential is never a v5 UUID here.
+  '''^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$''',
 ]

@@ -46,7 +46,7 @@ export const envoyInputSchema = z.object({
   concerns: z.array(z.string().min(1).max(300)).max(10).optional(),
 });
 
-/** `z.guid()` as in `architect.ts`: seeded fixture ids carry no RFC version nibble. */
+/** `z.guid()` as in `architect.ts`: the column accepts any GUID layout, so does the wire. */
 export const envoyDraftRequestSchema = envoyInputSchema
   .pick({ occasion: true, concerns: true })
   .extend({

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SCHEMA_VERSIONS, envoyDraftRequestSchema } from "../../../schemas";
 
 const VALID = {
-  engagementId: "bbbbbbbb-0000-0000-0000-000000000001",
+  engagementId: "5c007eed-b2b0-54aa-bdd7-5df7797b2536",
   idempotencyKey: "envoy-submit-0001",
   occasion: "kickoff",
 };

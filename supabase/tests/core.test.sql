@@ -69,7 +69,7 @@ select throws_ok(
 -- the only writer, so no role holds INSERT on the table any more (rules:184 still holds —
 -- a prospective org with no account can file an intake — through the RPC).
 select throws_ok(
-  $$ select tests.intake_values('dddddddd-0000-0000-0000-000000000001') $$,
+  $$ select tests.intake_values('1e238853-fb3e-52a8-bed4-954ab17a8a5d') $$,
   '42501',
   null,
   'anon cannot insert an intake row directly (0007: submit_scout_intake is the only writer)'
@@ -97,7 +97,7 @@ select throws_ok(
        rationale, poc_score, clarity_score, foothold_score, composite_signal, hitl_tier,
        review_status, review_action, final_bucket
      ) values (
-       'dddddddd-0000-0000-0000-000000000002', 'Sneaky Org', 'X', 'x@example.org', 'M',
+       'a979b501-97f4-5e4f-acd2-83209784d7b7', 'Sneaky Org', 'X', 'x@example.org', 'M',
        'S', 'build_tool', 'P', 'C', 'T', 'R', 'Rat', 2, 2, 2, 'Conditional', 'L3',
        'reviewed', 'approved', 'ML / Predictive'
      ) $$,
@@ -108,7 +108,7 @@ select throws_ok(
 
 select throws_ok(
   $$ update scout_intakes set review_status = 'reviewed'
-     where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+     where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$,
   null,
   null,
   'anon cannot update an intake (rules:185 — admin only)'
@@ -119,7 +119,7 @@ select throws_ok(
 select tests.login_anonymous(:anon_user_id);
 
 select throws_ok(
-  $$ select tests.intake_values('dddddddd-0000-0000-0000-000000000003') $$,
+  $$ select tests.intake_values('518394ce-c89d-53aa-97c2-a136e99192de') $$,
   '42501',
   null,
   'an anonymous session cannot insert an intake row directly (0007)'
@@ -139,7 +139,7 @@ select is(
   tests.affected(
     $$ update scout_intakes set review_status = 'reviewed', review_action = 'approved',
        final_bucket = 'ML / Predictive'
-       where id = 'cccccccc-0000-0000-0000-000000000001' $$
+       where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$
   ),
   0,
   'an anonymous session cannot review an intake'
@@ -160,7 +160,7 @@ select is(
   tests.affected(
     $$ update scout_intakes set review_status = 'reviewed', review_action = 'approved',
               final_bucket = 'ML / Predictive'
-        where id = 'cccccccc-0000-0000-0000-000000000001' $$),
+        where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$),
   0,
   'a non-admin cannot review an intake (rules:185)'
 );
@@ -169,7 +169,7 @@ select is(
 select tests.login_as(:admin_id);
 
 select isnt_empty(
-  $$ select id from scout_intakes where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  $$ select id from scout_intakes where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$,
   'an admin CAN read intakes (rules:183)'
 );
 
@@ -182,14 +182,14 @@ select lives_ok(
             reviewed_by_email = 'admin@dssg.nyc',
             reviewed_at   = now(),
             -- 0001_core: review also assigns the intake to the reviewer's org (null -> org).
-            organization_id = 'eeeeeeee-0000-0000-0000-000000000001'
-      where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+            organization_id = 'b07a14e0-a781-53ba-a553-3e3aa287acf1'
+      where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$,
   'an admin CAN review an intake and assign it to their org (rules:185-191, 0001_core)'
 );
 
 select throws_ok(
   $$ update scout_intakes set org_name = 'Rewritten Org'
-     where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+     where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$,
   null,
   null,
   'even an admin cannot rewrite the applicant''s own answers (rules:187 hasOnly)'
@@ -197,7 +197,7 @@ select throws_ok(
 
 select throws_ok(
   $$ update scout_intakes set reviewed_by = '11111111-1111-1111-1111-111111111111'
-     where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+     where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$,
   null,
   null,
   'reviewed_by must be the acting admin (rules:191)'
@@ -206,33 +206,33 @@ select throws_ok(
 -- 0010: an admin can park an intake as needs_info with a request note; the parked row
 -- carries no decision and cannot go back to pending.
 reset role;
-select tests.intake_values('cccccccc-0000-0000-0000-000000000002');
+select tests.intake_values('d623e1da-6f6a-53b1-9964-6848ba0cc4a2');
 select tests.login_as(:admin_id);
 
 select lives_ok(
   $$ update scout_intakes
         set review_status = 'needs_info', review_notes = 'Which systems hold the data?',
             reviewed_by = '33333333-3333-3333-3333-333333333333', reviewed_at = now()
-      where id = 'cccccccc-0000-0000-0000-000000000002' $$,
+      where id = 'd623e1da-6f6a-53b1-9964-6848ba0cc4a2' $$,
   'an admin CAN park an intake as needs_info with the request in review_notes (0010)'
 );
 
 select throws_ok(
   $$ update scout_intakes set review_action = 'approved', final_bucket = 'ML / Predictive'
-     where id = 'cccccccc-0000-0000-0000-000000000002' $$,
+     where id = 'd623e1da-6f6a-53b1-9964-6848ba0cc4a2' $$,
   '23514', null,
   'a needs_info intake never carries a decision (0010: scout_intakes_needs_info_undecided)'
 );
 
 select throws_ok(
   $$ update scout_intakes set review_status = 'pending'
-     where id = 'cccccccc-0000-0000-0000-000000000002' $$,
+     where id = 'd623e1da-6f6a-53b1-9964-6848ba0cc4a2' $$,
   '42501', null,
   'a parked intake cannot be put back to pending — the queue reads needs_info as pending (0010)'
 );
 
 select throws_ok(
-  $$ delete from scout_intakes where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  $$ delete from scout_intakes where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$,
   null,
   null,
   'nobody can delete an intake — audit trail (rules:192)'
@@ -317,17 +317,17 @@ select results_eq(
 
 select lives_ok(
   $$ insert into businesses (id, name, type, owner_id, organization_id)
-     values ('aaaaaaaa-0000-0000-0000-000000000002', 'Alice Second', 'small_business',
+     values ('b9dbb27e-99ef-5699-9131-bffc84050f64', 'Alice Second', 'small_business',
              '11111111-1111-1111-1111-111111111111',
-             'eeeeeeee-0000-0000-0000-000000000001') $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   'a user CAN create a business they own in their org (rules:108)'
 );
 
 select throws_ok(
   $$ insert into businesses (id, name, type, owner_id, organization_id)
-     values ('aaaaaaaa-0000-0000-0000-000000000003', 'Planted', 'nonprofit',
+     values ('443dded6-f9ab-5606-a710-39ad1fefad7d', 'Planted', 'nonprofit',
              '22222222-2222-2222-2222-222222222222',
-             'eeeeeeee-0000-0000-0000-000000000001') $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   '42501',
   null,
   'a user cannot create a business owned by somebody else (rules:52,108)'
@@ -337,7 +337,7 @@ select throws_ok(
 -- the caller's orgs. A real org alice is not in would be refused the same way.
 select throws_ok(
   $$ insert into businesses (id, name, type, owner_id, organization_id)
-     values ('aaaaaaaa-0000-0000-0000-000000000005', 'Elsewhere', 'nonprofit',
+     values ('40892e73-3b12-5bf9-bf63-bb74e3846d69', 'Elsewhere', 'nonprofit',
              '11111111-1111-1111-1111-111111111111', null) $$,
   '42501',
   null,
@@ -349,14 +349,14 @@ select throws_ok(
 select is(
   tests.affected(
     $$ update businesses set owner_id = '11111111-1111-1111-1111-111111111111'
-        where id = 'bbbbbbbb-0000-0000-0000-000000000001' $$),
+        where id = '5c007eed-b2b0-54aa-bdd7-5df7797b2536' $$),
   0,
   'a user cannot steal another owner''s business (rules:109)'
 );
 
 select throws_ok(
   $$ update businesses set owner_id = '22222222-2222-2222-2222-222222222222'
-     where id = 'aaaaaaaa-0000-0000-0000-000000000001' $$,
+     where id = '52c36b93-0c74-5222-b593-86c0c5ec460a' $$,
   null,
   null,
   'owner_id is immutable even for the owner (rules:110)'
@@ -366,7 +366,7 @@ select throws_ok(
 -- WITH CHECK, so this proves the immutability guard itself, not RLS.
 select throws_ok(
   $$ update businesses set organization_id = '99999999-9999-9999-9999-999999999999'
-     where id = 'aaaaaaaa-0000-0000-0000-000000000001' $$,
+     where id = '52c36b93-0c74-5222-b593-86c0c5ec460a' $$,
   '23514',
   null,
   'organization_id is immutable on businesses (0001_core: immutability trigger)'
@@ -374,12 +374,12 @@ select throws_ok(
 
 select lives_ok(
   $$ update businesses set name = 'Alice Nonprofit Inc.'
-     where id = 'aaaaaaaa-0000-0000-0000-000000000001' $$,
+     where id = '52c36b93-0c74-5222-b593-86c0c5ec460a' $$,
   'an owner CAN rename their business (rules:111)'
 );
 
 select lives_ok(
-  $$ delete from businesses where id = 'aaaaaaaa-0000-0000-0000-000000000002' $$,
+  $$ delete from businesses where id = 'b9dbb27e-99ef-5699-9131-bffc84050f64' $$,
   'an owner CAN delete their own business (rules:112)'
 );
 
@@ -409,10 +409,10 @@ select results_eq(
 -- the rows the rest of this suite builds on are seeded as the superuser, as the fixtures are.
 select throws_ok(
   $$ insert into engagements (id, business_id, owner_id, stage, status, organization_id)
-     values ('aaaaaaaa-0000-0000-0000-000000000011',
-             'aaaaaaaa-0000-0000-0000-000000000001',
+     values ('1ba5f756-9fb6-5d86-a6c6-4b523295a41e',
+             '52c36b93-0c74-5222-b593-86c0c5ec460a',
              '11111111-1111-1111-1111-111111111111', 'scoping', 'pending',
-             'eeeeeeee-0000-0000-0000-000000000001') $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   '42501',
   null,
   'a user can NO LONGER create an engagement directly — only transition_engagement() writes (0001_core; was rules:119-120)'
@@ -420,18 +420,18 @@ select throws_ok(
 
 reset role;
 insert into engagements (id, business_id, owner_id, stage, status, organization_id)
-values ('aaaaaaaa-0000-0000-0000-000000000011',
-        'aaaaaaaa-0000-0000-0000-000000000001',
+values ('1ba5f756-9fb6-5d86-a6c6-4b523295a41e',
+        '52c36b93-0c74-5222-b593-86c0c5ec460a',
         '11111111-1111-1111-1111-111111111111', 'scoping', 'pending',
-        'eeeeeeee-0000-0000-0000-000000000001');
+        'b07a14e0-a781-53ba-a553-3e3aa287acf1');
 select tests.login_as(:alice_id);
 
 select throws_ok(
   $$ insert into engagements (id, business_id, owner_id, stage, status, organization_id)
-     values ('aaaaaaaa-0000-0000-0000-000000000012',
-             'bbbbbbbb-0000-0000-0000-000000000001',
+     values ('b7265abe-a694-5889-b20d-56c3d26dd0b1',
+             '5c007eed-b2b0-54aa-bdd7-5df7797b2536',
              '11111111-1111-1111-1111-111111111111', 'scoping', 'pending',
-             'eeeeeeee-0000-0000-0000-000000000001') $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   '42501',
   null,
   'a user cannot attach an engagement to a business they do not own — 42501 from the 0001_core privilege revoke (was rules:120)'
@@ -442,10 +442,10 @@ select throws_ok(
 reset role;
 select throws_ok(
   $$ insert into engagements (id, business_id, owner_id, stage, status, organization_id)
-     values ('aaaaaaaa-0000-0000-0000-000000000013',
+     values ('97a7d09a-e564-5070-b1c1-3a24157360f1',
              '99999999-9999-9999-9999-999999999999',
              '11111111-1111-1111-1111-111111111111', 'scoping', 'pending',
-             'eeeeeeee-0000-0000-0000-000000000001') $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   '23503',
   null,
   'an engagement cannot reference a nonexistent business (rules:120 atomic guarantee; FK 23503)'
@@ -454,7 +454,7 @@ select tests.login_as(:alice_id);
 
 select throws_ok(
   $$ update engagements set stage = 'budget_check'
-     where id = 'aaaaaaaa-0000-0000-0000-000000000010' $$,
+     where id = '53939e32-79f1-50fa-afcc-87e61809fc30' $$,
   '42501',
   null,
   'an owner can NO LONGER write the stage — the lifecycle self-advancement hole is closed (0001_core; was rules:126)'
@@ -463,7 +463,7 @@ select throws_ok(
 -- The suite below was built on this row having moved to budget_check; seed it as the superuser.
 reset role;
 update engagements set stage = 'budget_check'
- where id = 'aaaaaaaa-0000-0000-0000-000000000010';
+ where id = '53939e32-79f1-50fa-afcc-87e61809fc30';
 select tests.login_as(:alice_id);
 
 -- The target must be a *different* business that alice also owns, otherwise the update is
@@ -473,9 +473,9 @@ select tests.login_as(:alice_id);
 -- section above, so create a fresh one to move to.
 select lives_ok(
   $$ insert into businesses (id, name, type, owner_id, organization_id)
-     values ('aaaaaaaa-0000-0000-0000-000000000004', 'Alice Third', 'nonprofit',
+     values ('ae15935c-e245-5846-acf1-4bb6455268bb', 'Alice Third', 'nonprofit',
              '11111111-1111-1111-1111-111111111111',
-             'eeeeeeee-0000-0000-0000-000000000001') $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   'fixture: a second business alice owns, to attempt a real business_id change'
 );
 
@@ -484,8 +484,8 @@ select lives_ok(
 reset role;
 
 select throws_ok(
-  $$ update engagements set business_id = 'aaaaaaaa-0000-0000-0000-000000000004'
-     where id = 'aaaaaaaa-0000-0000-0000-000000000011' $$,
+  $$ update engagements set business_id = 'ae15935c-e245-5846-acf1-4bb6455268bb'
+     where id = '1ba5f756-9fb6-5d86-a6c6-4b523295a41e' $$,
   '23514',
   null,
   'business_id is immutable after create (rules:123)'
@@ -493,7 +493,7 @@ select throws_ok(
 
 select throws_ok(
   $$ update engagements set organization_id = '99999999-9999-9999-9999-999999999999'
-     where id = 'aaaaaaaa-0000-0000-0000-000000000010' $$,
+     where id = '53939e32-79f1-50fa-afcc-87e61809fc30' $$,
   '23514',
   null,
   'organization_id is immutable on engagements (0001_core: immutability trigger)'
@@ -506,7 +506,7 @@ select tests.as_service();
 
 select throws_ok(
   $$ update engagements set status = 'in_progress'
-     where id = 'bbbbbbbb-0000-0000-0000-000000000010' $$,
+     where id = '3e75b295-305e-5e33-938c-4cb2290d2424' $$,
   '23514',
   null,
   'service_role cannot return a completed engagement to in_progress: the lock keys on the session role (rules:125)'
@@ -516,15 +516,15 @@ reset role;
 
 select lives_ok(
   $$ update engagements set status = 'in_progress'
-     where id = 'bbbbbbbb-0000-0000-0000-000000000010' $$,
+     where id = '3e75b295-305e-5e33-938c-4cb2290d2424' $$,
   'the superuser (as a definer function would) can reopen a completed engagement with no setting'
 );
 
-update engagements set status = 'completed' where id = 'bbbbbbbb-0000-0000-0000-000000000010';
+update engagements set status = 'completed' where id = '3e75b295-305e-5e33-938c-4cb2290d2424';
 
 select lives_ok(
   $$ update engagements set notes = 'wrapped up'
-     where id = 'bbbbbbbb-0000-0000-0000-000000000010' $$,
+     where id = '3e75b295-305e-5e33-938c-4cb2290d2424' $$,
   'a completed engagement can still be annotated by the superuser (rules:125 allows status = completed)'
 );
 
@@ -570,7 +570,7 @@ select results_eq(
 -- admin's only write path is transition_engagement() (U5 / D18 resolved, lifecycle.md §2).
 select throws_ok(
   $$ update engagements set stage = 'budget_check'
-     where id = 'bbbbbbbb-0000-0000-0000-000000000010' $$,
+     where id = '3e75b295-305e-5e33-938c-4cb2290d2424' $$,
   '42501',
   null,
   'an admin CANNOT write engagements directly — transition_engagement() is the only writer (0001_core)'
@@ -589,7 +589,7 @@ select results_eq(
 -- Read authority only: the admin owns no business, so the owner-scoped update matches nothing.
 select is(
   tests.affected($$ update businesses set name = 'Renamed by admin'
-                    where id = 'aaaaaaaa-0000-0000-0000-000000000001' $$),
+                    where id = '52c36b93-0c74-5222-b593-86c0c5ec460a' $$),
   0,
   'an admin CANNOT update a business they do not own (0009 adds no write)'
 );
@@ -635,17 +635,17 @@ select results_eq(
 
 select lives_ok(
   $$ insert into engagement_events (engagement_id, kind, detail, created_by, organization_id)
-     values ('aaaaaaaa-0000-0000-0000-000000000010', 'session_held', '{"text": "kickoff call"}',
+     values ('53939e32-79f1-50fa-afcc-87e61809fc30', 'session_held', '{"text": "kickoff call"}',
              '11111111-1111-1111-1111-111111111111',
-             'eeeeeeee-0000-0000-0000-000000000001') $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   'an owner CAN append an event to their own engagement (insert_own)'
 );
 
 select throws_ok(
   $$ insert into engagement_events (engagement_id, kind, detail, created_by, organization_id)
-     values ('aaaaaaaa-0000-0000-0000-000000000010', 'note_added', '"a bare string"',
+     values ('53939e32-79f1-50fa-afcc-87e61809fc30', 'note_added', '"a bare string"',
              '11111111-1111-1111-1111-111111111111',
-             'eeeeeeee-0000-0000-0000-000000000001') $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   '23514',
   null,
   'engagement_events.detail must be a JSON object, not a scalar (0003_delivery check)'
@@ -653,9 +653,9 @@ select throws_ok(
 
 select throws_ok(
   $$ insert into engagement_events (engagement_id, kind, created_by, organization_id)
-     values ('bbbbbbbb-0000-0000-0000-000000000010', 'session_held',
+     values ('3e75b295-305e-5e33-938c-4cb2290d2424', 'session_held',
              '11111111-1111-1111-1111-111111111111',
-             'eeeeeeee-0000-0000-0000-000000000001') $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   '42501',
   null,
   'a user cannot append an event to someone else''s engagement'
@@ -664,9 +664,9 @@ select throws_ok(
 -- created_by is the attribution field Pulse trusts; forging it must be impossible.
 select throws_ok(
   $$ insert into engagement_events (engagement_id, kind, created_by, organization_id)
-     values ('aaaaaaaa-0000-0000-0000-000000000010', 'note_added',
+     values ('53939e32-79f1-50fa-afcc-87e61809fc30', 'note_added',
              '22222222-2222-2222-2222-222222222222',
-             'eeeeeeee-0000-0000-0000-000000000001') $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   '42501',
   null,
   'a user cannot attribute an event to another user'
@@ -730,7 +730,7 @@ select throws_ok(
        points, composite_level, charter, ninety_day_plan,
        created_by, created_by_email
      ) values (
-       'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001',
+       '0d73afe2-648b-54bc-8111-033b3e08bb8c', '0d73afe2-648b-54bc-8111-033b3e08bb8c',
        'Seeded Org', 'Analytics & Insight', 'Ready',
        'ctx', 'size', 'poc', 'partial', 'locations', 'some_share',
        'somewhat_familiar', 'mixed', 'now', 'wished', 'leadership_managers',
@@ -764,7 +764,7 @@ select throws_ok(
        points, composite_level, charter, ninety_day_plan,
        created_by, created_by_email
      ) values (
-       'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001',
+       '0d73afe2-648b-54bc-8111-033b3e08bb8c', '0d73afe2-648b-54bc-8111-033b3e08bb8c',
        'Seeded Org', 'Analytics & Insight', 'Ready',
        'ctx', 'size', 'poc', 'partial', 'locations', 'some_share',
        'somewhat_familiar', 'mixed', 'now', 'wished', 'leadership_managers',
@@ -806,7 +806,7 @@ insert into architect_assessments (
        points, composite_level, charter, ninety_day_plan,
        created_by, created_by_email
      ) values (
-       'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001',
+       '0d73afe2-648b-54bc-8111-033b3e08bb8c', '0d73afe2-648b-54bc-8111-033b3e08bb8c',
        'Seeded Org', 'Analytics & Insight', 'Ready',
        'ctx', 'size', 'poc', 'partial', 'locations', 'some_share',
        'somewhat_familiar', 'mixed', 'now', 'wished', 'leadership_managers',
@@ -819,7 +819,7 @@ select tests.login_as(:admin_id);
 
 select throws_ok(
   $$ update architect_assessments set created_by = '11111111-1111-1111-1111-111111111111'
-     where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+     where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$,
   '42501',
   null,
   'an admin cannot rewrite created_by directly (rules:202; no UPDATE since 0001_core)'
@@ -827,14 +827,14 @@ select throws_ok(
 
 select throws_ok(
   $$ update architect_assessments set composite_level = 'Established', points = 14
-     where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+     where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$,
   '42501',
   null,
   'an admin cannot re-conduct an assessment directly — a re-submit goes through submit_architect_draft() (0001_core)'
 );
 
 select throws_ok(
-  $$ delete from architect_assessments where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  $$ delete from architect_assessments where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$,
   null,
   null,
   'nobody can delete an assessment — audit trail (rules:204)'
@@ -854,15 +854,15 @@ reset role;
 
 select lives_ok(
   $$ update engagements
-     set assessment_id = 'cccccccc-0000-0000-0000-000000000001'
-     where id = 'aaaaaaaa-0000-0000-0000-000000000010' $$,
+     set assessment_id = '0d73afe2-648b-54bc-8111-033b3e08bb8c'
+     where id = '53939e32-79f1-50fa-afcc-87e61809fc30' $$,
   'an engagement can be linked to an assessment (assessment_id)'
 );
 
 select throws_ok(
   $$ update engagements
      set assessment_id = '99999999-9999-9999-9999-999999999999'
-     where id = 'aaaaaaaa-0000-0000-0000-000000000010' $$,
+     where id = '53939e32-79f1-50fa-afcc-87e61809fc30' $$,
   '23503',
   null,
   'assessment_id cannot reference a nonexistent assessment (FK)'
@@ -941,37 +941,37 @@ end;
 $$;
 
 insert into agent_runs (id, agent, organization_id, model, prompt_version, status, hitl_tier, duration_ms)
-values ('ffffffff-0000-0000-0000-0000000000a8', 'scout', null,
+values ('67856603-0a59-501f-82cd-20790dfc0405', 'scout', null,
         'gemini-2.5-flash', 'scout-routing-v1', 'success', 'L3', 700);
 
 select is(
-  (select routing_source::text from scout_intakes where id = 'cccccccc-0000-0000-0000-000000000001'),
+  (select routing_source::text from scout_intakes where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c'),
   'derived',
   'an existing intake reads routing_source ''derived'' by default (0001_core)'
 );
 
 select throws_ok(
-  $$ select tests.intake_routing('abcd0018-0000-0000-0000-0000000000a1', 'ai', null) $$,
+  $$ select tests.intake_routing('367df664-bdbc-5d26-bff4-1801dca42830', 'ai', null) $$,
   '23514', null,
   'routing_source ''ai'' with no routing_run_id is refused (0001_core)'
 );
 
 select throws_ok(
-  $$ select tests.intake_routing('abcd0018-0000-0000-0000-0000000000a2', 'derived',
-                                 'ffffffff-0000-0000-0000-0000000000a8') $$,
+  $$ select tests.intake_routing('13554ff0-bf3d-509c-91d1-b4bc29851e03', 'derived',
+                                 '67856603-0a59-501f-82cd-20790dfc0405') $$,
   '23514', null,
   'a routing_run_id on a ''derived'' intake is refused (0001_core)'
 );
 
 select throws_ok(
-  $$ select tests.intake_routing('abcd0018-0000-0000-0000-0000000000a3', 'human', null) $$,
+  $$ select tests.intake_routing('0e373f81-0be9-57c0-a56d-23d2bb400e02', 'human', null) $$,
   '23514', null,
   'routing_source admits only ''derived'' and ''ai'' (0001_core)'
 );
 
 select lives_ok(
-  $$ select tests.intake_routing('abcd0018-0000-0000-0000-0000000000a4', 'ai',
-                                 'ffffffff-0000-0000-0000-0000000000a8') $$,
+  $$ select tests.intake_routing('1862f013-7051-5b4b-b688-99a3a0250fbe', 'ai',
+                                 '67856603-0a59-501f-82cd-20790dfc0405') $$,
   'routing_source ''ai'' with a routing_run_id is accepted (0001_core)'
 );
 
@@ -979,8 +979,8 @@ select lives_ok(
 -- RPC it does hold derives provenance from the run (asserted in the 0007 block below).
 select tests.logout();
 select throws_ok(
-  $$ select tests.intake_routing('abcd0018-0000-0000-0000-0000000000a5', 'ai',
-                                 'ffffffff-0000-0000-0000-0000000000a8') $$,
+  $$ select tests.intake_routing('ec462617-975d-5a45-a4c5-59d7bb17e5ef', 'ai',
+                                 '67856603-0a59-501f-82cd-20790dfc0405') $$,
   '42501',
   null,
   'anon cannot insert an intake claiming ''ai'' routing provenance (0007: no INSERT privilege)'
@@ -993,7 +993,7 @@ select throws_ok(
         set review_status = 'reviewed', review_action = 'approved',
             final_bucket = 'Analytics & Insight', reviewed_by = '33333333-3333-3333-3333-333333333333',
             reviewed_at = now(), routing_model = 'rewritten'
-      where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+      where id = '0d73afe2-648b-54bc-8111-033b3e08bb8c' $$,
   '23514', null,
   'an admin review cannot rewrite routing provenance (0001_core review-only trigger)'
 );
@@ -1012,9 +1012,9 @@ reset role;
 
 -- A successful run that recorded L2, a failed one, and one of another agent.
 insert into agent_runs (id, agent, model, prompt_version, status, hitl_tier, duration_ms)
-values ('ffffffff-0000-0000-0000-0000000000a9', 'scout', 'gemini-3.5-flash-lite', 'scout-routing-0.05', 'success', 'L2', 500),
-       ('ffffffff-0000-0000-0000-0000000000b0', 'scout', 'gemini-3.5-flash-lite', 'scout-routing-0.05', 'fallback', null, 500),
-       ('ffffffff-0000-0000-0000-0000000000b1', 'envoy', 'gemini-3.5-flash-lite', 'envoy-0.1', 'success', 'L3', 500);
+values ('480043d4-68d0-57a1-a196-bb07da0e8b7a', 'scout', 'gemini-3.5-flash-lite', 'scout-routing-0.05', 'success', 'L2', 500),
+       ('3b33ab7a-c98e-547e-b034-00357006a852', 'scout', 'gemini-3.5-flash-lite', 'scout-routing-0.05', 'fallback', null, 500),
+       ('5b718538-1b35-5d7e-9a97-3fa6fcbdc201', 'envoy', 'gemini-3.5-flash-lite', 'envoy-0.1', 'success', 'L3', 500);
 
 select tests.logout();
 
@@ -1024,7 +1024,7 @@ select is(
   (select r ->> 'hitl_tier' || '/' || (r ->> 'routing_source')
      from submit_scout_intake(tests.intake_payload()
        || '{"hitl_tier": "L2", "review_status": "reviewed", "review_action": "approved",
-            "final_bucket": "ML / Predictive", "routing_source": "ai", "organization_id": "eeeeeeee-0000-0000-0000-000000000001"}'::jsonb) r),
+            "final_bucket": "ML / Predictive", "routing_source": "ai", "organization_id": "b07a14e0-a781-53ba-a553-3e3aa287acf1"}'::jsonb) r),
   'L3/derived',
   'submit_scout_intake ignores a payload''s tier, review and provenance claims (0007)'
 );
@@ -1043,7 +1043,7 @@ select tests.logout();
 select is(
   (select r ->> 'hitl_tier' || '/' || (r ->> 'routing_source')
      from submit_scout_intake(tests.intake_payload() || '{"confidence": "High", "composite_signal": "Ready"}'::jsonb,
-                              'ffffffff-0000-0000-0000-0000000000a9') r),
+                              '480043d4-68d0-57a1-a196-bb07da0e8b7a') r),
   'L2/ai',
   'a successful Scout run that recorded L2, with a High + Ready result, yields L2 / ai (0007)'
 );
@@ -1051,26 +1051,26 @@ select is(
 reset role;
 select results_eq(
   $$ select routing_model, routing_prompt_version from scout_intakes
-      where routing_run_id = 'ffffffff-0000-0000-0000-0000000000a9' $$,
+      where routing_run_id = '480043d4-68d0-57a1-a196-bb07da0e8b7a' $$,
   $$ values ('gemini-3.5-flash-lite'::text, 'scout-routing-0.05'::text) $$,
   'model and prompt version are copied from the run, not the payload (0007)'
 );
 select tests.logout();
 
 select throws_ok(
-  $$ select submit_scout_intake(tests.intake_payload(), 'ffffffff-0000-0000-0000-0000000000a9') $$,
+  $$ select submit_scout_intake(tests.intake_payload(), '480043d4-68d0-57a1-a196-bb07da0e8b7a') $$,
   '22023', null,
   'a run already behind another intake is refused (0007)'
 );
 
 select throws_ok(
-  $$ select submit_scout_intake(tests.intake_payload(), 'ffffffff-0000-0000-0000-0000000000b0') $$,
+  $$ select submit_scout_intake(tests.intake_payload(), '3b33ab7a-c98e-547e-b034-00357006a852') $$,
   '22023', null,
   'a run that did not succeed cannot back an intake (0007)'
 );
 
 select throws_ok(
-  $$ select submit_scout_intake(tests.intake_payload(), 'ffffffff-0000-0000-0000-0000000000b1') $$,
+  $$ select submit_scout_intake(tests.intake_payload(), '5b718538-1b35-5d7e-9a97-3fa6fcbdc201') $$,
   '22023', null,
   'a run of another agent cannot back a Scout intake (0007)'
 );
@@ -1085,13 +1085,13 @@ select throws_ok(
 -- result that is no longer High + Ready lands as L3.
 reset role;
 insert into agent_runs (id, agent, model, status, hitl_tier, duration_ms)
-values ('ffffffff-0000-0000-0000-0000000000b2', 'scout', 'gemini-3.5-flash-lite', 'success', 'L2', 500);
+values ('264d93a5-b1ff-5367-bc6e-afb8d61c7898', 'scout', 'gemini-3.5-flash-lite', 'success', 'L2', 500);
 select tests.logout();
 
 select is(
   (select r ->> 'hitl_tier'
      from submit_scout_intake(tests.intake_payload() || '{"confidence": "High", "composite_signal": "Conditional"}'::jsonb,
-                              'ffffffff-0000-0000-0000-0000000000b2') r),
+                              '264d93a5-b1ff-5367-bc6e-afb8d61c7898') r),
   'L3',
   'an L2 run filed with a result that is not High + Ready lands as L3 (0007)'
 );

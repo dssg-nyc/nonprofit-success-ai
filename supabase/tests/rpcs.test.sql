@@ -23,14 +23,14 @@ insert into scout_intakes (
   composite_signal, flags, hitl_tier,
   review_status, review_action, final_bucket, organization_id
 ) values (
-  'cccccccc-0000-0000-0000-000000000009',
+  '6378f799-caa0-5acf-b06c-cec9496b7212',
   'Charter Org', 'Sam Lee, ED', 'sam@example.org', 'Food access.',
   '12 sites', 'analyze_data', 'Cannot see shortages.', 'Spreadsheets',
   'Next quarter', 'Referral',
   'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2',
   'reviewed', 'redirected', 'Data Infrastructure', :org_id
 ), (
-  'cccccccc-0000-0000-0000-000000000008',
+  '873d261b-9deb-54b0-b549-91b2af53f599',
   'Unreviewed Org', 'Kim Park, ED', 'kim@example.org', 'Tutoring.',
   '200 students', 'analyze_data', 'No outcome data.', 'Paper',
   'Next year', 'Referral',
@@ -40,7 +40,7 @@ insert into scout_intakes (
 
 insert into agent_runs (id, agent, organization_id, model, prompt_version, status,
                         hitl_tier, duration_ms)
-values ('ffffffff-0000-0000-0000-000000000090', 'architect', :org_id,
+values ('032ed4b0-a523-5fee-9c1d-43e106476aea', 'architect', :org_id,
         'gemini-2.5-flash', 'architect-plan-v1', 'success', 'L3', 4000);
 
 create or replace function tests.architect_draft(intake uuid) returns jsonb
@@ -64,7 +64,7 @@ language sql as $$
     'ninety_day_plan', jsonb_build_object('shape', 'build_basics'),
     -- Derived by the function; these must be ignored.
     'created_by', '11111111-1111-1111-1111-111111111111',
-    'organization_id', 'eeeeeeee-0000-0000-0000-000000000002',
+    'organization_id', '19ba7dba-4e31-56bc-8178-68fbab041dfb',
     'scout_bucket', 'ML / Predictive'
   )
 $$;
@@ -72,7 +72,7 @@ $$;
 select tests.logout();
 
 select throws_ok(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000009'),
+  $$ select submit_architect_draft(tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212'),
                                    'architect-key-anon', null) $$,
   '42501',
   null,
@@ -82,7 +82,7 @@ select throws_ok(
 select tests.login_as(:alice_id);
 
 select throws_ok(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000009'),
+  $$ select submit_architect_draft(tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212'),
                                    'architect-key-alice', null) $$,
   '42501',
   null,
@@ -92,7 +92,7 @@ select throws_ok(
 select tests.login_as(:rival_id);
 
 select throws_ok(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000009'),
+  $$ select submit_architect_draft(tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212'),
                                    'architect-key-rival', null) $$,
   '42501',
   null,
@@ -113,7 +113,7 @@ reset role;
 select tests.login_as(:admin_id);
 
 select throws_ok(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000008'),
+  $$ select submit_architect_draft(tests.architect_draft('873d261b-9deb-54b0-b549-91b2af53f599'),
                                    'architect-key-unreviewed', null) $$,
   '55000',
   null,
@@ -121,16 +121,16 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000009'),
-                                   'architect-key-scoutrun', 'ffffffff-0000-0000-0000-000000000001') $$,
+  $$ select submit_architect_draft(tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212'),
+                                   'architect-key-scoutrun', '37500687-f06e-5b63-9ce5-7c391d74a0a5') $$,
   '22023',
   null,
   'a draft can link only an Architect agent_run, not a Scout one (0004_drafts)'
 );
 
 select lives_ok(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000009'),
-                                   'architect-key-0001', 'ffffffff-0000-0000-0000-000000000090') $$,
+  $$ select submit_architect_draft(tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212'),
+                                   'architect-key-0001', '032ed4b0-a523-5fee-9c1d-43e106476aea') $$,
   'an admin CAN submit an Architect draft (0004_drafts)'
 );
 
@@ -138,37 +138,37 @@ select results_eq(
   $$ select hitl_tier, status, agent, entity_type, agent_run_id, organization_id
        from approvals where idempotency_key = 'architect-key-0001' $$,
   $$ values ('L3'::text, 'pending'::text, 'architect'::text, 'charter'::text,
-             'ffffffff-0000-0000-0000-000000000090'::uuid,
-             'eeeeeeee-0000-0000-0000-000000000001'::uuid) $$,
+             '032ed4b0-a523-5fee-9c1d-43e106476aea'::uuid,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1'::uuid) $$,
   'the submit opens a pending L3 charter approval linked to its run, in the intake''s org'
 );
 
 select results_eq(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000009'),
-                                   'architect-key-0001', 'ffffffff-0000-0000-0000-000000000090') $$,
+  $$ select submit_architect_draft(tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212'),
+                                   'architect-key-0001', '032ed4b0-a523-5fee-9c1d-43e106476aea') $$,
   $$ select id from approvals where idempotency_key = 'architect-key-0001' $$,
   'a replayed idempotency key returns the original approval (design-system.md §8.1)'
 );
 
 select results_eq(
   $$ select count(*)::int from approvals
-      where entity_type = 'charter' and entity_id = 'cccccccc-0000-0000-0000-000000000009' $$,
+      where entity_type = 'charter' and entity_id = '6378f799-caa0-5acf-b06c-cec9496b7212' $$,
   $$ values (1) $$,
   'a replay opens no second approval'
 );
 
 select results_eq(
   $$ select created_by, organization_id, scout_bucket::text, composite_level::text
-       from architect_assessments where id = 'cccccccc-0000-0000-0000-000000000009' $$,
+       from architect_assessments where id = '6378f799-caa0-5acf-b06c-cec9496b7212' $$,
   $$ values ('33333333-3333-3333-3333-333333333333'::uuid,
-             'eeeeeeee-0000-0000-0000-000000000001'::uuid,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1'::uuid,
              'Data Infrastructure'::text, 'Developing'::text) $$,
   'author, org and bucket are derived (acting admin, intake org, final_bucket), not taken from the payload'
 );
 
 select lives_ok(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000009'),
-                                   'architect-key-0002', 'ffffffff-0000-0000-0000-000000000090') $$,
+  $$ select submit_architect_draft(tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212'),
+                                   'architect-key-0002', '032ed4b0-a523-5fee-9c1d-43e106476aea') $$,
   'an admin CAN re-submit a draft under a new key (0004_drafts; 0004_drafts: a model draft names its run)'
 );
 
@@ -181,7 +181,7 @@ select results_eq(
 select results_eq(
   $$ select idempotency_key from approvals
       where entity_type = 'charter' and status = 'pending'
-        and entity_id = 'cccccccc-0000-0000-0000-000000000009' $$,
+        and entity_id = '6378f799-caa0-5acf-b06c-cec9496b7212' $$,
   $$ values ('architect-key-0002'::text) $$,
   'exactly one pending charter approval remains: the re-submit''s'
 );
@@ -189,7 +189,7 @@ select results_eq(
 select results_eq(
   $$ select count(*)::int from audit_events
       where action = 'architect.draft_submitted'
-        and entity_id = 'cccccccc-0000-0000-0000-000000000009' $$,
+        and entity_id = '6378f799-caa0-5acf-b06c-cec9496b7212' $$,
   $$ values (2) $$,
   'each effective submit appends one architect.draft_submitted event; the replay none'
 );
@@ -213,8 +213,8 @@ select tests.as_service();
 
 select throws_ok(
   $$ insert into approvals (organization_id, agent, entity_type, entity_id, hitl_tier, status)
-     values ('eeeeeeee-0000-0000-0000-000000000001', 'architect', 'charter',
-             'cccccccc-0000-0000-0000-000000000009', 'L3', 'pending') $$,
+     values ('b07a14e0-a781-53ba-a553-3e3aa287acf1', 'architect', 'charter',
+             '6378f799-caa0-5acf-b06c-cec9496b7212', 'L3', 'pending') $$,
   '23505',
   null,
   'a second pending charter approval for one assessment is rejected (0004_drafts unique index)'
@@ -235,35 +235,35 @@ reset role;
 
 -- The membership engagement comes first: runs 096 below reference it (agent_runs FK).
 insert into engagements (id, business_id, owner_id, stage, status, organization_id) values
-  ('aaaaaaaa-0000-0000-0000-000000000020',
-   'aaaaaaaa-0000-0000-0000-000000000001', :alice_id, 'membership', 'in_progress', :org_id);
+  ('73e669eb-0980-5f0b-82b5-94828b60645d',
+   '52c36b93-0c74-5222-b593-86c0c5ec460a', :alice_id, 'membership', 'in_progress', :org_id);
 
 insert into agent_runs (id, agent, organization_id, model, prompt_version, status,
                         hitl_tier, duration_ms)
 values
-  ('ffffffff-0000-0000-0000-000000000091', 'envoy', :org_id,
+  ('c5f578e6-afc6-5775-a7b1-2e63d1928a40', 'envoy', :org_id,
    'gemini-2.5-flash', 'envoy-draft-v2', 'success', 'L3', 1500),
-  ('ffffffff-0000-0000-0000-000000000092', 'chronicle', :org_id,
+  ('eb726ea8-5a01-5bb1-8664-f5720fc6f4b3', 'chronicle', :org_id,
    'gemini-2.5-flash', 'chronicle-draft-v2', 'success', 'L3', 1800),
-  ('ffffffff-0000-0000-0000-000000000093', 'envoy', :org_id,
+  ('8ca640cb-a997-5a04-8bb3-042ad40116e7', 'envoy', :org_id,
    'gemini-2.5-flash', 'envoy-draft-v2', 'fallback', 'L3', 900),
   -- spare successful runs: a run may back only one draft, so each later submit gets its own
-  ('ffffffff-0000-0000-0000-000000000094', 'envoy', :org_id,
+  ('1b8604ff-843f-5ea1-bbcc-e0ccda6583a2', 'envoy', :org_id,
    'gemini-2.5-flash', 'envoy-draft-v2', 'success', 'L3', 1500),
-  ('ffffffff-0000-0000-0000-000000000095', 'envoy', :org_id,
+  ('d9dca3b6-cab2-5165-8b79-a543406c54fe', 'envoy', :org_id,
    'gemini-2.5-flash', 'envoy-draft-v2', 'success', 'L3', 1500);
 
 -- Runs scoped to another engagement / another org: neither may back a draft here.
 insert into agent_runs (id, agent, organization_id, engagement_id, model, prompt_version,
                         status, hitl_tier, duration_ms)
 values
-  ('ffffffff-0000-0000-0000-000000000096', 'envoy', :org_id,
-   'aaaaaaaa-0000-0000-0000-000000000020',
+  ('bf0b65ce-8489-5257-83c9-4c3742ff4529', 'envoy', :org_id,
+   '73e669eb-0980-5f0b-82b5-94828b60645d',
    'gemini-2.5-flash', 'envoy-draft-v2', 'success', 'L3', 1500),
-  ('ffffffff-0000-0000-0000-000000000097', 'chronicle', :org_id,
-   'aaaaaaaa-0000-0000-0000-000000000010',
+  ('c5d4afef-04df-5a75-a26e-3fb3bf1d6d79', 'chronicle', :org_id,
+   '53939e32-79f1-50fa-afcc-87e61809fc30',
    'gemini-2.5-flash', 'chronicle-draft-v2', 'success', 'L3', 1800),
-  ('ffffffff-0000-0000-0000-000000000098', 'architect', :rival_org_id, null,
+  ('24f197b9-c3d2-54bc-b9c7-6a80baed61b6', 'architect', :rival_org_id, null,
    'gemini-2.5-flash', 'architect-plan-v1', 'success', 'L3', 4000);
 
 -- A second reviewed intake, for the "run already behind another assessment" rejection.
@@ -274,7 +274,7 @@ insert into scout_intakes (
   composite_signal, flags, hitl_tier,
   review_status, review_action, final_bucket, organization_id
 ) values (
-  'cccccccc-0000-0000-0000-000000000007',
+  '1d944c26-5036-515d-9d60-434e986dab20',
   'Second Charter Org', 'Pat Doe, ED', 'pat@example.org', 'Housing.',
   '4 sites', 'analyze_data', 'Cannot see waitlists.', 'Spreadsheets',
   'Next quarter', 'Referral',
@@ -307,13 +307,13 @@ $$;
 select tests.logout();
 
 select throws_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
                                'envoy-key-anon', null) $$,
   '42501', null,
   'anon cannot submit an Envoy draft (0004_drafts: execute not granted)'
 );
 select throws_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020'),
+  $$ select submit_chronicle_draft(tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d'),
                                    'chronicle-key-anon', null) $$,
   '42501', null,
   'anon cannot submit a Chronicle draft (0004_drafts: execute not granted)'
@@ -322,13 +322,13 @@ select throws_ok(
 select tests.login_as(:alice_id);
 
 select throws_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
                                'envoy-key-alice', null) $$,
   '42501', null,
   'a non-admin cannot submit an Envoy draft (0004_drafts: is_admin)'
 );
 select throws_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020'),
+  $$ select submit_chronicle_draft(tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d'),
                                    'chronicle-key-alice', null) $$,
   '42501', null,
   'a non-admin cannot submit a Chronicle draft (0004_drafts: is_admin)'
@@ -337,13 +337,13 @@ select throws_ok(
 select tests.login_as(:rival_id);
 
 select throws_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
                                'envoy-key-rival', null) $$,
   '42501', null,
   'an admin of another org cannot submit into this org''s engagement (0004_drafts: Envoy)'
 );
 select throws_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020'),
+  $$ select submit_chronicle_draft(tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d'),
                                    'chronicle-key-rival', null) $$,
   '42501', null,
   'an admin of another org cannot submit into this org''s engagement (0004_drafts: Chronicle)'
@@ -368,69 +368,69 @@ select tests.login_as(:admin_id);
 -- Rejected inputs ------------------------------------------------------------
 
 select throws_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-0000000000ff'),
+  $$ select submit_envoy_draft(tests.envoy_payload('d6c8b983-bce0-505e-8537-70257ee2324b'),
                                'envoy-key-unknown', null) $$,
   'P0002', null,
   'an Envoy draft for an unknown engagement is refused (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-0000000000ff'),
+  $$ select submit_chronicle_draft(tests.chronicle_payload('d6c8b983-bce0-505e-8537-70257ee2324b'),
                                    'chronicle-key-unknown', null) $$,
   'P0002', null,
   'a Chronicle draft for an unknown engagement is refused (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('bbbbbbbb-0000-0000-0000-000000000010'),
+  $$ select submit_chronicle_draft(tests.chronicle_payload('3e75b295-305e-5e33-938c-4cb2290d2424'),
                                    'chronicle-key-nomember', null) $$,
   '55000', null,
   'a Chronicle draft needs a membership-stage engagement on the business (0004_drafts gate)'
 );
 select throws_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020',
+  $$ select submit_chronicle_draft(tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d',
                                                            'not_ready', 'fallback'),
                                    'chronicle-key-notready', null) $$,
   '22023', null,
   'a not_ready Chronicle draft is refused — it saves nothing (chronicle.md §1)'
 );
 select throws_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
-                               'envoy-key-wrongrun', 'ffffffff-0000-0000-0000-000000000092') $$,
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
+                               'envoy-key-wrongrun', 'eb726ea8-5a01-5bb1-8664-f5720fc6f4b3') $$,
   '22023', null,
   'an Envoy draft can link only an Envoy agent_run, not a Chronicle one (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020'),
-                                   'chronicle-key-wrongrun', 'ffffffff-0000-0000-0000-000000000091') $$,
+  $$ select submit_chronicle_draft(tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d'),
+                                   'chronicle-key-wrongrun', 'c5f578e6-afc6-5775-a7b1-2e63d1928a40') $$,
   '22023', null,
   'a Chronicle draft can link only a Chronicle agent_run, not an Envoy one (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
                                'envoy-key-norun', null) $$,
   '22023', null,
   'source ''model'' with no run and no payload.model is refused for Envoy (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020'),
+  $$ select submit_chronicle_draft(tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d'),
                                    'chronicle-key-norun', null) $$,
   '22023', null,
   'source ''model'' with no run and no payload.model is refused for Chronicle (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
-                               'envoy-key-failedrun', 'ffffffff-0000-0000-0000-000000000093') $$,
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
+                               'envoy-key-failedrun', '8ca640cb-a997-5a04-8bb3-042ad40116e7') $$,
   '22023', null,
   'source ''model'' cannot ride on a run that fell back (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
-                               'envoy-key-otherengrun', 'ffffffff-0000-0000-0000-000000000096') $$,
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
+                               'envoy-key-otherengrun', 'bf0b65ce-8489-5257-83c9-4c3742ff4529') $$,
   '22023', null,
   'an Envoy draft cannot link a run recorded for another engagement (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020'),
-                                   'chronicle-key-otherengrun', 'ffffffff-0000-0000-0000-000000000097') $$,
+  $$ select submit_chronicle_draft(tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d'),
+                                   'chronicle-key-otherengrun', 'c5d4afef-04df-5a75-a26e-3fb3bf1d6d79') $$,
   '22023', null,
   'a Chronicle draft cannot link a run recorded for another engagement (0004_drafts)'
 );
@@ -438,13 +438,13 @@ select throws_ok(
 -- The happy path ---------------------------------------------------------------
 
 select lives_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
-                               'envoy-key-0001', 'ffffffff-0000-0000-0000-000000000091') $$,
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
+                               'envoy-key-0001', 'c5f578e6-afc6-5775-a7b1-2e63d1928a40') $$,
   'an admin CAN submit an Envoy draft (0004_drafts)'
 );
 select lives_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020'),
-                                   'chronicle-key-0001', 'ffffffff-0000-0000-0000-000000000092') $$,
+  $$ select submit_chronicle_draft(tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d'),
+                                   'chronicle-key-0001', 'eb726ea8-5a01-5bb1-8664-f5720fc6f4b3') $$,
   'an admin CAN submit a Chronicle draft (0004_drafts)'
 );
 
@@ -452,14 +452,14 @@ select results_eq(
   $$ select hitl_tier, status, agent, entity_type, entity_id, draft_id is not null
        from approvals where idempotency_key = 'envoy-key-0001' $$,
   $$ values ('L3'::text, 'pending'::text, 'envoy'::text, 'communication'::text,
-             'aaaaaaaa-0000-0000-0000-000000000010'::uuid, true) $$,
+             '53939e32-79f1-50fa-afcc-87e61809fc30'::uuid, true) $$,
   'the Envoy submit opens a pending L3 communication approval on the engagement, pointing at the draft'
 );
 select results_eq(
   $$ select hitl_tier, status, agent, entity_type, entity_id, draft_id is not null
        from approvals where idempotency_key = 'chronicle-key-0001' $$,
   $$ values ('L3'::text, 'pending'::text, 'chronicle'::text, 'story'::text,
-             'aaaaaaaa-0000-0000-0000-000000000020'::uuid, true) $$,
+             '73e669eb-0980-5f0b-82b5-94828b60645d'::uuid, true) $$,
   'the Chronicle submit opens a pending L3 story approval on the engagement, pointing at the draft'
 );
 
@@ -469,7 +469,7 @@ select results_eq(
        from communications c join approvals a on a.draft_id = c.id
       where a.idempotency_key = 'envoy-key-0001' $$,
   $$ values ('ai'::text, 'envoy'::text, 'gemini-2.5-flash'::text, 'envoy-draft-v2'::text,
-             'ffffffff-0000-0000-0000-000000000091'::uuid, 'draft'::text, true,
+             'c5f578e6-afc6-5775-a7b1-2e63d1928a40'::uuid, 'draft'::text, true,
              '33333333-3333-3333-3333-333333333333'::uuid) $$,
   'the communication carries provenance copied from its run, is a draft and is unsent (0004_drafts)'
 );
@@ -479,25 +479,25 @@ select results_eq(
        from chronicle_drafts d join approvals a on a.draft_id = d.id
       where a.idempotency_key = 'chronicle-key-0001' $$,
   $$ values ('ai'::text, 'chronicle'::text, 'gemini-2.5-flash'::text, 'chronicle-draft-v2'::text,
-             'ffffffff-0000-0000-0000-000000000092'::uuid, 'draft'::text, false) $$,
+             'eb726ea8-5a01-5bb1-8664-f5720fc6f4b3'::uuid, 'draft'::text, false) $$,
   'the Chronicle draft carries provenance copied from its run; ready is not provisional (0004_drafts)'
 );
 
 -- Replay -----------------------------------------------------------------------
 
 select results_eq(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
-                               'envoy-key-0001', 'ffffffff-0000-0000-0000-000000000091') $$,
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
+                               'envoy-key-0001', 'c5f578e6-afc6-5775-a7b1-2e63d1928a40') $$,
   $$ select jsonb_build_object('approval_id', id, 'draft_id', draft_id)
        from approvals where idempotency_key = 'envoy-key-0001' $$,
   'a replayed Envoy key returns the original approval and draft (design-system.md §8.1)'
 );
 select results_eq(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020'),
-                                   'chronicle-key-0001', 'ffffffff-0000-0000-0000-000000000092') $$,
+  $$ select submit_chronicle_draft(tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d'),
+                                   'chronicle-key-0001', 'eb726ea8-5a01-5bb1-8664-f5720fc6f4b3') $$,
   $$ select jsonb_build_object('approval_id', id, 'draft_id', draft_id,
                                'lesson_id', (select l.id from lessons l
-                                              where l.engagement_id = 'aaaaaaaa-0000-0000-0000-000000000020'))
+                                              where l.engagement_id = '73e669eb-0980-5f0b-82b5-94828b60645d'))
        from approvals where idempotency_key = 'chronicle-key-0001' $$,
   'a replayed Chronicle key returns the original approval, draft and (0004_drafts) lesson (design-system.md §8.1)'
 );
@@ -508,22 +508,22 @@ select results_eq(
   'a replay writes no second draft row'
 );
 select throws_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
-                               'chronicle-key-0001', 'ffffffff-0000-0000-0000-000000000091') $$,
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
+                               'chronicle-key-0001', 'c5f578e6-afc6-5775-a7b1-2e63d1928a40') $$,
   '22023', null,
   'a key already used for a Chronicle draft cannot be replayed as an Envoy one (0004_drafts)'
 );
 
 -- A run already behind a draft cannot back another one.
 select throws_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
-                               'envoy-key-reuse', 'ffffffff-0000-0000-0000-000000000091') $$,
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
+                               'envoy-key-reuse', 'c5f578e6-afc6-5775-a7b1-2e63d1928a40') $$,
   '22023', null,
   'an Envoy run that already backs a draft cannot back a second (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_chronicle_draft(tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020'),
-                                   'chronicle-key-reuse', 'ffffffff-0000-0000-0000-000000000092') $$,
+  $$ select submit_chronicle_draft(tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d'),
+                                   'chronicle-key-reuse', 'eb726ea8-5a01-5bb1-8664-f5720fc6f4b3') $$,
   '22023', null,
   'a Chronicle run that already backs a draft cannot back a second (0004_drafts)'
 );
@@ -531,8 +531,8 @@ select throws_ok(
 -- Supersede --------------------------------------------------------------------
 
 select lives_ok(
-  $$ select submit_envoy_draft(tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010'),
-                               'envoy-key-0002', 'ffffffff-0000-0000-0000-000000000094') $$,
+  $$ select submit_envoy_draft(tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30'),
+                               'envoy-key-0002', '1b8604ff-843f-5ea1-bbcc-e0ccda6583a2') $$,
   'an admin CAN re-submit an Envoy draft under a new key (0004_drafts)'
 );
 select results_eq(
@@ -553,21 +553,21 @@ select results_eq(
 -- A different occasion is a different thread: it supersedes nothing.
 select lives_ok(
   $$ select submit_envoy_draft(
-       tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010') || '{"occasion":"check_in"}',
-       'envoy-key-0003', 'ffffffff-0000-0000-0000-000000000095') $$,
+       tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30') || '{"occasion":"check_in"}',
+       'envoy-key-0003', 'd9dca3b6-cab2-5165-8b79-a543406c54fe') $$,
   'an admin CAN draft a second occasion for the same engagement (0004_drafts)'
 );
 select results_eq(
   $$ select count(*)::int from approvals
       where agent = 'envoy' and status = 'pending'
-        and entity_id = 'aaaaaaaa-0000-0000-0000-000000000010' $$,
+        and entity_id = '53939e32-79f1-50fa-afcc-87e61809fc30' $$,
   $$ values (2) $$,
   'a draft for another occasion leaves the kickoff approval pending'
 );
 
 select lives_ok(
   $$ select submit_chronicle_draft(
-       tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020', 'thin', 'fallback'),
+       tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d', 'thin', 'fallback'),
        'chronicle-key-0002', null) $$,
   'an admin CAN re-submit a Chronicle draft as a fallback with no run (0004_drafts)'
 );
@@ -597,7 +597,7 @@ select results_eq(
 -- handler names the model, the row is 'ai' with no run, the audit event flags it.
 select lives_ok(
   $$ select submit_envoy_draft(
-       tests.envoy_payload('aaaaaaaa-0000-0000-0000-000000000010')
+       tests.envoy_payload('53939e32-79f1-50fa-afcc-87e61809fc30')
          || '{"occasion":"wrap_up","model":"gemini-2.5-flash"}',
        'envoy-key-unrecorded', null) $$,
   'an Envoy model draft with no recorded run but a named model is saved (0004_drafts)'
@@ -611,7 +611,7 @@ select results_eq(
 );
 select lives_ok(
   $$ select submit_chronicle_draft(
-       tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020')
+       tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d')
          || '{"model":"gemini-2.5-flash"}',
        'chronicle-key-unrecorded', null) $$,
   'a Chronicle model draft with no recorded run but a named model is saved (0004_drafts)'
@@ -628,51 +628,51 @@ select results_eq(
 
 select results_eq(
   $$ select source_type::text, generated_by, model, prompt_version, run_id
-       from architect_assessments where id = 'cccccccc-0000-0000-0000-000000000009' $$,
+       from architect_assessments where id = '6378f799-caa0-5acf-b06c-cec9496b7212' $$,
   $$ values ('ai'::text, 'architect'::text, 'gemini-2.5-flash'::text, 'architect-plan-v1'::text,
-             'ffffffff-0000-0000-0000-000000000090'::uuid) $$,
+             '032ed4b0-a523-5fee-9c1d-43e106476aea'::uuid) $$,
   'an Architect draft carries provenance copied from its run (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000009'),
+  $$ select submit_architect_draft(tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212'),
                                    'architect-key-norun', null) $$,
   '22023', null,
   'an Architect draft claiming ''model'' with no run and no payload.model is refused (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000009'),
-                                   'architect-key-otherorg', 'ffffffff-0000-0000-0000-000000000098') $$,
+  $$ select submit_architect_draft(tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212'),
+                                   'architect-key-otherorg', '24f197b9-c3d2-54bc-b9c7-6a80baed61b6') $$,
   '22023', null,
   'an Architect draft cannot link a run recorded for another organization (0004_drafts)'
 );
 select throws_ok(
-  $$ select submit_architect_draft(tests.architect_draft('cccccccc-0000-0000-0000-000000000007'),
-                                   'architect-key-reuse', 'ffffffff-0000-0000-0000-000000000090') $$,
+  $$ select submit_architect_draft(tests.architect_draft('1d944c26-5036-515d-9d60-434e986dab20'),
+                                   'architect-key-reuse', '032ed4b0-a523-5fee-9c1d-43e106476aea') $$,
   '22023', null,
   'an Architect run already behind another assessment cannot back a second (0004_drafts)'
 );
 select lives_ok(
   $$ select submit_architect_draft(
-       tests.architect_draft('cccccccc-0000-0000-0000-000000000009')
+       tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212')
          || '{"model":"gemini-2.5-flash","prompt_version":"architect-plan-v1"}',
        'architect-key-unrecorded', null) $$,
   'an Architect model draft with no recorded run but a named model is saved (0004_drafts)'
 );
 select results_eq(
   $$ select source_type::text, model, run_id
-       from architect_assessments where id = 'cccccccc-0000-0000-0000-000000000009' $$,
+       from architect_assessments where id = '6378f799-caa0-5acf-b06c-cec9496b7212' $$,
   $$ values ('ai'::text, 'gemini-2.5-flash'::text, null::uuid) $$,
   'an unrecorded-run Architect draft is ai with the named model and no run_id (0004_drafts)'
 );
 select lives_ok(
   $$ select submit_architect_draft(
-       tests.architect_draft('cccccccc-0000-0000-0000-000000000009') || '{"source":"fallback"}',
+       tests.architect_draft('6378f799-caa0-5acf-b06c-cec9496b7212') || '{"source":"fallback"}',
        'architect-key-fallback', null) $$,
   'an Architect fallback draft needs no run (0004_drafts)'
 );
 select results_eq(
   $$ select source_type::text, model, run_id
-       from architect_assessments where id = 'cccccccc-0000-0000-0000-000000000009' $$,
+       from architect_assessments where id = '6378f799-caa0-5acf-b06c-cec9496b7212' $$,
   $$ values ('derived'::text, null::text, null::uuid) $$,
   'a re-conduct as a fallback replaces the AI provenance with derived (0004_drafts)'
 );
@@ -682,7 +682,7 @@ select results_eq(
 select throws_ok(
   $$ insert into communications (organization_id, engagement_id, occasion, subject, body,
                                  created_by, source_type)
-     values ('eeeeeeee-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000010',
+     values ('b07a14e0-a781-53ba-a553-3e3aa287acf1', '53939e32-79f1-50fa-afcc-87e61809fc30',
              'kickoff', 's', 'b', '33333333-3333-3333-3333-333333333333', 'derived') $$,
   '42501', null,
   'an admin cannot insert a communication directly — only submit_envoy_draft() writes (0004_drafts)'
@@ -690,7 +690,7 @@ select throws_ok(
 select throws_ok(
   $$ insert into chronicle_drafts (organization_id, engagement_id, readiness, headline, narrative,
                                    created_by, source_type)
-     values ('eeeeeeee-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000020',
+     values ('b07a14e0-a781-53ba-a553-3e3aa287acf1', '73e669eb-0980-5f0b-82b5-94828b60645d',
              'ready', 'h', 'n', '33333333-3333-3333-3333-333333333333', 'derived') $$,
   '42501', null,
   'an admin cannot insert a Chronicle draft directly — only submit_chronicle_draft() writes (0004_drafts)'
@@ -786,7 +786,7 @@ insert into scout_intakes (
   composite_signal, flags, hitl_tier,
   review_status, review_action, final_bucket, organization_id
 ) values (
-  'abcd0013-0000-0000-0000-0000000000a1',
+  '387980d0-271f-5351-961c-e561be1b724a',
   'Transition Org', 'Lee Kim, ED', 'lee@example.org', 'Youth programs.',
   '300 youth', 'analyze_data', 'Cannot show outcomes.', 'Spreadsheets',
   'Next quarter', 'Referral',
@@ -811,7 +811,7 @@ insert into architect_assessments (
        points, composite_level, charter, ninety_day_plan,
        created_by, created_by_email
      ) values (
-       'abcd0013-0000-0000-0000-0000000000a1', 'abcd0013-0000-0000-0000-0000000000a1',
+       '387980d0-271f-5351-961c-e561be1b724a', '387980d0-271f-5351-961c-e561be1b724a',
        'Transition Org', 'Analytics & Insight', 'Ready',
        'ctx', 'size', 'poc', 'partial', 'locations', 'some_share',
        'somewhat_familiar', 'mixed', 'now', 'wished', 'leadership_managers',
@@ -824,27 +824,27 @@ insert into architect_assessments (
 -- scout_intake_id is writable only by a non-API role (0001_core trigger); the fixture is the
 -- superuser standing in for the future Scout-approve definer function (T2).
 insert into businesses (id, name, type, owner_id, organization_id, scout_intake_id) values
-  ('abcd0013-0000-0000-0000-000000000001', 'Transition Org', 'nonprofit', :alice_id, :org_id,
-   'abcd0013-0000-0000-0000-0000000000a1'),
-  ('abcd0013-0000-0000-0000-000000000002', 'No Intake Org', 'nonprofit', :alice_id, :org_id, null),
-  ('abcd0013-0000-0000-0000-000000000003', 'Two Completed', 'nonprofit', :alice_id, :org_id, null),
-  ('abcd0013-0000-0000-0000-000000000004', 'Stale In Progress', 'nonprofit', :alice_id, :org_id, null),
-  ('abcd0013-0000-0000-0000-000000000005', 'Pending Only', 'nonprofit', :alice_id, :org_id, null);
+  ('8b3c620b-763d-5261-9a9d-f01e32d5d934', 'Transition Org', 'nonprofit', :alice_id, :org_id,
+   '387980d0-271f-5351-961c-e561be1b724a'),
+  ('5f8e3af9-e15a-58cd-86ee-f9cccf011349', 'No Intake Org', 'nonprofit', :alice_id, :org_id, null),
+  ('0d131fcc-d91a-5dc0-81da-2226d4c51c40', 'Two Completed', 'nonprofit', :alice_id, :org_id, null),
+  ('33a1edbb-e121-5b8f-95a0-adce240bd2cd', 'Stale In Progress', 'nonprofit', :alice_id, :org_id, null),
+  ('14605491-72a7-56d2-8c53-8656a5f448c7', 'Pending Only', 'nonprofit', :alice_id, :org_id, null);
 
 insert into engagements (business_id, owner_id, stage, status, organization_id) values
-  ('abcd0013-0000-0000-0000-000000000003', :alice_id, 'initial_meeting', 'completed', :org_id),
-  ('abcd0013-0000-0000-0000-000000000003', :alice_id, 'budget_check',    'completed', :org_id),
-  ('abcd0013-0000-0000-0000-000000000004', :alice_id, 'initial_meeting', 'in_progress', :org_id),
-  ('abcd0013-0000-0000-0000-000000000004', :alice_id, 'budget_check',    'completed', :org_id),
-  ('abcd0013-0000-0000-0000-000000000005', :alice_id, 'initial_meeting', 'pending', :org_id),
-  ('abcd0013-0000-0000-0000-000000000005', :alice_id, 'budget_check',    'pending', :org_id);
+  ('0d131fcc-d91a-5dc0-81da-2226d4c51c40', :alice_id, 'initial_meeting', 'completed', :org_id),
+  ('0d131fcc-d91a-5dc0-81da-2226d4c51c40', :alice_id, 'budget_check',    'completed', :org_id),
+  ('33a1edbb-e121-5b8f-95a0-adce240bd2cd', :alice_id, 'initial_meeting', 'in_progress', :org_id),
+  ('33a1edbb-e121-5b8f-95a0-adce240bd2cd', :alice_id, 'budget_check',    'completed', :org_id),
+  ('14605491-72a7-56d2-8c53-8656a5f448c7', :alice_id, 'initial_meeting', 'pending', :org_id),
+  ('14605491-72a7-56d2-8c53-8656a5f448c7', :alice_id, 'budget_check',    'pending', :org_id);
 
 -- Who may call ---------------------------------------------------------------
 
 select tests.logout();
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'initial_meeting', null, 'tx-key-anon-0001') $$,
   '42501', null,
   'anon cannot transition an engagement (0005_lifecycle: execute not granted)'
@@ -853,7 +853,7 @@ select throws_ok(
 select tests.login_as(:alice_id);
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'initial_meeting', null, 'tx-key-alice-0001') $$,
   '42501', null,
   'a partner cannot transition their own engagement (0005_lifecycle: is_admin)'
@@ -862,7 +862,7 @@ select throws_ok(
 select tests.login_as(:rival_id);
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'initial_meeting', null, 'tx-key-rival-0001') $$,
   '42501', null,
   'an admin of another org cannot transition this org''s business (0005_lifecycle)'
@@ -871,7 +871,7 @@ select throws_ok(
 select tests.as_service();
 
 select throws_ok(
-  $$ select public.transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select public.transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                          'initial_meeting', null, 'tx-key-service-0001') $$,
   '42501', null,
   'service_role cannot transition an engagement — the handler uses the caller''s JWT (0005_lifecycle)'
@@ -883,42 +883,42 @@ select tests.login_as(:admin_id);
 -- Rejected inputs ------------------------------------------------------------
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-0000000000ff',
+  $$ select transition_engagement('ba961f11-5fbd-5827-acf9-366ebc7b5cf5',
                                   'initial_meeting', null, 'tx-key-nobiz-0001') $$,
   'P0002', null,
   'transitioning a business that does not exist is P0002 (0005_lifecycle)'
 );
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'initial_meeting', null, 'short') $$,
   '22023', null,
   'an idempotency key under 8 characters is refused (0005_lifecycle)'
 );
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'budget_check', 'skipping ahead', 'tx-key-skip-0000') $$,
   '22023', 'stage_skipped',
   'with no stage yet, only initial_meeting is a valid first move (0005_lifecycle)'
 );
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000002',
+  $$ select transition_engagement('5f8e3af9-e15a-58cd-86ee-f9cccf011349',
                                   'initial_meeting', null, 'tx-key-nointake-0001') $$,
   '55000', 'guard:intake_approved',
   'initial_meeting is refused without a reviewed approved/edited intake (0005_lifecycle guard)'
 );
 
 select is_empty(
-  $$ select id from engagements where business_id = 'abcd0013-0000-0000-0000-000000000002' $$,
+  $$ select id from engagements where business_id = '5f8e3af9-e15a-58cd-86ee-f9cccf011349' $$,
   'a refused transition writes nothing (0005_lifecycle)'
 );
 
 -- First transition: row 1, pre-approved, so no approvals row ----------------------
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'initial_meeting', null, 'tx-first-0001')->>'to_stage'),
   'initial_meeting',
   'an admin opens initial_meeting for a business with no rows (0005_lifecycle)'
@@ -926,7 +926,7 @@ select is(
 
 select results_eq(
   $$ select stage::text, status::text from engagements
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' $$,
   $$ values ('initial_meeting'::text, 'in_progress'::text) $$,
   'the first transition inserts the initial_meeting row at in_progress (0005_lifecycle)'
 );
@@ -935,7 +935,7 @@ select is(
   (select count(*)::int from engagement_events
     where kind = 'stage_advanced'
       and engagement_id in (select id from engagements
-                             where business_id = 'abcd0013-0000-0000-0000-000000000001')),
+                             where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934')),
   1,
   'the first transition writes one stage_advanced event (0005_lifecycle)'
 );
@@ -944,7 +944,7 @@ select is(
   (select count(*)::int from audit_events
     where action = 'engagement.transition'
       and entity_id in (select id from engagements
-                         where business_id = 'abcd0013-0000-0000-0000-000000000001')),
+                         where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934')),
   1,
   'the first transition writes one engagement.transition audit event (0005_lifecycle)'
 );
@@ -953,7 +953,7 @@ select is(
   (select count(*)::int from approvals
     where entity_type = 'transition'
       and entity_id in (select id from engagements
-                         where business_id = 'abcd0013-0000-0000-0000-000000000001')),
+                         where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934')),
   0,
   'row 1 is pre-approved by the Scout review: no approvals row (0005_lifecycle)'
 );
@@ -961,34 +961,34 @@ select is(
 -- Replay ---------------------------------------------------------------------
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'initial_meeting', null, 'tx-first-0001')->>'replayed'),
   'true',
   'replaying an idempotency key reports replayed = true (0005_lifecycle)'
 );
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'initial_meeting', null, 'tx-first-0001')->>'event_id'),
   (select id::text from engagement_events where idempotency_key = 'tx-first-0001'),
   'a replay returns the original event id (0005_lifecycle)'
 );
 
 select is(
-  (select count(*)::int from engagements where business_id = 'abcd0013-0000-0000-0000-000000000001'),
+  (select count(*)::int from engagements where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934'),
   1,
   'a replay writes no second row (0005_lifecycle)'
 );
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'budget_check', 'reuse', 'tx-first-0001') $$,
   '22023', null,
   'an idempotency key reused for a different target is refused (0005_lifecycle)'
 );
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000002',
+  $$ select transition_engagement('5f8e3af9-e15a-58cd-86ee-f9cccf011349',
                                   'initial_meeting', null, 'tx-first-0001') $$,
   '22023', null,
   'an idempotency key reused for a different business is refused (0005_lifecycle)'
@@ -997,14 +997,14 @@ select throws_ok(
 -- Classification -------------------------------------------------------------
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'initial_meeting', null, 'tx-key-same-0001') $$,
   '22023', 'invalid_transition',
   'moving to the current stage is invalid_transition (0005_lifecycle)'
 );
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'data_ethics_committee', 'skip', 'tx-key-skip-0001') $$,
   '22023', 'stage_skipped',
   'initial_meeting -> data_ethics_committee skips a stage (0005_lifecycle)'
@@ -1013,14 +1013,14 @@ select throws_ok(
 -- budget_check: attested until engagement_contracts exists ---------------------------
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'budget_check', null, 'tx-key-budget-0000') $$,
   '55000', 'guard:contract_signed',
   'budget_check without a reason fails the attested contract guard (0005_lifecycle)'
 );
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'budget_check', 'Charter signed 2026-10-01',
                                 'tx-budget-0001')->>'to_stage'),
   'budget_check',
@@ -1046,7 +1046,7 @@ select is(
 -- data_ethics_committee: budget confirmed -----------------------------------------------
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'data_ethics_committee', null, 'tx-key-dec-0000') $$,
   '55000', 'guard:budget_confirmed',
   'data_ethics_committee needs budget_amount on the budget_check row (0005_lifecycle)'
@@ -1054,11 +1054,11 @@ select throws_ok(
 
 reset role;
 update engagements set budget_amount = 25000
- where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'budget_check';
+ where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'budget_check';
 select tests.login_as(:admin_id);
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'data_ethics_committee', null, 'tx-dec-0001')->>'to_stage'),
   'data_ethics_committee',
   'data_ethics_committee advances once the budget is confirmed (0005_lifecycle)'
@@ -1067,7 +1067,7 @@ select is(
 -- scoping: an approved assessment approval; L3 recorded ----------------------------------
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'scoping', null, 'tx-key-scoping-0000') $$,
   '55000', 'guard:ethics_approved',
   'scoping needs an approved assessment approval for this business (0005_lifecycle)'
@@ -1077,12 +1077,12 @@ select throws_ok(
 reset role;
 insert into approvals (organization_id, agent, entity_type, entity_id, hitl_tier, status,
                        reviewer_id, reviewed_at)
-values (:org_id, 'architect', 'assessment', 'abcd0013-0000-0000-0000-0000000000a1', 'L3',
+values (:org_id, 'architect', 'assessment', '387980d0-271f-5351-961c-e561be1b724a', 'L3',
         'approved', :admin_id, now());
 select tests.login_as(:admin_id);
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'scoping', null, 'tx-scoping-0001')->>'to_stage'),
   'scoping',
   'scoping advances once the committee approval exists (0005_lifecycle)'
@@ -1092,7 +1092,7 @@ select results_eq(
   $$ select agent, entity_type, status, reviewer_id::text, hitl_tier from approvals
       where entity_type = 'transition'
         and entity_id = (select id from engagements
-                          where business_id = 'abcd0013-0000-0000-0000-000000000001'
+                          where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934'
                             and stage = 'scoping') $$,
   $$ values ('system'::text, 'transition'::text, 'approved'::text,
              '33333333-3333-3333-3333-333333333333'::text, 'L3'::text) $$,
@@ -1105,7 +1105,7 @@ select is(
   (select id::text from approvals
     where entity_type = 'transition'
       and entity_id = (select id from engagements
-                        where business_id = 'abcd0013-0000-0000-0000-000000000001'
+                        where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934'
                           and stage = 'scoping')),
   'the event names the approval it recorded (0005_lifecycle)'
 );
@@ -1113,14 +1113,14 @@ select is(
 -- Reversal: a named, recorded move; history is kept ----------------------------------
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'budget_check', null, 'tx-key-revert-0000') $$,
   '22023', 'reason_required',
   'a reversal without a reason is refused (0005_lifecycle)'
 );
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'budget_check', 'Budget withdrawn by the board',
                                 'tx-revert-0001')->>'to_stage'),
   'budget_check',
@@ -1129,7 +1129,7 @@ select is(
 
 select results_eq(
   $$ select stage::text, status::text from engagements
-      where business_id = 'abcd0013-0000-0000-0000-000000000001'
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934'
       order by engagements.stage $$,  -- the enum, not the text alias
   $$ values ('initial_meeting'::text, 'completed'::text),
             ('budget_check'::text, 'in_progress'::text),
@@ -1142,7 +1142,7 @@ select is(
   (select count(*)::int from engagement_events
     where kind = 'stage_reverted'
       and engagement_id in (select id from engagements
-                             where business_id = 'abcd0013-0000-0000-0000-000000000001')),
+                             where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934')),
   1,
   'a reversal writes a stage_reverted event (0005_lifecycle)'
 );
@@ -1151,7 +1151,7 @@ select is(
   (select count(*)::int from approvals
     where entity_type = 'transition'
       and entity_id in (select id from engagements
-                         where business_id = 'abcd0013-0000-0000-0000-000000000001')),
+                         where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934')),
   2,
   'the L3 advance and the reversal each recorded an approval; no L2 move did (0005_lifecycle)'
 );
@@ -1159,21 +1159,21 @@ select is(
 -- Re-advance over rows that already exist: flipped back, never duplicated ------------------
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'data_ethics_committee', null, 'tx-dec-0002')->>'to_stage'),
   'data_ethics_committee',
   'a re-advance after a reversal reopens the existing completed row (0005_lifecycle)'
 );
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'scoping', null, 'tx-scoping-0002')->>'to_stage'),
   'scoping',
   'a second advance into scoping reopens its completed row (0005_lifecycle)'
 );
 
 select is(
-  (select count(*)::int from engagements where business_id = 'abcd0013-0000-0000-0000-000000000001'),
+  (select count(*)::int from engagements where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934'),
   4,
   'reversals and re-advances never create a second row for a stage (0005_lifecycle)'
 );
@@ -1185,7 +1185,7 @@ select tests.as_service();
 
 select throws_ok(
   $$ update engagements set status = 'in_progress'
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'initial_meeting' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'initial_meeting' $$,
   '23514', null,
   'completed -> in_progress is refused outside transition_engagement(): the lock keys on the session role (0001_core trigger)'
 );
@@ -1196,19 +1196,19 @@ select tests.login_as(:admin_id);
 -- current_engagement_stage(): the same rule as src/lib/lifecycle.ts ------------------------
 
 select results_eq(
-  $$ select stage::text from current_engagement_stage('abcd0013-0000-0000-0000-000000000003') $$,
+  $$ select stage::text from current_engagement_stage('0d131fcc-d91a-5dc0-81da-2226d4c51c40') $$,
   $$ values ('budget_check'::text) $$,
   'with no in_progress row, the current stage is the furthest completed one (0005_lifecycle; lifecycle.md §3)'
 );
 
 select results_eq(
-  $$ select stage::text from current_engagement_stage('abcd0013-0000-0000-0000-000000000004') $$,
+  $$ select stage::text from current_engagement_stage('33a1edbb-e121-5b8f-95a0-adce240bd2cd') $$,
   $$ values ('initial_meeting'::text) $$,
   'an in_progress row wins over a later completed row (0005_lifecycle; lifecycle.md §3)'
 );
 
 select is_empty(
-  $$ select stage from current_engagement_stage('abcd0013-0000-0000-0000-000000000005') $$,
+  $$ select stage from current_engagement_stage('14605491-72a7-56d2-8c53-8656a5f448c7') $$,
   'pending rows never make a stage current (0005_lifecycle)'
 );
 
@@ -1218,7 +1218,7 @@ select lives_ok(
   $$ insert into engagement_events (engagement_id, organization_id, kind, created_by)
      select id, organization_id, 'session_held', '33333333-3333-3333-3333-333333333333'
        from engagements
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'scoping' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'scoping' $$,
   'an admin can append a session_held event to an engagement in their org (0005_lifecycle)'
 );
 
@@ -1226,7 +1226,7 @@ select throws_ok(
   $$ insert into engagement_events (engagement_id, organization_id, kind, created_by)
      select id, organization_id, 'session_held', '11111111-1111-1111-1111-111111111111'
        from engagements
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'scoping' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'scoping' $$,
   '42501', null,
   'an admin cannot attribute an event to someone else (0005_lifecycle)'
 );
@@ -1235,7 +1235,7 @@ select throws_ok(
 -- rows and raise nothing. Carry the row id across as a custom setting instead.
 select set_config('tests.scoping_id',
                   (select id::text from engagements
-                    where business_id = 'abcd0013-0000-0000-0000-000000000001'
+                    where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934'
                       and stage = 'scoping'),
                   true);
 
@@ -1243,7 +1243,7 @@ select tests.login_as(:rival_id);
 
 select throws_ok(
   $$ insert into engagement_events (engagement_id, organization_id, kind, created_by)
-     values (current_setting('tests.scoping_id')::uuid, 'eeeeeeee-0000-0000-0000-000000000001',
+     values (current_setting('tests.scoping_id')::uuid, 'b07a14e0-a781-53ba-a553-3e3aa287acf1',
              'session_held', '88888888-8888-8888-8888-888888888888') $$,
   '42501', null,
   'an admin of another org cannot append events to this org''s engagement (0005_lifecycle)'
@@ -1255,7 +1255,7 @@ select lives_ok(
   $$ insert into engagement_events (engagement_id, organization_id, kind, created_by)
      select id, organization_id, 'note_added', '11111111-1111-1111-1111-111111111111'
        from engagements
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'scoping' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'scoping' $$,
   'a partner can still append note_added to their own engagement (engagement_events_insert_own)'
 );
 
@@ -1264,7 +1264,7 @@ select throws_ok(
   $$ insert into engagement_events (engagement_id, organization_id, kind, created_by)
      select id, organization_id, 'stage_advanced', '11111111-1111-1111-1111-111111111111'
        from engagements
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'scoping' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'scoping' $$,
   '42501', null,
   'a partner cannot forge a stage_advanced event (0005_lifecycle: insert_own excludes lifecycle kinds)'
 );
@@ -1273,7 +1273,7 @@ select throws_ok(
   $$ insert into engagement_events (engagement_id, organization_id, kind, created_by)
      select id, organization_id, 'stage_reverted', '11111111-1111-1111-1111-111111111111'
        from engagements
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'scoping' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'scoping' $$,
   '42501', null,
   'a partner cannot forge a stage_reverted event (0005_lifecycle)'
 );
@@ -1282,24 +1282,24 @@ select throws_ok(
   $$ insert into engagement_events (engagement_id, organization_id, kind, created_by, idempotency_key)
      select id, organization_id, 'note_added', '11111111-1111-1111-1111-111111111111', 'squat-key-0001'
        from engagements
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'scoping' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'scoping' $$,
   '42501', null,
   'a partner cannot set an idempotency_key on an event (0005_lifecycle)'
 );
 
 -- businesses.scout_intake_id is the row-1 guard input: a partner cannot set it.
 select throws_ok(
-  $$ update businesses set scout_intake_id = 'abcd0013-0000-0000-0000-0000000000a1'
-      where id = 'abcd0013-0000-0000-0000-000000000002' $$,
+  $$ update businesses set scout_intake_id = '387980d0-271f-5351-961c-e561be1b724a'
+      where id = '5f8e3af9-e15a-58cd-86ee-f9cccf011349' $$,
   '23514', null,
   'a partner cannot set businesses.scout_intake_id by update (0001_core trigger)'
 );
 
 select throws_ok(
   $$ insert into businesses (id, name, type, owner_id, organization_id, scout_intake_id)
-     values ('abcd0013-0000-0000-0000-000000000006', 'Forged Intake', 'nonprofit',
-             '11111111-1111-1111-1111-111111111111', 'eeeeeeee-0000-0000-0000-000000000001',
-             'abcd0013-0000-0000-0000-0000000000a1') $$,
+     values ('2941f8ad-5678-5923-ac56-60afb8cca7fb', 'Forged Intake', 'nonprofit',
+             '11111111-1111-1111-1111-111111111111', 'b07a14e0-a781-53ba-a553-3e3aa287acf1',
+             '387980d0-271f-5351-961c-e561be1b724a') $$,
   '23514', null,
   'a partner cannot insert a business with a scout_intake_id (0001_core trigger)'
 );
@@ -1310,7 +1310,7 @@ select throws_ok(
   $$ insert into engagement_events (engagement_id, organization_id, kind, created_by)
      select id, organization_id, 'stage_advanced', '33333333-3333-3333-3333-333333333333'
        from engagements
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'scoping' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'scoping' $$,
   '42501', null,
   'an admin cannot forge a stage_advanced event either — only the command writes it (0005_lifecycle)'
 );
@@ -1318,7 +1318,7 @@ select throws_ok(
 -- hackathon_ready and membership: guards read the milestones ---------------------------------
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'hackathon_ready', null, 'tx-key-hack-0000') $$,
   '55000', 'guard:plan_accepted',
   'hackathon_ready needs the scoping row linked to an assessment (0005_lifecycle)'
@@ -1327,12 +1327,12 @@ select throws_ok(
 -- Nothing sets engagements.assessment_id yet (C2 does, on plan acceptance), so the
 -- fixture does, as the superuser.
 reset role;
-update engagements set assessment_id = 'abcd0013-0000-0000-0000-0000000000a1'
- where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'scoping';
+update engagements set assessment_id = '387980d0-271f-5351-961c-e561be1b724a'
+ where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'scoping';
 select tests.login_as(:admin_id);
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'hackathon_ready', null, 'tx-key-hack-0001') $$,
   '55000', 'guard:plan_accepted',
   'hackathon_ready also needs at least one milestone (0005_lifecycle)'
@@ -1340,20 +1340,20 @@ select throws_ok(
 
 reset role;
 insert into milestones (id, engagement_id, organization_id, title, status)
-select 'abcd0013-0000-0000-0000-0000000000b1', id, organization_id, 'Dashboard live', 'in_progress'
+select 'f22927fb-97f7-5e99-bdb7-9a015915bc0b', id, organization_id, 'Dashboard live', 'in_progress'
   from engagements
- where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'scoping';
+ where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'scoping';
 select tests.login_as(:admin_id);
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'hackathon_ready', null, 'tx-hack-0001')->>'to_stage'),
   'hackathon_ready',
   'hackathon_ready advances with a linked assessment and a milestone (0005_lifecycle)'
 );
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'membership', null, 'tx-key-member-0000') $$,
   '55000', 'guard:milestones_complete',
   'membership is refused while a milestone is incomplete (0005_lifecycle)'
@@ -1361,18 +1361,18 @@ select throws_ok(
 
 reset role;
 update milestones set status = 'completed', completed_at = now()
- where id = 'abcd0013-0000-0000-0000-0000000000b1';
+ where id = 'f22927fb-97f7-5e99-bdb7-9a015915bc0b';
 select tests.login_as(:admin_id);
 
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  (select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                 'membership', null, 'tx-member-0001')->>'to_stage'),
   'membership',
   'membership advances once every milestone is completed (0005_lifecycle)'
 );
 
 select throws_ok(
-  $$ select transition_engagement('abcd0013-0000-0000-0000-000000000001',
+  $$ select transition_engagement('8b3c620b-763d-5261-9a9d-f01e32d5d934',
                                   'scoping', 'reopening the plan', 'tx-key-out-0001') $$,
   '55000', 'terminal',
   'nothing leaves membership, a reversal included (0005_lifecycle)'
@@ -1389,15 +1389,15 @@ select tests.login_as(:alice_id);
 
 select throws_ok(
   $$ insert into engagements (business_id, owner_id, stage, status, organization_id)
-     values ('abcd0013-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111',
-             'initial_meeting', 'in_progress', 'eeeeeeee-0000-0000-0000-000000000001') $$,
+     values ('5f8e3af9-e15a-58cd-86ee-f9cccf011349', '11111111-1111-1111-1111-111111111111',
+             'initial_meeting', 'in_progress', 'b07a14e0-a781-53ba-a553-3e3aa287acf1') $$,
   '42501', null,
   'a partner cannot INSERT an engagement row on their own business (0001_core)'
 );
 
 select throws_ok(
   $$ update engagements set notes = 'hello'
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'scoping' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'scoping' $$,
   '42501', null,
   'a partner cannot UPDATE their own engagement row (0001_core)'
 );
@@ -1406,7 +1406,7 @@ select throws_ok(
 -- privilege first; service_role holds UPDATE and is stopped by the trigger itself.
 select throws_ok(
   $$ update engagements set status = 'in_progress'
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'initial_meeting' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'initial_meeting' $$,
   '42501', null,
   'a partner cannot reopen a completed row (no UPDATE privilege)'
 );
@@ -1415,14 +1415,14 @@ select tests.as_service();
 
 select throws_ok(
   $$ update engagements set status = 'in_progress'
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'initial_meeting' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'initial_meeting' $$,
   '23514', null,
   'service_role cannot reopen a completed row: the terminal lock keys on the session role (0001_core trigger)'
 );
 
 select throws_ok(
   $$ update businesses set scout_intake_id = null
-      where id = 'abcd0013-0000-0000-0000-000000000001' $$,
+      where id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' $$,
   '23514', null,
   'service_role cannot change businesses.scout_intake_id: the lock keys on the session role (0001_core trigger)'
 );
@@ -1433,7 +1433,7 @@ select tests.login_as(:admin_id);
 
 select throws_ok(
   $$ update engagements set status = 'in_progress'
-      where business_id = 'abcd0013-0000-0000-0000-000000000001' and stage = 'initial_meeting' $$,
+      where business_id = '8b3c620b-763d-5261-9a9d-f01e32d5d934' and stage = 'initial_meeting' $$,
   '42501', null,
   'an admin cannot write engagements directly either — the function is the only writer (0001_core)'
 );
@@ -1442,7 +1442,7 @@ select throws_ok(
 -- this advance reopens an existing completed row — the write that needs the GUC — as the
 -- definer function, after the revoke.
 select is(
-  (select transition_engagement('abcd0013-0000-0000-0000-000000000004',
+  (select transition_engagement('33a1edbb-e121-5b8f-95a0-adce240bd2cd',
                                 'budget_check', 'Charter signed 2026-10-02',
                                 'tx-postrevoke-0001')->>'to_stage'),
   'budget_check',
@@ -1452,7 +1452,7 @@ select is(
 select tests.login_as(:alice_id);
 
 select is(
-  (select count(*)::int from engagements where business_id = 'abcd0013-0000-0000-0000-000000000004'),
+  (select count(*)::int from engagements where business_id = '33a1edbb-e121-5b8f-95a0-adce240bd2cd'),
   2,
   'a partner still reads their own engagement rows: the SELECT policies are kept (0001_core)'
 );
@@ -1480,28 +1480,28 @@ reset role;
 
 reset role;
 
-\set eng20 '''aaaaaaaa-0000-0000-0000-000000000020'''
-\set bob_biz '''bbbbbbbb-0000-0000-0000-000000000001'''
+\set eng20 '''73e669eb-0980-5f0b-82b5-94828b60645d'''
+\set bob_biz '''5c007eed-b2b0-54aa-bdd7-5df7797b2536'''
 
 insert into engagements (id, business_id, owner_id, stage, status, organization_id) values
-  ('abcd0015-0000-0000-0000-0000000000e1', :bob_biz, :bob_id, 'budget_check',          'pending', :org_id),
-  ('abcd0015-0000-0000-0000-0000000000e2', :bob_biz, :bob_id, 'data_ethics_committee', 'pending', :org_id),
-  ('abcd0015-0000-0000-0000-0000000000e3', :bob_biz, :bob_id, 'scoping',               'pending', :org_id),
-  ('abcd0015-0000-0000-0000-0000000000e4', :bob_biz, :bob_id, 'hackathon_ready',       'pending', :org_id);
+  ('0241a584-557a-53dc-b1d8-d9cb8d0252c9', :bob_biz, :bob_id, 'budget_check',          'pending', :org_id),
+  ('000bd6aa-51fc-560f-8fba-c3d90c02ccdb', :bob_biz, :bob_id, 'data_ethics_committee', 'pending', :org_id),
+  ('08fb5d97-91fd-5531-a410-37858eedb491', :bob_biz, :bob_id, 'scoping',               'pending', :org_id),
+  ('64d41994-50ca-5c24-b13c-169307204257', :bob_biz, :bob_id, 'hackathon_ready',       'pending', :org_id);
 
 insert into businesses (id, name, type, owner_id, organization_id) values
-  ('abcd0015-0000-0000-0000-0000000000b2', 'Stale Nonprofit', 'nonprofit', :bob_id, :org_id);
+  ('4a45c40d-b064-545d-b5f9-b1b67e66eb73', 'Stale Nonprofit', 'nonprofit', :bob_id, :org_id);
 insert into engagements (id, business_id, owner_id, stage, status, organization_id) values
-  ('abcd0015-0000-0000-0000-0000000000e5', 'abcd0015-0000-0000-0000-0000000000b2', :bob_id,
+  ('5e4086ec-bf27-5b19-a469-2b0f50512a3c', '4a45c40d-b064-545d-b5f9-b1b67e66eb73', :bob_id,
    'initial_meeting', 'in_progress', :org_id);
 insert into engagement_events (engagement_id, organization_id, kind, created_by, created_at) values
-  ('abcd0015-0000-0000-0000-0000000000e5', :org_id, 'note_added', :admin_id, now() - interval '100 days');
+  ('5e4086ec-bf27-5b19-a469-2b0f50512a3c', :org_id, 'note_added', :admin_id, now() - interval '100 days');
 
 -- Test helpers. lesson20_id() is SECURITY DEFINER so a caller who cannot see the lesson
 -- (a partner, another org) can still name it in a call that must be refused.
 create or replace function tests.lesson20_id() returns uuid
 language sql security definer as $$
-  select id from public.lessons where engagement_id = 'aaaaaaaa-0000-0000-0000-000000000020'
+  select id from public.lessons where engagement_id = '73e669eb-0980-5f0b-82b5-94828b60645d'
 $$;
 
 create or replace function tests.chronicle_payload15(eng uuid, success text[], failure text[])
@@ -1524,8 +1524,8 @@ select tests.login_as(:admin_id);
 
 select throws_ok(
   $$ insert into lessons (organization_id, engagement_id, business_id, draft_id, outcome, created_by)
-     values ('eeeeeeee-0000-0000-0000-000000000001', 'abcd0015-0000-0000-0000-0000000000e1',
-             'bbbbbbbb-0000-0000-0000-000000000001',
+     values ('b07a14e0-a781-53ba-a553-3e3aa287acf1', '0241a584-557a-53dc-b1d8-d9cb8d0252c9',
+             '5c007eed-b2b0-54aa-bdd7-5df7797b2536',
              (select id from chronicle_drafts limit 1), 'delivered',
              '33333333-3333-3333-3333-333333333333') $$,
   '42501', null,
@@ -1536,8 +1536,8 @@ select tests.login_as(:alice_id);
 
 select throws_ok(
   $$ insert into lessons (organization_id, engagement_id, business_id, draft_id, outcome, created_by)
-     values ('eeeeeeee-0000-0000-0000-000000000001', 'abcd0015-0000-0000-0000-0000000000e1',
-             'bbbbbbbb-0000-0000-0000-000000000001',
+     values ('b07a14e0-a781-53ba-a553-3e3aa287acf1', '0241a584-557a-53dc-b1d8-d9cb8d0252c9',
+             '5c007eed-b2b0-54aa-bdd7-5df7797b2536',
              (select id from chronicle_drafts limit 1), 'delivered',
              '11111111-1111-1111-1111-111111111111') $$,
   '42501', null,
@@ -1556,7 +1556,7 @@ select is(
 
 select results_eq(
   $$ select predicted_bucket, predicted_readiness, prediction_correct, outcome
-       from lessons where engagement_id = 'aaaaaaaa-0000-0000-0000-000000000020' $$,
+       from lessons where engagement_id = '73e669eb-0980-5f0b-82b5-94828b60645d' $$,
   $$ values (null::text, null::text, null::boolean, 'delivered'::text) $$,
   'with no scout_intake_id the candidate has null predictions and prediction_correct; no milestones and recent events read as delivered (0004_drafts)'
 );
@@ -1573,14 +1573,14 @@ select results_eq(
 
 -- The business gains a scout intake (written as the superuser: an API role cannot) --
 
-update businesses set scout_intake_id = 'cccccccc-0000-0000-0000-000000000007'
- where id = 'aaaaaaaa-0000-0000-0000-000000000001';
+update businesses set scout_intake_id = '1d944c26-5036-515d-9d60-434e986dab20'
+ where id = '52c36b93-0c74-5222-b593-86c0c5ec460a';
 
 select tests.login_as(:admin_id);
 
 select ok(
   (select submit_chronicle_draft(
-            tests.chronicle_payload15('aaaaaaaa-0000-0000-0000-000000000020',
+            tests.chronicle_payload15('73e669eb-0980-5f0b-82b5-94828b60645d',
                                       array['Clear success criteria'], array['Sparse event log']),
             'chronicle-key-0015-a', null) ->> 'lesson_id') is not null,
   'the submit result carries a lesson_id (0004_drafts)'
@@ -1588,7 +1588,7 @@ select ok(
 
 select is(
   (select submit_chronicle_draft(
-            tests.chronicle_payload15('aaaaaaaa-0000-0000-0000-000000000020',
+            tests.chronicle_payload15('73e669eb-0980-5f0b-82b5-94828b60645d',
                                       array['Clear success criteria'], array['Sparse event log']),
             'chronicle-key-0015-a', null) ->> 'lesson_id'),
   (select id::text from lessons where engagement_id = :eng20),
@@ -1598,9 +1598,9 @@ select is(
 select results_eq(
   $$ select predicted_bucket, predicted_readiness, prediction_correct, scout_intake_id,
             success_factors, failure_factors
-       from lessons where engagement_id = 'aaaaaaaa-0000-0000-0000-000000000020' $$,
+       from lessons where engagement_id = '73e669eb-0980-5f0b-82b5-94828b60645d' $$,
   $$ values ('Data Infrastructure'::text, 'Ready'::text, true,
-             'cccccccc-0000-0000-0000-000000000007'::uuid,
+             '1d944c26-5036-515d-9d60-434e986dab20'::uuid,
              array['Clear success criteria']::text[], array['Sparse event log']::text[]) $$,
   'the candidate is updated in place: prediction from the intake (final_bucket first), Ready + delivered is correct, factors copied (0004_drafts)'
 );
@@ -1622,7 +1622,7 @@ select tests.login_as(:admin_id);
 
 select lives_ok(
   $$ select submit_chronicle_draft(
-       tests.chronicle_payload15('aaaaaaaa-0000-0000-0000-000000000020',
+       tests.chronicle_payload15('73e669eb-0980-5f0b-82b5-94828b60645d',
                                  array['Second pass'], array[]::text[]),
        'chronicle-key-0015-b', null) $$,
   'a Chronicle re-submit under a new key succeeds (0004_drafts)'
@@ -1640,7 +1640,7 @@ select results_eq(
        from lessons l
        join approvals a on a.idempotency_key = 'chronicle-key-0015-b'
        join chronicle_drafts d on d.id = a.draft_id
-      where l.engagement_id = 'aaaaaaaa-0000-0000-0000-000000000020' $$,
+      where l.engagement_id = '73e669eb-0980-5f0b-82b5-94828b60645d' $$,
   $$ values (true, array['Second pass']::text[], array[]::text[],
              array['Second pass']::text[], array[]::text[]) $$,
   'the candidate points at the newest draft and carries its factors, which are also stored on the draft (0004_drafts)'
@@ -1648,7 +1648,7 @@ select results_eq(
 
 select throws_ok(
   $$ select submit_chronicle_draft(
-       tests.chronicle_payload('aaaaaaaa-0000-0000-0000-000000000020', 'ready', 'fallback')
+       tests.chronicle_payload('73e669eb-0980-5f0b-82b5-94828b60645d', 'ready', 'fallback')
          || jsonb_build_object('success_factors', to_jsonb(array_fill('x'::text, array[11]))),
        'chronicle-key-0015-many', null) $$,
   '23514', null,
@@ -1664,33 +1664,33 @@ insert into lessons (organization_id, engagement_id, business_id, draft_id,
 select :org_id, v.eng, :bob_biz, (select id from chronicle_drafts limit 1),
        v.readiness, v.outcome, :admin_id
   from (values
-    ('abcd0015-0000-0000-0000-0000000000e1'::uuid, 'Ready',       'delivered'),
-    ('abcd0015-0000-0000-0000-0000000000e2'::uuid, 'Not Ready',   'partial'),
-    ('abcd0015-0000-0000-0000-0000000000e3'::uuid, 'Conditional', 'delivered'),
-    ('abcd0015-0000-0000-0000-0000000000e4'::uuid, null,          'delivered')
+    ('0241a584-557a-53dc-b1d8-d9cb8d0252c9'::uuid, 'Ready',       'delivered'),
+    ('000bd6aa-51fc-560f-8fba-c3d90c02ccdb'::uuid, 'Not Ready',   'partial'),
+    ('08fb5d97-91fd-5531-a410-37858eedb491'::uuid, 'Conditional', 'delivered'),
+    ('64d41994-50ca-5c24-b13c-169307204257'::uuid, null,          'delivered')
   ) as v(eng, readiness, outcome);
 
 select results_eq(
   $$ select prediction_correct from lessons
-      where engagement_id = 'abcd0015-0000-0000-0000-0000000000e1' $$,
+      where engagement_id = '0241a584-557a-53dc-b1d8-d9cb8d0252c9' $$,
   $$ values (true) $$,
   'prediction_correct: Ready + delivered is true (0004_drafts)'
 );
 select results_eq(
   $$ select prediction_correct from lessons
-      where engagement_id = 'abcd0015-0000-0000-0000-0000000000e2' $$,
+      where engagement_id = '000bd6aa-51fc-560f-8fba-c3d90c02ccdb' $$,
   $$ values (true) $$,
   'prediction_correct: Not Ready + partial is true (0004_drafts)'
 );
 select results_eq(
   $$ select prediction_correct from lessons
-      where engagement_id = 'abcd0015-0000-0000-0000-0000000000e3' $$,
+      where engagement_id = '08fb5d97-91fd-5531-a410-37858eedb491' $$,
   $$ values (false) $$,
   'prediction_correct: Conditional + delivered is false (0004_drafts)'
 );
 select results_eq(
   $$ select prediction_correct from lessons
-      where engagement_id = 'abcd0015-0000-0000-0000-0000000000e4' $$,
+      where engagement_id = '64d41994-50ca-5c24-b13c-169307204257' $$,
   $$ values (null::boolean) $$,
   'prediction_correct: a null predicted_readiness gives null (0004_drafts)'
 );
@@ -1698,24 +1698,24 @@ select results_eq(
 -- derive_engagement_outcome() --------------------------------------------------------
 
 insert into milestones (id, engagement_id, organization_id, title, status) values
-  ('abcd0015-0000-0000-0000-0000000000c1', 'abcd0015-0000-0000-0000-0000000000e1', :org_id, 'Done',        'completed'),
-  ('abcd0015-0000-0000-0000-0000000000c2', 'abcd0015-0000-0000-0000-0000000000e1', :org_id, 'Still going', 'in_progress');
+  ('e5c9b66d-40c9-5b14-a605-f3dcbe9dad55', '0241a584-557a-53dc-b1d8-d9cb8d0252c9', :org_id, 'Done',        'completed'),
+  ('b0281ed3-961c-5115-b0c7-3dd425d1fd8b', '0241a584-557a-53dc-b1d8-d9cb8d0252c9', :org_id, 'Still going', 'in_progress');
 
 select tests.login_as(:admin_id);
 
 select is(
-  derive_engagement_outcome(:bob_biz, 'abcd0015-0000-0000-0000-0000000000e1'),
+  derive_engagement_outcome(:bob_biz, '0241a584-557a-53dc-b1d8-d9cb8d0252c9'),
   'partial',
   'outcome: a milestone that is not completed makes it partial (0004_drafts)'
 );
 
 reset role;
 update milestones set status = 'completed', completed_at = now()
- where id = 'abcd0015-0000-0000-0000-0000000000c2';
+ where id = 'b0281ed3-961c-5115-b0c7-3dd425d1fd8b';
 select tests.login_as(:admin_id);
 
 select is(
-  derive_engagement_outcome(:bob_biz, 'abcd0015-0000-0000-0000-0000000000e1'),
+  derive_engagement_outcome(:bob_biz, '0241a584-557a-53dc-b1d8-d9cb8d0252c9'),
   'delivered',
   'outcome: every milestone completed is delivered (0004_drafts)'
 );
@@ -1723,12 +1723,12 @@ select is(
 -- A reversal as the business's latest transition event: abandoned.
 reset role;
 insert into engagement_events (engagement_id, organization_id, kind, created_by, created_at) values
-  ('abcd0015-0000-0000-0000-0000000000e2', :org_id, 'stage_reverted', :admin_id,
+  ('000bd6aa-51fc-560f-8fba-c3d90c02ccdb', :org_id, 'stage_reverted', :admin_id,
    now() - interval '1 hour');
 select tests.login_as(:admin_id);
 
 select is(
-  derive_engagement_outcome(:bob_biz, 'abcd0015-0000-0000-0000-0000000000e1'),
+  derive_engagement_outcome(:bob_biz, '0241a584-557a-53dc-b1d8-d9cb8d0252c9'),
   'abandoned',
   'outcome: a stage_reverted as the latest transition event is abandoned (0004_drafts)'
 );
@@ -1736,18 +1736,18 @@ select is(
 -- A later advance clears it.
 reset role;
 insert into engagement_events (engagement_id, organization_id, kind, created_by, created_at) values
-  ('abcd0015-0000-0000-0000-0000000000e2', :org_id, 'stage_advanced', :admin_id, now());
+  ('000bd6aa-51fc-560f-8fba-c3d90c02ccdb', :org_id, 'stage_advanced', :admin_id, now());
 select tests.login_as(:admin_id);
 
 select is(
-  derive_engagement_outcome(:bob_biz, 'abcd0015-0000-0000-0000-0000000000e1'),
+  derive_engagement_outcome(:bob_biz, '0241a584-557a-53dc-b1d8-d9cb8d0252c9'),
   'delivered',
   'outcome: a later stage_advanced clears the reversal (0004_drafts)'
 );
 
 select is(
-  derive_engagement_outcome('abcd0015-0000-0000-0000-0000000000b2',
-                            'abcd0015-0000-0000-0000-0000000000e5'),
+  derive_engagement_outcome('4a45c40d-b064-545d-b5f9-b1b67e66eb73',
+                            '5e4086ec-bf27-5b19-a469-2b0f50512a3c'),
   'abandoned',
   'outcome: no event for more than 90 days is abandoned (0004_drafts)'
 );
@@ -1755,8 +1755,8 @@ select is(
 select tests.login_as(:alice_id);
 
 select throws_ok(
-  $$ select derive_engagement_outcome('bbbbbbbb-0000-0000-0000-000000000001',
-                                      'abcd0015-0000-0000-0000-0000000000e1') $$,
+  $$ select derive_engagement_outcome('5c007eed-b2b0-54aa-bdd7-5df7797b2536',
+                                      '0241a584-557a-53dc-b1d8-d9cb8d0252c9') $$,
   '42501', null,
   'a partner cannot derive an outcome (0004_drafts)'
 );
@@ -1764,8 +1764,8 @@ select throws_ok(
 select tests.login_as(:rival_id);
 
 select throws_ok(
-  $$ select derive_engagement_outcome('bbbbbbbb-0000-0000-0000-000000000001',
-                                      'abcd0015-0000-0000-0000-0000000000e1') $$,
+  $$ select derive_engagement_outcome('5c007eed-b2b0-54aa-bdd7-5df7797b2536',
+                                      '0241a584-557a-53dc-b1d8-d9cb8d0252c9') $$,
   '42501', null,
   'an admin of another org cannot derive an outcome (0004_drafts)'
 );
@@ -1798,7 +1798,7 @@ select is(
 );
 
 select throws_ok(
-  $$ select promote_lesson('abcd0015-0000-0000-0000-0000000000ff') $$,
+  $$ select promote_lesson('47f9a14b-fac9-55c5-b5ec-bd0c3bdb37dd') $$,
   'P0002', null,
   'promoting a lesson that does not exist is P0002 (0004_drafts)'
 );
@@ -1812,7 +1812,7 @@ select is(
 
 select results_eq(
   $$ select promoted_by, promoted_at is not null, promotion_approval_id is not null
-       from lessons where engagement_id = 'aaaaaaaa-0000-0000-0000-000000000020' $$,
+       from lessons where engagement_id = '73e669eb-0980-5f0b-82b5-94828b60645d' $$,
   $$ values ('33333333-3333-3333-3333-333333333333'::uuid, true, true) $$,
   'promotion stamps promoted_by from auth.uid() and links the approval (0004_drafts)'
 );
@@ -1822,7 +1822,7 @@ select results_eq(
             a.id = l.promotion_approval_id
        from approvals a join lessons l on l.id = a.entity_id
       where a.entity_type = 'lesson'
-        and l.engagement_id = 'aaaaaaaa-0000-0000-0000-000000000020' $$,
+        and l.engagement_id = '73e669eb-0980-5f0b-82b5-94828b60645d' $$,
   $$ values ('approved'::text, 'chronicle'::text, 'L3'::text,
              '33333333-3333-3333-3333-333333333333'::uuid, true,
              'Held up against the outcome'::text, true) $$,
@@ -1900,7 +1900,7 @@ select tests.login_as(:admin_id);
 
 select lives_ok(
   $$ select submit_chronicle_draft(
-       tests.chronicle_payload15('aaaaaaaa-0000-0000-0000-000000000020',
+       tests.chronicle_payload15('73e669eb-0980-5f0b-82b5-94828b60645d',
                                  array['Third pass'], array['Late change']),
        'chronicle-key-0015-c', null) $$,
   'a Chronicle draft can still be submitted after the lesson was promoted (0004_drafts)'
@@ -1909,7 +1909,7 @@ select lives_ok(
 select results_eq(
   $$ select l.draft_id = (select draft_id from approvals where idempotency_key = 'chronicle-key-0015-b'),
             l.success_factors, l.failure_factors
-       from lessons l where l.engagement_id = 'aaaaaaaa-0000-0000-0000-000000000020' $$,
+       from lessons l where l.engagement_id = '73e669eb-0980-5f0b-82b5-94828b60645d' $$,
   $$ values (true, array['Second pass']::text[], array[]::text[]) $$,
   'a promoted lesson is not rewritten by a later draft: same draft, same factors (0004_drafts)'
 );
@@ -1996,10 +1996,10 @@ select results_eq(
        join communications c on c.id = a.draft_id
       where a.idempotency_key = 'envoy-key-0001' $$,
   $$ values ('communication'::text, true,
-             'ffffffff-0000-0000-0000-000000000091'::uuid,
+             'c5f578e6-afc6-5775-a7b1-2e63d1928a40'::uuid,
              '33333333-3333-3333-3333-333333333333'::uuid, 'approved'::text,
              'ai'::text, 'gemini-2.5-flash'::text, 'envoy-draft-v2'::text,
-             'aaaaaaaa-0000-0000-0000-000000000010'::uuid, true) $$,
+             '53939e32-79f1-50fa-afcc-87e61809fc30'::uuid, true) $$,
   'the chain row names the draft, the run, the reviewer and the engagement of the Envoy approval (0006_views)'
 );
 
@@ -2065,28 +2065,28 @@ insert into scout_intakes (
   composite_signal, flags, hitl_tier,
   review_status, review_action, final_bucket, organization_id
 ) values (
-  'abcd0008-0000-0000-0000-0000000000a1',
+  '365db816-43ef-5e82-899b-421e623d66d0',
   'Approve Org', 'Pat Diaz, ED', 'pat@example.org', 'Housing.',
   '40 staff', 'analyze_data', 'No view of outcomes.', 'Spreadsheets',
   'Next quarter', 'Referral',
   'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2',
   'pending', null, null, null
 ), (
-  'abcd0008-0000-0000-0000-0000000000a2',
+  '8abc65b1-e11b-58f1-a9c1-b3c0a4843ad5',
   'No Bucket Org', 'Lou Chen, ED', 'lou@example.org', 'Arts.',
   '5 staff', 'something_else', 'Unclear.', 'None',
   'Someday', 'Referral',
   null, null, 'Could not route.', 1, 1, 1, 'Not Ready', '{}', 'L3',
   'pending', null, null, null
 ), (
-  'abcd0008-0000-0000-0000-0000000000a3',
+  'e5b56247-74df-5251-8b09-81a8ec9bc4d2',
   'Queue Approved Org', 'Ana Ruiz, ED', 'ana@example.org', 'Youth.',
   '20 staff', 'build_tool', 'Need a dashboard.', 'Sheets',
   'Next quarter', 'Referral',
   'Tooling & Automation', 'Medium', 'Clear need.', 2, 2, 2, 'Conditional', '{}', 'L3',
   'reviewed', 'approved', 'Tooling & Automation', :org_id
 ), (
-  'abcd0008-0000-0000-0000-0000000000a4',
+  'e0b3425a-5d43-5e11-828e-e3fa4795946d',
   'Edited Org', 'Kai Wong, ED', 'kai@example.org', 'Food.',
   '10 staff', 'organize_data', 'Messy data.', 'Paper',
   'Next quarter', 'Referral',
@@ -2097,7 +2097,7 @@ insert into scout_intakes (
 select tests.logout();
 
 select throws_ok(
-  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0001') $$,
+  $$ select approve_scout_intake('365db816-43ef-5e82-899b-421e623d66d0', 'approve-0001') $$,
   '42501', null,
   'anon cannot execute approve_scout_intake (0008: no grant)'
 );
@@ -2105,7 +2105,7 @@ select throws_ok(
 select tests.login_as(:alice_id);
 
 select throws_ok(
-  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0001') $$,
+  $$ select approve_scout_intake('365db816-43ef-5e82-899b-421e623d66d0', 'approve-0001') $$,
   '42501', null,
   'a partner cannot approve an intake (0008: admin only)'
 );
@@ -2113,7 +2113,7 @@ select throws_ok(
 select tests.login_as(:rival_id);
 
 select throws_ok(
-  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a4', 'approve-0001') $$,
+  $$ select approve_scout_intake('e0b3425a-5d43-5e11-828e-e3fa4795946d', 'approve-0001') $$,
   '42501', null,
   'an admin of another org cannot approve an intake filed under this org (0008)'
 );
@@ -2121,25 +2121,25 @@ select throws_ok(
 select tests.login_as(:admin_id);
 
 select throws_ok(
-  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'short') $$,
+  $$ select approve_scout_intake('365db816-43ef-5e82-899b-421e623d66d0', 'short') $$,
   '22023', null,
   'an idempotency key under 8 characters is refused (0008)'
 );
 
 select throws_ok(
-  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000ff', 'approve-0001') $$,
+  $$ select approve_scout_intake('b99d1e91-ccf8-55f5-ad5e-eca30c0b1448', 'approve-0001') $$,
   'P0002', null,
   'a missing intake is P0002 (0008)'
 );
 
 select throws_ok(
-  $$ select approve_scout_intake('cccccccc-0000-0000-0000-000000000009', 'approve-0001') $$,
+  $$ select approve_scout_intake('6378f799-caa0-5acf-b06c-cec9496b7212', 'approve-0001') $$,
   '55000', 'guard:intake_approved',
   'a redirected intake never opens an engagement (0008: guard:intake_approved)'
 );
 
 select throws_ok(
-  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a2', 'approve-0001') $$,
+  $$ select approve_scout_intake('8abc65b1-e11b-58f1-a9c1-b3c0a4843ad5', 'approve-0001') $$,
   '22023', 'bucket_required',
   'a pending intake Scout could not bucket needs the reviewer''s bucket (0008)'
 );
@@ -2147,10 +2147,10 @@ select throws_ok(
 -- 0010: reopening a declined intake is explicit, and the reopened review is the caller's.
 select is(
   (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
-     from approve_scout_intake('cccccccc-0000-0000-0000-000000000009', 'approve-0009',
+     from approve_scout_intake('6378f799-caa0-5acf-b06c-cec9496b7212', 'approve-0009',
                                null, 'Reopened after a call', 'nonprofit', null, true) r),
   jsonb_build_object(
-    'intake_id', 'cccccccc-0000-0000-0000-000000000009',
+    'intake_id', '6378f799-caa0-5acf-b06c-cec9496b7212',
     'business_created', true, 'review_action', 'approved',
     'final_bucket', 'Analytics & Insight', 'reopened', true, 'replayed', false
   ),
@@ -2159,7 +2159,7 @@ select is(
 
 select results_eq(
   $$ select review_status::text, review_action::text, final_bucket::text, reviewed_by, review_notes
-       from scout_intakes where id = 'cccccccc-0000-0000-0000-000000000009' $$,
+       from scout_intakes where id = '6378f799-caa0-5acf-b06c-cec9496b7212' $$,
   $$ values ('reviewed', 'approved', 'Analytics & Insight',
              '33333333-3333-3333-3333-333333333333'::uuid, 'Reopened after a call') $$,
   'the reopened intake is re-reviewed under the reopening admin, replacing the decline (0010)'
@@ -2168,7 +2168,7 @@ select results_eq(
 select results_eq(
   $$ select (detail ->> 'reopened')::boolean from audit_events
       where action = 'scout_intake.approve'
-        and entity_id = 'cccccccc-0000-0000-0000-000000000009' $$,
+        and entity_id = '6378f799-caa0-5acf-b06c-cec9496b7212' $$,
   $$ values (true) $$,
   'the audit row records that the intake was reopened (0010)'
 );
@@ -2178,21 +2178,21 @@ reset role;
 update scout_intakes
    set review_status = 'needs_info', review_notes = 'Which systems hold the data?',
        reviewed_by = '33333333-3333-3333-3333-333333333333', reviewed_at = now()
- where id = 'abcd0008-0000-0000-0000-0000000000a2';
+ where id = '8abc65b1-e11b-58f1-a9c1-b3c0a4843ad5';
 select tests.login_as(:admin_id);
 
 select throws_ok(
-  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a2', 'approve-0001') $$,
+  $$ select approve_scout_intake('8abc65b1-e11b-58f1-a9c1-b3c0a4843ad5', 'approve-0001') $$,
   '22023', 'bucket_required',
   'a parked intake with no bucket still needs the reviewer''s bucket (0010)'
 );
 
 select is(
   (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
-     from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a2', 'approve-00a2',
+     from approve_scout_intake('8abc65b1-e11b-58f1-a9c1-b3c0a4843ad5', 'approve-00a2',
                                'Advisory / Strategy', 'They sent the details') r),
   jsonb_build_object(
-    'intake_id', 'abcd0008-0000-0000-0000-0000000000a2',
+    'intake_id', '8abc65b1-e11b-58f1-a9c1-b3c0a4843ad5',
     'business_created', true, 'review_action', 'edited',
     'final_bucket', 'Advisory / Strategy', 'reopened', false, 'replayed', false
   ),
@@ -2201,16 +2201,16 @@ select is(
 
 select results_eq(
   $$ select review_status::text, review_notes from scout_intakes
-      where id = 'abcd0008-0000-0000-0000-0000000000a2' $$,
+      where id = '8abc65b1-e11b-58f1-a9c1-b3c0a4843ad5' $$,
   $$ values ('reviewed', 'They sent the details') $$,
   'approving a parked intake closes the wait and replaces the request note (0010)'
 );
 
 select is(
   (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
-     from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0001') r),
+     from approve_scout_intake('365db816-43ef-5e82-899b-421e623d66d0', 'approve-0001') r),
   jsonb_build_object(
-    'intake_id', 'abcd0008-0000-0000-0000-0000000000a1',
+    'intake_id', '365db816-43ef-5e82-899b-421e623d66d0',
     'business_created', true, 'review_action', 'approved',
     'final_bucket', 'Analytics & Insight', 'reopened', false, 'replayed', false
   ),
@@ -2220,25 +2220,25 @@ select is(
 select results_eq(
   $$ select review_status::text, review_action::text, final_bucket::text, reviewed_by,
             reviewed_at is not null, organization_id
-       from scout_intakes where id = 'abcd0008-0000-0000-0000-0000000000a1' $$,
+       from scout_intakes where id = '365db816-43ef-5e82-899b-421e623d66d0' $$,
   $$ values ('reviewed', 'approved', 'Analytics & Insight',
              '33333333-3333-3333-3333-333333333333'::uuid, true,
-             'eeeeeeee-0000-0000-0000-000000000001'::uuid) $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1'::uuid) $$,
   'the intake row is reviewed by the caller and filed under the caller''s organization (0008)'
 );
 
 select results_eq(
   $$ select name, type::text, owner_id, organization_id
-       from businesses where scout_intake_id = 'abcd0008-0000-0000-0000-0000000000a1' $$,
+       from businesses where scout_intake_id = '365db816-43ef-5e82-899b-421e623d66d0' $$,
   $$ values ('Approve Org', 'nonprofit', '33333333-3333-3333-3333-333333333333'::uuid,
-             'eeeeeeee-0000-0000-0000-000000000001'::uuid) $$,
+             'b07a14e0-a781-53ba-a553-3e3aa287acf1'::uuid) $$,
   'the business is named after the intake, linked by scout_intake_id, owned by the caller (0008)'
 );
 
 select results_eq(
   $$ select e.stage::text, e.status::text
        from engagements e join businesses b on b.id = e.business_id
-      where b.scout_intake_id = 'abcd0008-0000-0000-0000-0000000000a1' $$,
+      where b.scout_intake_id = '365db816-43ef-5e82-899b-421e623d66d0' $$,
   $$ values ('initial_meeting', 'in_progress') $$,
   'the first transition opened initial_meeting in_progress (0008 -> 0005)'
 );
@@ -2246,7 +2246,7 @@ select results_eq(
 select results_eq(
   $$ select kind::text, detail ->> 'to', detail -> 'evidence' ->> 'scout_intake_id'
        from engagement_events where idempotency_key = 'approve-0001' $$,
-  $$ values ('stage_advanced', 'initial_meeting', 'abcd0008-0000-0000-0000-0000000000a1') $$,
+  $$ values ('stage_advanced', 'initial_meeting', '365db816-43ef-5e82-899b-421e623d66d0') $$,
   'the transition event carries the caller''s key and names the intake as evidence (0008)'
 );
 
@@ -2255,17 +2255,17 @@ select results_eq(
             (detail ->> 'business_created')::boolean, actor_id
        from audit_events
       where action = 'scout_intake.approve'
-        and entity_id = 'abcd0008-0000-0000-0000-0000000000a1' $$,
+        and entity_id = '365db816-43ef-5e82-899b-421e623d66d0' $$,
   $$ values ('approved', true, true, '33333333-3333-3333-3333-333333333333'::uuid) $$,
   'the approval writes its own audit row beside the transition''s (0008)'
 );
 
 select is(
   (select r - 'engagement_id' - 'event_id' - 'transitioned_at'
-     from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0001') r),
+     from approve_scout_intake('365db816-43ef-5e82-899b-421e623d66d0', 'approve-0001') r),
   jsonb_build_object(
-    'intake_id', 'abcd0008-0000-0000-0000-0000000000a1',
-    'business_id', (select id from businesses where scout_intake_id = 'abcd0008-0000-0000-0000-0000000000a1'),
+    'intake_id', '365db816-43ef-5e82-899b-421e623d66d0',
+    'business_id', (select id from businesses where scout_intake_id = '365db816-43ef-5e82-899b-421e623d66d0'),
     'business_created', false, 'review_action', 'approved',
     'final_bucket', 'Analytics & Insight', 'reopened', false, 'replayed', true
   ),
@@ -2273,13 +2273,13 @@ select is(
 );
 
 select throws_ok(
-  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0002') $$,
+  $$ select approve_scout_intake('365db816-43ef-5e82-899b-421e623d66d0', 'approve-0002') $$,
   '22023', 'already_approved',
   'a new key on an intake already in the pipeline is refused, not a second transition (0008)'
 );
 
 select throws_ok(
-  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a3', 'approve-0003',
+  $$ select approve_scout_intake('e5b56247-74df-5251-8b09-81a8ec9bc4d2', 'approve-0003',
                                  'ML / Predictive') $$,
   '22023', 'already_reviewed',
   'an intake the queue reviewed cannot be re-bucketed here (0008)'
@@ -2287,9 +2287,9 @@ select throws_ok(
 
 select is(
   (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
-     from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a3', 'approve-0003') r),
+     from approve_scout_intake('e5b56247-74df-5251-8b09-81a8ec9bc4d2', 'approve-0003') r),
   jsonb_build_object(
-    'intake_id', 'abcd0008-0000-0000-0000-0000000000a3',
+    'intake_id', 'e5b56247-74df-5251-8b09-81a8ec9bc4d2',
     'business_created', true, 'review_action', 'approved',
     'final_bucket', 'Tooling & Automation', 'reopened', false, 'replayed', false
   ),
@@ -2298,10 +2298,10 @@ select is(
 
 select is(
   (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
-     from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a4', 'approve-0004',
+     from approve_scout_intake('e0b3425a-5d43-5e11-828e-e3fa4795946d', 'approve-0004',
                                'Analytics & Insight', 'Rerouted on review') r),
   jsonb_build_object(
-    'intake_id', 'abcd0008-0000-0000-0000-0000000000a4',
+    'intake_id', 'e0b3425a-5d43-5e11-828e-e3fa4795946d',
     'business_created', true, 'review_action', 'edited',
     'final_bucket', 'Analytics & Insight', 'reopened', false, 'replayed', false
   ),

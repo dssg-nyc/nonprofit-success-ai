@@ -55,11 +55,11 @@ const report = (over: Partial<EvalReport>): EvalReport => ({
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-/** The HTML of one case, by its `data-search` (case id is its first word). */
+/** The HTML of one scenario, by its `data-search` (case id is its first word); a scenario closes with a newline, an inner output block does not. */
 const caseBlock = (html: string, caseId: string): string => {
   const start = html.indexOf(`data-search="${caseId.toLowerCase()}`);
   expect(start).toBeGreaterThan(-1);
-  return html.slice(html.lastIndexOf('<details', start), html.indexOf('</details>', start));
+  return html.slice(html.lastIndexOf('<details', start), html.indexOf('</details>\n', start));
 };
 
 describe('renderReport', () => {
@@ -929,7 +929,7 @@ describe('stakeholder sections — section pattern, readiness ladder, review que
     expect(card).toContain('<h3>scoutRationale <span class="pill pass">trusted</span></h3>');
     expect(card).toContain('<span class="num t-good">91%</span><span class="label">agreement with hand labels</span>');
     expect(card).toContain('<div class="fill good" style="width:91%"></div><div class="target" style="left:80%"></div>');
-    expect(card).toContain('<b class="t-good">11 of 10</b> labelled outputs toward the floor · <span class="t-bad">1 lenient</span> · <span class="">0 harsh</span>');
+    expect(card).toContain('<b class="t-good">11 of 10</b> labelled outputs toward the floor · <span class="t-bad">1 false pass (lenient)</span> · <span class="">0 false failures (harsh)</span>');
     expect(card).toContain('<span class="t-bad">1 reader-failed output at the pass mark</span> — lenient');
     const plot = card.slice(card.indexOf('<figure class="stripplot">'), card.indexOf('</figure>'));
     // Two rails, one per hand label, and the pass threshold drawn through both at score 1.
@@ -1002,14 +1002,14 @@ describe('agent tabs — cases, the filter bar, the dimension chart, page weight
   it('renders a failing case inline and a passing case from the blob, with identical outputs stored once', () => {
     const html = renderReport(input());
     const bad = caseBlock(html, 'e-bad');
-    expect(bad).toContain('data-state="fail" data-search="e-bad" data-lanes="judge" data-dims="appropriate"');
+    expect(bad).toContain('data-state="fail" data-search="e-bad" data-keys="envoyDraft:e-bad" data-lanes="judge" data-dims="appropriate"');
     expect(bad).toContain('<div class="case-body"><div class="expected">');
     expect(bad).toContain('<li class="miss"><span>appropriate</span>');
     expect(bad).toContain('Judge’s reasoning:</span> Promises a dashboard the plan does not have.');
     expect(bad).toContain('<pre data-o="0"></pre>');
     const ok = caseBlock(html, 'e-ok');
-    expect(ok).toContain('data-state="pass" data-search="e-ok"><summary>');
-    expect(ok).toContain('<span class="note">a clean kickoff</span>');
+    expect(ok).toContain('data-state="pass" data-search="e-ok" data-keys="envoyDraft:e-ok"><summary>');
+    expect(ok).toContain('<b class="title">a clean kickoff</b><span class="note"><code>e-ok</code></span>');
     expect(ok).toContain('<span class="pill pass">Judge on fallback: pass 1.00</span>');
     expect(ok).not.toContain('case-body');
     const blob = JSON.parse(html.slice(html.indexOf('id="case-data">') + 'id="case-data">'.length, html.indexOf('</script>', html.indexOf('id="case-data">')))) as {
@@ -1050,15 +1050,21 @@ describe('agent tabs — cases, the filter bar, the dimension chart, page weight
     const tab = html.slice(html.indexOf('id="tab-envoy"'), html.indexOf('id="tab-calibration"'));
     expect(tab.match(/<div class="filter-bar" data-filter-bar>/g)).toHaveLength(1);
     expect(tab).toContain('<option value="judge">Fallback · judge</option><option value="modelJudge">Model · judge</option>');
-    expect(tab).toContain('<option value="appropriate">appropriate</option><option value="grounded">grounded</option>');
+    expect(tab).toContain('<option value="appropriate">Fits the occasion</option><option value="grounded">Grounded</option>');
     expect(tab).toContain('<button type="button" class="chip" data-filter="fail" aria-pressed="false">Failing</button>');
     // Dimension × path, weakest first, each bar titled with rate and counts, legend beside.
     const chart = tab.slice(tab.indexOf('<div class="dim-chart">'), tab.indexOf('</div>', tab.indexOf('<div class="dim-chart">')));
-    expect(chart).toContain('<title>appropriate — Fallback: 50% (1/2)</title>');
-    expect(chart).toContain('<title>grounded — Model: 100% (2/2)</title>');
-    expect(chart.indexOf('appropriate — Fallback')).toBeLessThan(chart.indexOf('grounded — Fallback'));
-    expect(tab).toContain('<p class="dim-why">Weakest check: <code>appropriate</code> at 50% on the fallback, 100% on the model.</p>');
-    expect(tab).toContain('<p><strong>Claim.</strong> Envoy has no gated metric yet');
+    // Checks carry their readable name; the raw id sits beside the weakest one.
+    expect(chart).toContain('<title>Fits the occasion — Fallback: 50% (1/2)</title>');
+    expect(chart).toContain('<title>Grounded — Model: 100% (2/2)</title>');
+    expect(chart.indexOf('Fits the occasion — Fallback')).toBeLessThan(chart.indexOf('Grounded — Fallback'));
+    expect(tab).toContain('<p class="dim-why">Weakest check: <strong>Fits the occasion</strong> (<code>appropriate</code>) at 50% on the fallback, 100% on the model.</p>');
+    // The tab leads with a verdict derived from the fallback verdicts, then honest counts: scenarios, completed check results, what was skipped.
+    expect(tab).toContain('<h2 id="agent-envoy-h">Envoy · <span class="t-bad">Needs attention</span> — Email quality: 1/2</h2>');
+    expect(tab).toContain('<strong>2 scenarios</strong>, <strong>4 completed check results</strong>.');
+    expect(tab).toContain('<button type="button" class="chip" data-filter="attention" aria-pressed="true">Needs attention</button>');
+    expect(tab).toContain('<p class="all-clear" data-all-clear hidden><span class="t-good">No failures in completed checks.</span> <button type="button" class="chip" data-filter="all">Explore all 2 scenarios</button></p>');
+    expect(tab).toContain('<p class="metric-verdict"><b class="t-bad">1/2 passed</b> <span class="muted">on the fallback by the judge</span> · <span class="t-good">Model (judge): 2/2 passed</span></p>');
   });
 
   // Run 2 (2026-10-08, 325 cases, every lane) is the size fixture, when it is on disk. Pinned

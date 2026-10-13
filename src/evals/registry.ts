@@ -244,8 +244,8 @@ export const METRICS: Record<string, MetricDefinition> = {
   },
   scoutGrounding: {
     name: 'scoutGrounding',
-    displayName: 'Rationale grounding',
-    description: 'Does the Scout template keep rubric arithmetic ("3/3") and wire field names out of the rationale a reviewer reads?',
+    displayName: 'Rationale format',
+    description: 'Is the fallback rationale written for a reviewer — no rubric arithmetic ("3/3") and no wire field names in the text? A format check only; it does not judge whether the rationale is right.',
     fixture: 'scoutRouting',
     heuristic: gradeScoutGrounding,
     judgeCls: null,

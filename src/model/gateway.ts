@@ -196,7 +196,9 @@ export async function callModel<T>(
       const run = await safeRecord({ ...base, status: 'fallback', errorCode: gwErr.code, durationMs: 0 });
       gwErr.runId = run.recorded ? run.runId : null;
     }
-    log('error', 'model_call', {
+    // A fallback caller is built for this (a keyless preview answers from the heuristic), so
+    // it is `warn`; an `error` caller has no answer at all, so a human has to act.
+    log(failureStatus === 'fallback' ? 'warn' : 'error', 'model_call', {
       ...logBase(base, modelId),
       status: failureStatus,
       code: gwErr.code,

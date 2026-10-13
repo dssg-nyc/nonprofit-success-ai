@@ -39,7 +39,7 @@ The PRD (§15) Q5 asks five questions. Four are answered by the `agent_run_metri
 
 Local: `make metrics` prints the view from the local stack via `psql` as the local superuser (RLS bypassed, local only). An admin sees their orgs' rows; a partner sees nothing; anon has no grant. Alerting, log drain and hosted dashboards are J4 / D44 (`roadmap.md`); the request id and `cost_cents` are in place for them.
 
-Spend is also bounded before it happens: `check_model_budget()` (0007) counts each caller's gateway calls per clock hour and the routes answer 429 past `MODEL_CALLS_PER_HOUR` (`api/_budget.ts`), so a looped form or button cannot run up the bill while nobody is watching the view.
+Spend is also bounded before it happens: `check_model_budget()` (0007) counts each caller's gateway calls per clock hour; past `MODEL_CALLS_PER_HOUR` the staff routes answer 429 and the public intake falls back to the heuristic (`api/_budget.ts`), so a looped form or button cannot run up the bill while nobody is watching the view.
 
 ## Dependencies
 - **Imports:** Supabase service-role client (`@supabase/supabase-js`); `src/types/` (`AgentRunPayload`, `ToolCallPayload`)

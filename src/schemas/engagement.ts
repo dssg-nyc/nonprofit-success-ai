@@ -10,7 +10,7 @@ import { Constants } from "../lib/database.types";
 /** The six stages, in pipeline order (the `engagement_stage` enum). */
 export const engagementStageSchema = z.enum(Constants.public.Enums.engagement_stage);
 
-/** `z.guid()` as in `envoy.ts`: seeded fixture ids carry no RFC version nibble. */
+/** `z.guid()` as in `architect.ts`: the column accepts any GUID layout, so does the wire. */
 export const engagementTransitionRequestSchema = z.object({
   businessId: z.guid(),
   toStage: engagementStageSchema,

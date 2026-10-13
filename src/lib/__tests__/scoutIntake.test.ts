@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { scoutIntakeFromRow } from '../scoutIntake';
-import { rowToDomain } from '../supabase';
+import { rowToDomain } from '../rows';
 
 // A scout_intakes row as PostgREST returns it (snake_case, ISO timestamps, nulls).
 const ROW = {
-  id: 'cccccccc-0000-0000-0000-000000000001',
+  id: '0d73afe2-648b-54bc-8111-033b3e08bb8c',
   org_name: 'Harlem Community Pantry',
   contact_name_role: 'Dana Reyes, Executive Director',
   contact_email: 'dana@harlempantry.org',

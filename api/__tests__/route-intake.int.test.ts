@@ -206,24 +206,30 @@ describe('POST /api/route-intake (integration)', () => {
     expect((await filedRow(body.intakeId)).routing_run_id).toBeNull();
   });
 
-  it('spends the per-user hourly budget on the real counter and answers 429 once it is gone', async () => {
+  // The public form never refuses over quota: the second call is filed by the heuristic.
+  it('spends the per-user hourly budget on the real counter and files from the fallback once it is gone', async () => {
     process.env.GOOGLE_GENERATIVE_AI_API_KEY = 'integration-test-key';
     process.env.MODEL_CALLS_PER_HOUR = '1';
     const runId = await seedRun({ status: 'success', hitl_tier: 'L2' });
     modelMock.mockResolvedValue({ result: highReady(), runId });
     const { token } = await session();
-    const org = `${ORG} budget`;
+    // Unique per run: both intakes here are filed, so a stale row from an aborted run
+    // under a shared name would inflate the count below.
+    const org = `${ORG} budget ${crypto.randomUUID()}`;
 
     const first = await POST(jsonRequest('/api/route-intake', { ...intake(), org_name: org }, token));
     expect(first.status).toBe(200);
     cleanup.intake((await first.json()).intakeId);
 
     const second = await POST(jsonRequest('/api/route-intake', { ...intake(), org_name: org }, token));
-    expect(second.status).toBe(429);
-    expect(await second.json()).toEqual({ error: 'model_budget_exceeded' });
-    expect(Number(second.headers.get('Retry-After'))).toBeGreaterThan(0);
+    expect(second.status).toBe(200);
+    const body = await second.json();
+    cleanup.intake(body.intakeId);
+    expect(body).toMatchObject({ hitlTier: 'L3', routingSource: 'derived' });
+    expect(body.flags.some((f: string) => f.includes('model_budget_exceeded'))).toBe(true);
+    expect((await filedRow(body.intakeId)).routing_run_id).toBeNull();
     expect(modelMock).toHaveBeenCalledTimes(1);
-    expect(await countFiled(org)).toBe(1);
+    expect(await countFiled(org)).toBe(2);
   });
 
   it('rejects an invalid body before any session, model or database work', async () => {

@@ -22,7 +22,7 @@ describe('GET /api/health', () => {
     const res = await get();
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, modelKeyConfigured: true, supabase: 'ok' });
+    expect(await res.json()).toEqual({ ok: true, supabase: 'ok' });
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('http://127.0.0.1:54321/auth/v1/health');
     expect((init.headers as Record<string, string>).apikey).toBe('anon-key');
@@ -47,7 +47,7 @@ describe('GET /api/health', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const res = await get();
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ ok: true, modelKeyConfigured: false, supabase: 'unconfigured' });
+    expect(await res.json()).toEqual({ ok: true, supabase: 'unconfigured' });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

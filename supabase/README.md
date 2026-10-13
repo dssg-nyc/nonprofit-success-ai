@@ -33,36 +33,34 @@ These local keys are fixed dev values, identical on every machine — not secret
 
 `studio` and `analytics` are disabled in `config.toml` (2026-08-21): their containers
 failed health checks on this machine and neither is needed for schema work. `storage` is
-enabled (nothing uses it yet). `[db.seed]` runs `seed.sql` on every `db reset` (see
-"Local seed" below); the pgTAP suite does not depend on it and seeds its own rows inside
-each test transaction. Re-enable Studio if you want the UI on :54323.
+enabled (nothing uses it yet). `[db.seed]` is disabled: there is no seed file (see "Local
+data" below), and the pgTAP suite seeds its own rows inside each test transaction.
+Re-enable Studio if you want the UI on :54323.
 
-## Local seed
+## Local data
 
-`seed.sql` gives the local stack accounts and a partner to click through — the hosted
-project never runs it. It is idempotent (fixed `dddddddd-…` ids, `on conflict do nothing`),
-so it applies on `make db-reset` or at any time without a reset:
+There is no `seed.sql`, by decision (2026-10-13): one existed briefly and carried team
+members' real email addresses, a shared password and invented partner organisations —
+personal data in git, and a UI demoing against rows no real flow produced. Local data
+comes from the application itself against the local stack: sign up through the SPA
+(`handle_new_user()` provisions the `users` row), submit the public intake form, and
+promote your own account to staff the way an operator would in the hosted project:
 
 ```bash
-psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -f supabase/seed.sql
+psql postgresql://postgres:postgres@127.0.0.1:54322/postgres <<'SQL'
+alter table users disable trigger user;          -- users.role is immutable to API roles
+update users set role = 'admin' where email = '<your local sign-up email>';
+alter table users enable trigger user;
+insert into organizations (name) values ('My local org') returning id;
+insert into organization_members (organization_id, user_id, role)
+  select o.id, u.id, 'owner' from organizations o, users u
+  where o.name = 'My local org' and u.email = '<your local sign-up email>';
+SQL
 ```
 
-Every account shares the password `dssg-admin-2026`:
-
-| Email | Role | Sees |
-|---|---|---|
-| `ramsey.wise@gmail.com` | admin (org owner) | every partner, the Scout review queue, Architect assessment |
-| `tony.j.amodeo@gmail.com`, `jianyinroachell@gmail.com`, `carlosfc@umich.edu`, `karthik.chakravartula@gmail.com` | admin | same |
-| `dana@harlempantry.org` | client | only Harlem Community Pantry |
-| `priya@bktenants.org` | client | only Brooklyn Tenants Union |
-
-Seeded data: organization **DSSG NYC**; five Scout intakes (two reviewed and approved,
-two pending at L2 and L3, one declined — it shows under Declined on `/scout/decisions`,
-where an admin can reopen it); two businesses, **Harlem Community Pantry** (Dana's, a completed
-initial meeting and a budget check in progress) and **Brooklyn Tenants Union** (Priya's,
-initial meeting in progress). An admin's dashboard lists both (`businesses_select_admin`,
-0009); each client sees only their own. Google sign-in stays disabled
-locally; use the email form.
+Google sign-in stays disabled locally; use the email form. The pgTAP fixtures
+(`tests/_shared/fixtures.psql`) are the only checked-in rows, and they roll back with
+each test file.
 
 ## Hosted project
 

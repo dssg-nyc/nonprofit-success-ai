@@ -1,18 +1,19 @@
 /**
- * Per-case detail. Every case is a <details class="case"> with its id, note and one pill
- * per lane in the summary, so the filter and the anchors work on server-rendered DOM.
- * Failing and errored cases carry their body inline — expected, got, reasoning — because
- * they are what a reader opens and what the triage links to. Everything heavy goes into
- * one JSON blob (`<script type="application/json">`): the passing cases' grades as compact
- * records, every distinct agent output stored once, every distinct expected block stored
+ * Per-case detail shared by the scenario explorer (`scenarios.ts`): the verdict pills, the
+ * intake and expected blocks, one grade block per lane. Failing and errored scenarios carry
+ * their body inline — expected, got, reasoning — because they are what a reader opens and
+ * what the triage links to. Everything heavy goes into one JSON blob
+ * (`<script type="application/json">`): the passing scenarios' grades as compact records,
+ * every distinct agent output stored once, every distinct intake and expected block stored
  * once. `CASE_SCRIPT` builds the same markup in the browser on first expand.
  */
 
 import { gzipSync } from 'node:zlib';
 
 import type { EvalCase, GradedRow, GraderResult } from '../../types';
-import { caseAnchor, escapeHtml, LANE_LABEL, laneOfGrade, PILL_LABEL, plural } from './views';
-import type { Lane, LaneKey, MetricView, Tone } from './views';
+import { EXPECTED_LABEL, expectedLabel, INPUT_LABEL, inputLabel, renderArtifact } from './artifacts';
+import { escapeHtml, LANE_LABEL, PILL_LABEL } from './views';
+import type { Lane, LaneKey, Tone } from './views';
 
 export type CaseState = 'fail' | 'errored' | 'pass' | 'none';
 
@@ -81,21 +82,31 @@ export class Store<T> {
   }
 }
 
-/** A string output is stored HTML-escaped (filled as HTML); anything else stays a value the page pretty-prints as text. */
-export type StoredOutput = string | { v: unknown };
+/**
+ * A string output is stored HTML-escaped (filled as HTML); an output the portal has a
+ * layout for (`artifacts.ts`) is stored as that HTML under `h`; anything else stays a
+ * value the page pretty-prints as JSON.
+ */
+export type StoredOutput = string | { h: string } | { v: unknown };
 export type OutputStore = Store<StoredOutput>;
 
-const storedOutput = (output: unknown): StoredOutput => (typeof output === 'string' ? escapeHtml(output) : { v: output });
+function storedOutput(output: unknown): StoredOutput {
+  if (typeof output === 'string') return escapeHtml(output);
+  const h = renderArtifact(output);
+  return h === null ? { v: output } : { h };
+}
 
-export function renderOutput(output: unknown, store?: OutputStore): string {
+/** The output block; open by default for prose, where the draft is what a reader came for. */
+export function renderOutput(output: unknown, store?: OutputStore, open = false): string {
   if (output === undefined || output === null) return '';
   const pre = store
     ? `<pre data-o="${store.add(storedOutput(output))}"></pre>`
     : `<pre>${typeof output === 'string' ? escapeHtml(output) : escapeHtml(JSON.stringify(output, null, 2))}</pre>`;
-  return `<details class="output"><summary>What the agent produced</summary>${pre}</details>`;
+  return `<details class="output"${open ? ' open' : ''}><summary>What the agent produced</summary>${pre}</details>`;
 }
 
-export function renderGradeDetail(lane: Lane, g: GraderResult | undefined, store?: OutputStore): string {
+/** One lane's verdict on a case. For a prose metric the draft comes first and open; a check's comparison table first otherwise. */
+export function renderGradeDetail(lane: Lane, g: GraderResult | undefined, store?: OutputStore, prose = false): string {
   const head = `<h4>${escapeHtml(lane.label)}</h4>`;
   if (!g) return `<div class="grade absent">${head}<p class="muted">${lane.ran ? 'Not evaluated for this case.' : 'Not evaluated — no model key for this run.'}</p></div>`;
   if (g.status === 'errored') {
@@ -108,22 +119,33 @@ export function renderGradeDetail(lane: Lane, g: GraderResult | undefined, store
     lane.kind === 'exact'
       ? renderComparisonTable(g.reasoning)
       : `${renderDims(g.dimensions)}${g.reasoning ? `<p class="reasoning"><span class="muted">Judge’s reasoning:</span> ${escapeHtml(g.reasoning)}</p>` : ''}`;
-  return `<div class="grade ${g.isCorrect ? 'pass' : 'fail'}">${head}${body}${renderOutput(g.output, store)}</div>`;
+  const output = renderOutput(g.output, store, prose);
+  return `<div class="grade ${g.isCorrect ? 'pass' : 'fail'}">${head}${prose ? output + body : body + output}</div>`;
 }
 
-const fmtExpected = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v));
+const fmt = (v: unknown): string => (typeof v === 'string' ? v : JSON.stringify(v));
 
+const dl = (entries: Array<[string, unknown]>, label: (k: string) => string): string =>
+  `<dl>${entries.map(([k, v]) => `<dt title="${escapeHtml(k)}">${escapeHtml(label(k))}</dt><dd>${escapeHtml(fmt(v))}</dd>`).join('')}</dl>`;
+
+/** What the fixture expected — the decision the agent is graded against. */
 export function renderExpected(evalCase: EvalCase | undefined): string {
   if (!evalCase) return '';
   const entries = Object.entries(evalCase.expected);
   if (!entries.length) return '';
-  return `<div class="expected"><h4>Expected (from the fixture)</h4><dl>${entries
-    .map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(fmtExpected(v))}</dd>`)
-    .join('')}</dl></div>`;
+  return `<div class="expected"><h4>Expected (from the fixture)</h4>${dl(entries, expectedLabel)}</div>`;
+}
+
+/** The intake the agent was given — the fixture's input, field by field. */
+export function renderIntake(evalCase: EvalCase | undefined): string {
+  if (!evalCase) return '';
+  const entries = Object.entries(evalCase.input);
+  if (!entries.length) return '';
+  return `<div class="intake"><h4>Intake</h4>${dl(entries, inputLabel)}</div>`;
 }
 
 /** One lane of a passing case, as the blob stores it: lane key, then only what is set. */
-interface CompactGrade {
+export interface CompactGrade {
   l: LaneKey;
   /** Absent lane: 1 when the lane ran this run (not for this case), 0 when skipped. */
   a?: 0 | 1;
@@ -135,24 +157,29 @@ interface CompactGrade {
   o?: number;
 }
 
-interface CompactCase {
+export interface CompactCase {
   /** Index into `expected`, as `[key, shown]` pairs. */
   e?: number;
   g: CompactGrade[];
 }
 
-/** What the blob holds: shared outputs and expected blocks, passing cases keyed `metric:caseId`. */
+/**
+ * What the blob holds: shared outputs, intake and expected blocks, passing cases keyed
+ * `metric:caseId`, and the display name of every metric a scenario carries.
+ */
 export interface CaseBlob {
   outputs: OutputStore;
+  inputs: Store<Array<[string, string]>>;
   expected: Store<Array<[string, string]>>;
   cases: Record<string, CompactCase>;
+  metrics: Record<string, string>;
 }
 
-export const newBlob = (): CaseBlob => ({ outputs: new Store(), expected: new Store(), cases: {} });
+export const newBlob = (): CaseBlob => ({ outputs: new Store(), inputs: new Store(), expected: new Store(), cases: {}, metrics: {} });
 
 export const blobKey = (metric: string, caseId: string): string => `${metric}:${caseId}`;
 
-function compactGrade(lane: Lane, g: GraderResult | undefined, store: OutputStore): CompactGrade {
+export function compactGrade(lane: Lane, g: GraderResult | undefined, store: OutputStore): CompactGrade {
   if (!g) return { l: lane.key, a: lane.ran ? 1 : 0 };
   const out: CompactGrade = { l: lane.key };
   if (g.status === 'errored') out.x = g.error ?? 'unknown';
@@ -163,56 +190,6 @@ function compactGrade(lane: Lane, g: GraderResult | undefined, store: OutputStor
   if (g.reasoning) out.r = g.reasoning;
   if (g.output !== undefined && g.output !== null) out.o = store.add(storedOutput(g.output));
   return out;
-}
-
-/** Lanes a case lost or errored on, and the dimensions it lost — the filter's data attributes. */
-function failedOn(view: MetricView, byLane: Map<LaneKey, GraderResult>): { lanes: string[]; dims: string[] } {
-  const lanes: string[] = [];
-  const dims = new Set<string>();
-  for (const lane of view.lanes) {
-    const g = byLane.get(lane.key);
-    if (!g) continue;
-    if (g.status === 'errored' || !g.isCorrect) lanes.push(lane.key);
-    if (g.status === 'graded') for (const [d, v] of Object.entries(g.dimensions)) if (v < 1) dims.add(d);
-  }
-  return { lanes, dims: [...dims] };
-}
-
-export function renderCase(view: MetricView, row: GradedRow, blob?: CaseBlob): string {
-  const evalCase = view.cases.get(row.caseId);
-  const state = caseState(row);
-  const byLane = new Map(row.grades.map((g) => [laneOfGrade(g), g]));
-  const note = evalCase?.note ?? '';
-  const lost = failedOn(view, byLane);
-  const metric = view.summary.metric;
-  // A passing case's grades go to the blob and the page builds the body on expand; a
-  // failing or errored one is inline, with its outputs shared through the blob.
-  let body = '';
-  if (blob && state === 'pass') {
-    const entries = Object.entries(evalCase?.expected ?? {});
-    const compact: CompactCase = { g: view.lanes.map((l) => compactGrade(l, byLane.get(l.key), blob.outputs)) };
-    if (entries.length) compact.e = blob.expected.add(entries.map(([k, v]) => [k, fmtExpected(v)]));
-    blob.cases[blobKey(metric, row.caseId)] = compact;
-  } else {
-    body = `<div class="case-body">${renderExpected(evalCase)}${view.lanes.map((l) => renderGradeDetail(l, byLane.get(l.key), blob?.outputs)).join('')}</div>`;
-  }
-  return `<details class="case s-${state}" id="${escapeHtml(caseAnchor(metric, row.caseId))}" data-state="${state}" data-search="${escapeHtml(row.caseId.toLowerCase())}"${lost.lanes.length ? ` data-lanes="${escapeHtml(lost.lanes.join(' '))}"` : ''}${lost.dims.length ? ` data-dims="${escapeHtml(lost.dims.join(' '))}"` : ''}><summary><span class="case-id"><code>${escapeHtml(row.caseId)}</code>${note ? `<span class="note">${escapeHtml(note)}</span>` : ''}</span><span class="pills">${view.lanes.map((l) => pill(l, byLane.get(l.key))).join('')}</span></summary>${body}</details>
-`;
-}
-
-/** One metric's cases, failing first, under a count line; the filter bar lives on the tab. */
-export function renderCases(view: MetricView, blob?: CaseBlob): string {
-  if (view.rows.length === 0) return '<p class="muted">No cases graded.</p>';
-  const rows = [...view.rows].sort((a, b) => STATE_ORDER[caseState(a)] - STATE_ORDER[caseState(b)]);
-  const failing = rows.filter((r) => caseState(r) === 'fail').length;
-  const errored = rows.filter((r) => caseState(r) === 'errored').length;
-  return `<div class="cases" data-cases>
-    <div class="cases-bar">
-      <h4>${plural(rows.length, 'case')}${failing ? ` · <span class="t-bad">${failing} with a failing verdict</span>` : ''}${errored ? ` · <span class="t-err">${errored} errored</span>` : ''}</h4>
-    </div>
-    <div class="case-list">${rows.map((r) => renderCase(view, r, blob)).join('')}</div>
-    <p class="muted no-match" hidden>No cases match.</p>
-  </div>`;
 }
 
 /** A blob longer than this is gzipped: plain JSON stays greppable on small pages, big pages stay light. */
@@ -226,7 +203,7 @@ export const BLOB_PLAIN_LIMIT = 32_768;
  */
 export function renderCaseBlob(blob: CaseBlob): string {
   const lanes = Object.fromEntries((Object.keys(LANE_LABEL) as LaneKey[]).map((k) => [k, { label: LANE_LABEL[k], exact: k === 'heuristic' || k === 'model' }]));
-  const json = JSON.stringify({ lanes, outputs: blob.outputs.items, expected: blob.expected.items, cases: blob.cases });
+  const json = JSON.stringify({ lanes, labels: { ...INPUT_LABEL, ...EXPECTED_LABEL }, metrics: blob.metrics, outputs: blob.outputs.items, inputs: blob.inputs.items, expected: blob.expected.items, cases: blob.cases });
   const payload = json.length > BLOB_PLAIN_LIMIT ? `{"gzip":"${gzipSync(Buffer.from(json, 'utf-8'), { level: 9 }).toString('base64')}"}` : json;
   return `<script type="application/json" id="case-data">${payload.replace(/</g, '\\u003c')}</script>`;
 }
@@ -246,7 +223,7 @@ function inflate(b64) {
 function caseData() {
   if (!data) {
     var el = document.getElementById('case-data');
-    var parsed = el ? JSON.parse(el.textContent) : { lanes: {}, outputs: [], expected: [], cases: {} };
+    var parsed = el ? JSON.parse(el.textContent) : { lanes: {}, labels: {}, metrics: {}, outputs: [], inputs: [], expected: [], cases: {} };
     data = parsed.gzip ? inflate(parsed.gzip) : Promise.resolve(parsed);
   }
   return data;
@@ -255,11 +232,13 @@ function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').
 function fillOutputs(d, root) {
   root.querySelectorAll('pre[data-o]').forEach(function (p) {
     var o = d.outputs[+p.getAttribute('data-o')];
-    if (typeof o === 'string') p.innerHTML = o; else p.textContent = JSON.stringify(o && o.v, null, 2);
+    if (typeof o === 'string') p.innerHTML = o;
+    else if (o && o.h !== undefined) { var div = document.createElement('div'); div.innerHTML = o.h; p.replaceWith(div); return; }
+    else p.textContent = JSON.stringify(o && o.v, null, 2);
     p.removeAttribute('data-o');
   });
 }
-function output(g) { return g.o === undefined ? '' : '<details class="output"><summary>What the agent produced</summary><pre data-o="' + g.o + '"></pre></details>'; }
+function output(g, open) { return g.o === undefined ? '' : '<details class="output"' + (open ? ' open' : '') + '><summary>What the agent produced</summary><pre data-o="' + g.o + '"></pre></details>'; }
 function comparisons(r) {
   var re = /([A-Za-z0-9_]+)=(.*?) \\(expected (.*?)\\)(?=, [A-Za-z0-9_]+=|$)/g, m, out = [];
   while ((m = re.exec(r))) out.push({ field: m[1], got: m[2], expected: m[3] });
@@ -284,16 +263,29 @@ function gradeHtml(d, g) {
   if (g.a !== undefined) return '<div class="grade absent">' + head + '<p class="muted">' + (g.a ? 'Not evaluated for this case.' : 'Not evaluated — no model key for this run.') + '</p></div>';
   if (g.x !== undefined) return '<div class="grade errored">' + head + '<p><span class="pill errored">errored</span> <code>' + esc(g.x) + '</code> — no verdict, so this case is left out of the rate.</p>' + (g.r ? '<p class="reasoning">' + esc(g.r) + '</p>' : '') + output(g) + '</div>';
   var body = lane.exact ? comparisons(g.r || '') : dims(g.d) + (g.r ? '<p class="reasoning"><span class="muted">Judge’s reasoning:</span> ' + esc(g.r) + '</p>' : '');
-  return '<div class="grade ' + (g.c ? 'pass' : 'fail') + '">' + head + body + output(g) + '</div>';
+  // A prose lane leads with the draft, open; a check leads with its comparison.
+  return '<div class="grade ' + (g.c ? 'pass' : 'fail') + '">' + head + (lane.exact ? body + output(g, false) : output(g, true) + body) + '</div>';
 }
+function dl(pairs, labels) { return '<dl>' + pairs.map(function (p) { return '<dt title="' + esc(p[0]) + '">' + esc(labels[p[0]] || p[0]) + '</dt><dd>' + esc(p[1]) + '</dd>'; }).join('') + '</dl>'; }
 function buildBody(d, details) {
-  var id = details.id.slice(5), cut = id.indexOf('-');
-  var c = d.cases[id.slice(0, cut) + ':' + id.slice(cut + 1)];
+  // A scenario names its metric:case keys; an older page derives the one key from its id.
+  var keys = (details.getAttribute('data-keys') || '').split(' ').filter(Boolean);
+  if (!keys.length) { var id = details.id.slice(5), cut = id.indexOf('-'); keys = [id.slice(0, cut) + ':' + id.slice(cut + 1)]; }
   var body = document.createElement('div');
   body.className = 'case-body';
-  if (!c) { body.textContent = 'This case is not in the page data.'; details.appendChild(body); return; }
-  var exp = c.e === undefined ? '' : '<div class="expected"><h4>Expected (from the fixture)</h4><dl>' + d.expected[c.e].map(function (p) { return '<dt>' + esc(p[0]) + '</dt><dd>' + esc(p[1]) + '</dd>'; }).join('') + '</dl></div>';
-  body.innerHTML = exp + c.g.map(function (g) { return gradeHtml(d, g); }).join('');
+  var found = keys.map(function (k) { return d.cases[k]; }).filter(Boolean);
+  if (!found.length) { body.textContent = 'This case is not in the page data.'; details.appendChild(body); return; }
+  var i = details.getAttribute('data-i');
+  var intake = i === null ? '' : '<div class="intake"><h4>Intake</h4>' + dl(d.inputs[+i], d.labels) + '</div>';
+  var withExp = found.filter(function (c) { return c.e !== undefined; })[0];
+  var exp = withExp ? '<div class="expected"><h4>Expected (from the fixture)</h4>' + dl(d.expected[withExp.e], d.labels) + '</div>' : '';
+  var named = keys.length > 1;
+  body.innerHTML = intake + exp + keys.map(function (k) {
+    var c = d.cases[k];
+    if (!c) return '';
+    var grades = c.g.map(function (g) { return gradeHtml(d, g); }).join('');
+    return named ? '<div class="metric-block"><h4 class="mb-h">' + esc(d.metrics[k.slice(0, k.indexOf(':'))] || k) + '</h4>' + grades + '</div>' : grades;
+  }).join('');
   details.appendChild(body);
 }
 document.addEventListener('toggle', function (e) {

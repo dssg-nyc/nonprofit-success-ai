@@ -154,7 +154,7 @@ describe("wire schemas (src/schemas/architect.ts)", () => {
       charter,
       plan,
       hitlTier: "L3",
-      approvalId: "ffffffff-0000-0000-0000-000000000099",
+      approvalId: "d551b46a-3262-583b-97d6-8cb473433d52",
       source: "fallback",
       runId: null,
     };
@@ -169,9 +169,9 @@ describe("wire schemas (src/schemas/architect.ts)", () => {
       charter,
       plan,
       hitlTier: "L3",
-      approvalId: "ffffffff-0000-0000-0000-000000000099",
+      approvalId: "d551b46a-3262-583b-97d6-8cb473433d52",
       source: "model",
-      runId: "ffffffff-0000-0000-0000-000000000098",
+      runId: "24f197b9-c3d2-54bc-b9c7-6a80baed61b6",
     };
     expect(architectPlanResponseSchema.safeParse({ ...base, hitlTier: "L2" }).success).toBe(false);
     expect(
@@ -184,7 +184,7 @@ describe("wire schemas (src/schemas/architect.ts)", () => {
 
   it("requires the 18 answers, the intake id and an idempotency key", () => {
     const ok = {
-      scoutIntakeId: "cccccccc-0000-0000-0000-000000000001",
+      scoutIntakeId: "0d73afe2-648b-54bc-8111-033b3e08bb8c",
       idempotencyKey: "architect-submit-0001",
       answers: ANSWERS,
     };
