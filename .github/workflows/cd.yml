@@ -48,21 +48,29 @@ jobs:
       # The deploy is not done until the functions answer. /api/health probes Supabase
       # Auth with the deployment's own env, so a project whose variables are missing or
       # wrong fails here (503) instead of on the first visitor's intake. A preview behind
-      # Vercel Deployment Protection needs the bypass secret
+      # Vercel Deployment Protection answers 302/401 to anyone without the bypass secret
       # (VERCEL_AUTOMATION_BYPASS_SECRET, from the project's protection settings); the
-      # header is sent only when the secret is set.
+      # header is sent only when the secret is set. Without it the check cannot see the
+      # function at all, so a protected preview is skipped with a warning rather than
+      # failed — a 302 says nothing about the deployment's health. Production is never
+      # protected, so `--prod` deploys are always checked for real.
       - name: Check /api/health
         env:
           URL: ${{ steps.deploy.outputs.url }}
           BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PROD: ${{ github.ref == 'refs/heads/main' }}
         run: |
           body=$(mktemp)
           for attempt in 1 2 3 4 5 6; do
             status=$(curl -sS -o "$body" -w '%{http_code}' \
               ${BYPASS:+-H "x-vercel-protection-bypass: $BYPASS"} \
               "$URL/api/health" || echo 000)
-            echo "attempt $attempt: HTTP $status $(cat "$body")"
+            echo "attempt $attempt: HTTP $status $(head -c 300 "$body")"
             [ "$status" = "200" ] && exit 0
+            if [ -z "$BYPASS" ] && [ "$PROD" != "true" ] && { [ "$status" = "302" ] || [ "$status" = "401" ]; }; then
+              echo "::warning::preview is behind Vercel Deployment Protection and VERCEL_AUTOMATION_BYPASS_SECRET is not set — /api/health not checked. Add the secret (project → Deployment Protection → Protection Bypass for Automation) to check previews."
+              exit 0
+            fi
             sleep 10
           done
           echo "::error::/api/health did not answer 200 (last status $status) — see api/README.md › Testing › Deploy check"

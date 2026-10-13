@@ -33,34 +33,35 @@ These local keys are fixed dev values, identical on every machine — not secret
 
 `studio` and `analytics` are disabled in `config.toml` (2026-08-21): their containers
 failed health checks on this machine and neither is needed for schema work. `storage` is
-enabled (nothing uses it yet). `[db.seed]` is disabled: there is no seed file (see "Local
-data" below), and the pgTAP suite seeds its own rows inside each test transaction.
-Re-enable Studio if you want the UI on :54323.
+enabled (nothing uses it yet). `[db.seed]` loads the git-ignored `seed.sql` on every
+`db reset` (see "Local data" below); the pgTAP suite does not depend on it and seeds its
+own rows inside each test transaction. Re-enable Studio if you want the UI on :54323.
 
 ## Local data
 
-There is no `seed.sql`, by decision (2026-10-13): one existed briefly and carried team
-members' real email addresses, a shared password and invented partner organisations —
-personal data in git, and a UI demoing against rows no real flow produced. Local data
-comes from the application itself against the local stack: sign up through the SPA
-(`handle_new_user()` provisions the `users` row), submit the public intake form, and
-promote your own account to staff the way an operator would in the hosted project:
+`supabase/seed.sql` gives the local stack the team's staff accounts and the DSSG NYC
+organization, and nothing else. It is **git-ignored** and not tracked in any form: it
+holds teammates' email addresses and a working password, which do not belong in the repo
+(the hosted project, when it exists, is seeded by real sign-ups — `supabase db push`
+never runs a seed). Get the file from a teammate, drop it at `supabase/seed.sql`, and
+every `make db-reset` loads it; `make db-seed` applies it to the running stack without a
+reset. Without the file, `make db-reset` still works and writes an empty placeholder, so
+the stack comes up with no accounts until you add it.
 
-```bash
-psql postgresql://postgres:postgres@127.0.0.1:54322/postgres <<'SQL'
-alter table users disable trigger user;          -- users.role is immutable to API roles
-update users set role = 'admin' where email = '<your local sign-up email>';
-alter table users enable trigger user;
-insert into organizations (name) values ('My local org') returning id;
-insert into organization_members (organization_id, user_id, role)
-  select o.id, u.id, 'owner' from organizations o, users u
-  where o.name = 'My local org' and u.email = '<your local sign-up email>';
-SQL
-```
+What the file does, so you can read or extend it: one `seed_accounts` temp table with
+`(id, email, full_name, org_role)` per teammate and a `\set seed_password` at the top;
+inserts into `auth.users` (bcrypt password, confirmed email, empty-string token columns
+GoTrue requires) and `auth.identities`; `handle_new_user()` creates each `public.users`
+profile as `client`; the seed then lifts the immutability trigger as the database owner
+and sets `role = 'admin'` — the operator step a real admin goes through — and makes each
+account a member of the organization, which is what `is_admin()` reads. Every insert is
+`on conflict do nothing`, so applying it twice is a no-op.
 
+There is deliberately no partner data in the seed: submit the public intake form, review
+it in the queue and approve it, so what the UI shows locally is what a real flow produced.
 Google sign-in stays disabled locally; use the email form. The pgTAP fixtures
-(`tests/_shared/fixtures.psql`) are the only checked-in rows, and they roll back with
-each test file.
+(`tests/_shared/fixtures.psql`) are the only checked-in rows, and they roll back with each
+test file.
 
 ## Hosted project
 
@@ -137,6 +138,29 @@ history to preserve. `0001_core.sql` keeps the `-- rules:NN` citations (about a 
 Nineteen tables, RLS enabled and forced on every one; every id defaults to
 `gen_random_uuid()`. Every `organization_id` references `organizations`, and admin reads
 on telemetry and approvals are scoped to the caller's orgs via `user_org_ids()`.
+
+### Tables by cluster
+
+The files above are a history: the CLI applies `migrations/*.sql` flat, in numeric order,
+so the folder cannot be laid out by subject. This is the map of what the schema holds
+today, by the kind of data each table carries. Every table is the portal's own
+operational data; nothing retrieved from outside (public filings, a CRM) is in the
+schema yet.
+
+| Cluster | Tables | Owned by | Trust posture |
+|---|---|---|---|
+| **Identity and tenancy** | `users`, `organizations`, `organization_members` | 0001 | Provisioned by Auth (`handle_new_user()`); `users.role` immutable to every API role. Access model to be replaced by C1 (below) |
+| **Partner pipeline** | `businesses`, `engagements`, `engagement_events`, `milestones`, `tasks`, `documents` | 0001, 0003, 0005, 0008, 0009 | Partner-owned rows, org-scoped staff reads; stage changes only through `transition_engagement()`, pipeline entry only through `approve_scout_intake()` |
+| **Agent output** | `scout_intakes`, `architect_assessments`, `communications`, `chronicle_drafts`, `lessons`, `promoted_lessons` | 0001, 0004, 0007, 0010 | Written only by the `submit_*` definer functions, each beside a pending L3 approval; review-only updates by staff |
+| **HITL spine and provenance** | `approvals`, `audit_events`, `agent_runs`, `tool_calls` | 0001, 0002 | Append-only; `agent_runs` written by the recorder's service role alone; the `provenance_chain` view (0006) reconstructs a decision from these |
+| **Plumbing** | `model_call_budget`; views `agent_run_metrics`, `provenance_chain` | 0006, 0007 | No role reads or writes the budget table directly; views are `security_invoker` |
+
+When a second kind of data lands it gets its own Postgres schema rather than more tables
+in `public`: the knowledge base (`knowledge.md`, D37 — public sources such as filings,
+chunked and embedded) as `knowledge`, a CRM sync (D35, parked) as `crm`. A schema is the
+boundary RLS and grants are easiest to reason about per data type, and it keeps the
+public-source cluster's "everyone reads" posture from ever sharing a policy file with
+partner records.
 
 Invariants the squash settled, so nobody has to rediscover them:
 

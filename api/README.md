@@ -297,7 +297,11 @@ cannot be pointed at a hosted project or a paid model by accident.
 minute) until it answers 200. Because `health` probes Supabase Auth with the
 deployment's own env, a project with a missing or wrong `SUPABASE_URL` / anon key
 fails the workflow here, not on the first visitor. A preview behind Vercel Deployment
-Protection needs the project's bypass secret in `VERCEL_AUTOMATION_BYPASS_SECRET`.
+Protection answers 302 to anyone without the project's bypass secret
+(`VERCEL_AUTOMATION_BYPASS_SECRET`, repo secret); until that secret is set, protected
+previews are skipped with a workflow warning instead of failed, because a 302 says
+nothing about the deployment. Production deploys are never protected and are always
+checked.
 
 ## Known gaps
 

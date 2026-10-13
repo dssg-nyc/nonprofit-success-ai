@@ -71,10 +71,11 @@ enabled = true
 schema_paths = []
 
 [db.seed]
-# No seed file: local data comes from real sign-ups through the app against the local
-# stack, never from rows checked into the repo (they would be personal data in git).
-enabled = false
-sql_paths = []
+# seed.sql is git-ignored (team emails + a local password, shared out of band; `make
+# db-reset` writes an empty placeholder when it is absent). Staff accounts and the DSSG NYC
+# org only — partner data comes from real flows through the app, never from checked-in rows.
+enabled = true
+sql_paths = ["./seed.sql"]
 
 [db.network_restrictions]
 # Enable management of network restrictions.

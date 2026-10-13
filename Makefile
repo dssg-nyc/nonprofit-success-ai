@@ -128,8 +128,21 @@ db-start:  ## Start the local Supabase stack (requires Docker running)
 db-stop:  ## Stop the local Supabase stack
 	$(SUPABASE) stop
 
-db-reset:  ## Drop and re-apply all migrations from scratch
+# seed.sql is git-ignored: it holds teammates' emails and a local password, shared out of
+# band (supabase/README.md "Local data"). A clone without it still resets; it just has no
+# accounts until the file is in place.
+SEED := $(or $(SUPABASE_WORKDIR),.)/supabase/seed.sql
+
+db-reset:  ## Drop and re-apply all migrations from scratch, then load seed.sql if present
+	@[ -f $(SEED) ] || { \
+		echo "db-reset: no $(SEED) -- resetting without accounts; get the file from a teammate (supabase/README.md 'Local data')"; \
+		printf -- '-- placeholder: no local accounts seeded. See supabase/README.md "Local data".\n' > $(SEED); \
+	}
 	$(SUPABASE) db reset
+
+db-seed:  ## Apply seed.sql to the running local stack without a reset
+	@[ -f $(SEED) ] || { echo "db-seed: no $(SEED) (supabase/README.md 'Local data')"; exit 1; }
+	psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -q -f $(SEED)
 
 # Guarded twice: a missing suite and a suite that ran zero assertions both fail. Without
 # the guard, `supabase test db` against an empty tests/ dir reports success -- the same
