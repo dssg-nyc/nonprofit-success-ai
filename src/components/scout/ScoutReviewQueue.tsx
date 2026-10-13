@@ -8,14 +8,19 @@ import {
 import { ApiError, approveScoutIntake } from '../../lib/api';
 import { accessToken } from '../../lib/session';
 import type { TablesUpdate } from '../../lib/database.types';
-import { ScoutIntake, ScoutBucket, SCOUT_BUCKETS } from '../../types';
+import { ScoutIntake, ScoutBucket, Engagement, EngagementStage, EngagementStatus } from '../../types';
+import { deriveCurrentStage } from '../../lib/lifecycle';
+import { scoutIntakeFromRow } from '../../lib/scoutIntake';
 import { routeScoutIntake, getOnboardingKitName } from '../../agents/scout/routing';
 import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
 import {
-  ClipboardList, CheckCircle2, Pencil, CornerUpRight, Flag, X, Mail, Building2,
-  DraftingCompass, CalendarRange,
+  ClipboardList, CheckCircle2, Pencil, HelpCircle, XCircle, ArrowRight, MessageSquareText,
+  Building2, DraftingCompass, CalendarRange, RotateCcw,
 } from 'lucide-react';
+import { Badge, IntakeHeader, IntakeBody } from './IntakeCard';
+import { decisionErrorMessage, relativeTime } from './review';
+import { ReviewModal } from './ReviewModal';
 
 interface ScoutReviewQueueProps {
   isDemo?: boolean;
@@ -81,52 +86,74 @@ const DEMO_INTAKES: ScoutIntake[] = [
   }),
 ];
 
-type ModalMode = 'edit' | 'redirect';
+/**
+ * The decisions a reviewer can make. Approve and "edit intake card" both run the
+ * Scout-approve command (the intake enters the pipeline); "needs more info" parks it;
+ * decline closes it; reopen (declined tab) runs Scout-approve with `reopen` (0010) so the
+ * pipeline keeps one door. None of them edits the applicant's answers or Scout's output —
+ * the database locks those after submission, by design.
+ */
+type ModalMode = 'edit' | 'info' | 'decline' | 'reopen';
 
-const CONFIDENCE_COLOR: Record<string, string> = {
-  High: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-  Medium: 'bg-amber-50 text-amber-600 border-amber-100',
-  Low: 'bg-rose-50 text-rose-600 border-rose-100',
+/** One screen, four tabs: the two open states and the two decided outcomes. */
+export type ScoutTab = 'pending' | 'needs_info' | 'approved' | 'declined';
+
+const TABS: { key: ScoutTab; label: string }[] = [
+  { key: 'pending', label: 'Pending' },
+  { key: 'needs_info', label: 'Needs info' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'declined', label: 'Declined' },
+];
+
+const TIER_MEANING: Record<ScoutIntake['hitlTier'], string> = {
+  L2: 'Scout is confident and they look ready',
+  L3: 'Needs your judgement',
 };
 
-const SIGNAL_COLOR: Record<string, string> = {
-  Ready: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-  Conditional: 'bg-amber-50 text-amber-600 border-amber-100',
-  'Not Ready': 'bg-rose-50 text-rose-600 border-rose-100',
+const STAGE_LABEL: Record<EngagementStage, string> = {
+  initial_meeting: 'Initial Meeting',
+  budget_check: 'Budget Check',
+  data_ethics_committee: 'Data Ethics Committee',
+  scoping: 'Scoping',
+  hackathon_ready: 'Hackathon Ready',
+  membership: 'Membership',
 };
 
-function Badge({ label, className }: { label: string; className: string }) {
-  return (
-    <span className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-[0.1em] border ${className}`}>
-      {label}
-    </span>
-  );
-}
+const STATUS_LABEL: Record<EngagementStatus, { label: string; className: string }> = {
+  pending: { label: 'Pending', className: 'bg-slate-50 text-slate-500 border-slate-200' },
+  in_progress: { label: 'In progress', className: 'bg-blue-50 text-blue-600 border-blue-100' },
+  completed: { label: 'Completed', className: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+};
 
-function ScorePip({ label, score }: { label: string; score: number }) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="flex gap-0.5">
-        {[1, 2, 3].map(n => (
-          <div key={n} className={`w-2.5 h-2.5 rounded-full ${n <= score ? 'bg-dssg-blue' : 'bg-slate-200'}`} />
-        ))}
-      </div>
-      <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">{label}</span>
-    </div>
-  );
-}
+interface BusinessRef { id: string; scoutIntakeId: string | null }
+
+const tabOf = (i: ScoutIntake): ScoutTab => {
+  if (i.reviewStatus !== 'reviewed') return i.reviewStatus;
+  return i.reviewAction === 'redirected' ? 'declined' : 'approved';
+};
+
+const EMPTY_COPY: Record<ScoutTab, string> = {
+  pending: 'No applications waiting for a decision.',
+  needs_info: 'No applications waiting on the applicant.',
+  approved: 'No approved applications yet.',
+  declined: 'No declined applications.',
+};
+
+const BTN = 'py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-40 flex items-center justify-center gap-1.5';
 
 export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
   const navigate = useNavigate();
   const [intakes, setIntakes] = useState<ScoutIntake[]>([]);
+  const [businesses, setBusinesses] = useState<BusinessRef[]>([]);
+  const [engagements, setEngagements] = useState<Engagement[]>([]);
+  const [assessedIds, setAssessedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'pending' | 'reviewed'>('pending');
+  const [tab, setTab] = useState<ScoutTab>('pending');
   const [modal, setModal] = useState<{ mode: ModalMode; target: ScoutIntake } | null>(null);
   const [modalBucket, setModalBucket] = useState<ScoutBucket | ''>('');
   const [modalNotes, setModalNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [assessedIds, setAssessedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (isDemo) {
@@ -138,83 +165,141 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
       return;
     }
 
-    // Both reads are admin-only at the database: scout_intakes_select_admin and the
-    // assessments policies check is_admin(). A non-admin reaching this route sees an empty
-    // queue rather than an error, which is the same outcome the Firestore rules produced.
-    const unsubscribe = liveQuery<ScoutIntake>(
-      'scout_intakes',
-      () => supabase.from('scout_intakes').select('*'),
-      (rows) => {
-        setIntakes(rows);
-        setLoading(false);
-      },
-      (err) => {
-        setLoading(false);
-        setError(
-          reportSupabaseError(err, OperationType.LIST, 'scout_intakes', 'Could not load the intake queue. The list below may be empty or stale.'),
-        );
-      },
-      ['submittedAt', 'reviewedAt'],
-    );
+    const fail = (table: string, what: string) => (err: unknown) => {
+      setLoading(false);
+      setError(reportSupabaseError(err, OperationType.LIST, table, what));
+    };
 
-    const unsubAssessments = liveQuery<{ id: string }>(
-      'architect_assessments',
-      // Only the id is needed — this drives an "assessed" badge, not a detail view.
-      () => supabase.from('architect_assessments').select('id'),
-      (rows) => setAssessedIds(new Set(rows.map(r => r.id))),
-      (err) => {
-        setError(
-          reportSupabaseError(err, OperationType.LIST, 'architect_assessments', 'Could not load assessment status. "Assessed" badges may be missing.'),
-        );
-      },
-    );
-
-    return () => { unsubscribe(); unsubAssessments(); };
+    // All admin-scoped at the database (scout_intakes_select_admin, businesses_select_admin,
+    // engagements_select_admin): a non-admin sees empty lists, not errors.
+    const unsubs = [
+      liveQuery<Record<string, unknown>>(
+        'scout_intakes',
+        () => supabase.from('scout_intakes').select('*'),
+        (rows) => { setIntakes(rows.map(scoutIntakeFromRow)); setLoading(false); },
+        fail('scout_intakes', 'Could not load the intake queue. The list below may be empty or stale.'),
+        ['submittedAt', 'reviewedAt'],
+      ),
+      liveQuery<BusinessRef>(
+        'businesses',
+        () => supabase.from('businesses').select('id, scout_intake_id'),
+        setBusinesses,
+        fail('businesses', 'Could not load partner links. Engagement stages may be missing.'),
+      ),
+      liveQuery<Engagement>(
+        'engagements',
+        () => supabase.from('engagements').select('*'),
+        setEngagements,
+        fail('engagements', 'Could not load engagements. Stages may be missing.'),
+        ['updatedAt'],
+      ),
+      liveQuery<{ id: string }>(
+        'architect_assessments',
+        () => supabase.from('architect_assessments').select('id'),
+        (rows) => setAssessedIds(new Set(rows.map(r => r.id))),
+        fail('architect_assessments', 'Could not load assessment status. "Assessed" badges may be missing.'),
+      ),
+    ];
+    return () => unsubs.forEach(u => u());
   }, [isDemo]);
 
-  const visible = intakes
-    .filter(i => i.reviewStatus === tab)
-    .sort((a, b) => (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0));
+  const count = (t: ScoutTab) => intakes.filter(i => tabOf(i) === t).length;
 
-  const applyDecision = async (intake: ScoutIntake, finalBucket: ScoutBucket, reviewAction: 'approved' | 'edited' | 'redirected', reviewNotes?: string) => {
+  // Pending: L2 first — Scout is confident and the org is ready, so those are one-click
+  // confirmations — then L3, each group newest first. Every other tab: most recently
+  // reviewed first.
+  const visible = intakes
+    .filter(i => tabOf(i) === tab)
+    .sort((a, b) =>
+      (tab === 'pending' && a.hitlTier !== b.hitlTier ? (a.hitlTier === 'L2' ? -1 : 1) : 0)
+      || (tab === 'pending'
+        ? (b.submittedAt?.seconds || 0) - (a.submittedAt?.seconds || 0)
+        : (b.reviewedAt?.seconds || 0) - (a.reviewedAt?.seconds || 0)));
+
+  /** Where an approved application's engagement stands, from its business's stage rows. */
+  const progress = (intake: ScoutIntake) => {
+    const business = businesses.find(b => b.scoutIntakeId === intake.id);
+    if (!business) return null;
+    const current = deriveCurrentStage(engagements.filter(e => e.businessId === business.id));
+    return { businessId: business.id, current };
+  };
+
+  const replaceLocal = (updated: ScoutIntake) => {
+    demoReviewedIntakes.set(updated.id, updated);
+    setIntakes(prev => prev.map(i => i.id === updated.id ? updated : i));
+  };
+
+  /** Approve (or reopen), with Scout's bucket or the reviewer's: the intake enters the pipeline. */
+  const approve = async (intake: ScoutIntake, finalBucket: ScoutBucket, reviewNotes?: string, reopen = false) => {
     if (isDemo) {
-      const updated: ScoutIntake = {
+      replaceLocal({
         ...intake,
         reviewStatus: 'reviewed',
-        reviewAction,
+        reviewAction: finalBucket === intake.bucket ? 'approved' : 'edited',
         finalBucket,
         onboardingKit: getOnboardingKitName(finalBucket),
         reviewedBy: DEMO_USER.uid,
         reviewedByEmail: DEMO_USER.email,
-        ...(reviewNotes ? { reviewNotes } : {}),
+        reviewNotes: reviewNotes || undefined,
         reviewedAt: { seconds: Date.now() / 1000 },
-      };
-      demoReviewedIntakes.set(intake.id, updated);
-      setIntakes(prev => prev.map(i => i.id === intake.id ? updated : i));
+      });
       return;
     }
+    // The Scout-approve command (lifecycle §4 row 1): one call reviews the intake, creates
+    // its business and opens `initial_meeting`. The row itself is updated server-side by
+    // approve_scout_intake(); liveQuery moves it to the Approved tab.
+    const token = await accessToken(supabase.auth);
+    if (!token) throw new ApiError('unauthorized', null);
+    await approveScoutIntake(
+      {
+        intakeId: intake.id,
+        // Per click, so a retry of a failed request replays rather than refuses.
+        idempotencyKey: `${reopen ? 'reopen' : 'review'}-${crypto.randomUUID()}`,
+        finalBucket,
+        ...(reopen ? { reopen: true } : {}),
+        ...(reviewNotes ? { reviewNotes } : {}),
+      },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  };
 
+  /**
+   * Park or decline: both are a direct admin update of the review fields (0001_core's
+   * review-only trigger; `needs_info` from 0010). Neither opens an engagement — a declined
+   * intake can only enter the pipeline by being reopened from the Declined tab.
+   */
+  const updateReview = async (intake: ScoutIntake, patch: Partial<ScoutIntake> & Record<string, unknown>) => {
+    if (isDemo) {
+      replaceLocal({
+        ...intake,
+        ...patch,
+        reviewedBy: DEMO_USER.uid,
+        reviewedByEmail: DEMO_USER.email,
+        reviewedAt: { seconds: Date.now() / 1000 },
+      } as ScoutIntake);
+      return;
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    const row = {
+      ...patch,
+      reviewedBy: user?.id,
+      // `?? undefined` rather than the raw value: Supabase types email as `string | null`,
+      // while ScoutIntake declares `string | undefined`.
+      reviewedByEmail: user?.email ?? undefined,
+      // reviewed_at has no column default (0001_core), so it is sent explicitly.
+      reviewedAt: new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from('scout_intakes')
+      .update(toColumns<TablesUpdate<'scout_intakes'>>(row))
+      .eq('id', intake.id);
+    if (error) handleSupabaseError(error, OperationType.UPDATE, `scout_intakes/${intake.id}`);
+  };
+
+  const run = async (intake: ScoutIntake, action: () => Promise<void>) => {
     setSaving(true);
     try {
-      if (reviewAction === 'redirected') {
-        await redirectIntake(intake, finalBucket, reviewNotes);
-      } else {
-        // Approve and Edit are the Scout-approve command (lifecycle §4 row 1): one call
-        // reviews the intake, creates its business and opens `initial_meeting`. The row
-        // itself is updated server-side by approve_scout_intake(); liveQuery picks it up.
-        const token = await accessToken(supabase.auth);
-        if (!token) throw new ApiError('unauthorized', null);
-        await approveScoutIntake(
-          {
-            intakeId: intake.id,
-            // Per click, so a retry of a failed request replays rather than refuses.
-            idempotencyKey: `review-${crypto.randomUUID()}`,
-            finalBucket,
-            ...(reviewNotes ? { reviewNotes } : {}),
-          },
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-      }
+      await action();
     } catch (err) {
       const code = err instanceof ApiError ? err.code : 'client_error';
       const requestId = err instanceof ApiError ? err.requestId : null;
@@ -225,73 +310,71 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
     }
   };
 
-  // A redirect never opens an engagement (approve_scout_intake() refuses a `redirected`
-  // intake), so it stays a direct admin update of the review fields.
-  const redirectIntake = async (intake: ScoutIntake, finalBucket: ScoutBucket, reviewNotes?: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    const patch = {
-      reviewStatus: 'reviewed' as const,
-      reviewAction: 'redirected' as const,
-      finalBucket,
-      onboardingKit: getOnboardingKitName(finalBucket),
-      reviewedBy: user?.id,
-      // `?? undefined` rather than the raw value: Supabase types email as `string | null`,
-      // while ScoutIntake declares `string | undefined`.
-      reviewedByEmail: user?.email ?? undefined,
-      ...(reviewNotes ? { reviewNotes } : {}),
-      // reviewed_at has no column default (0001_core), so it is sent explicitly —
-      // unlike scout_intakes.submitted_at, which does default and is left to the server.
-      reviewedAt: new Date().toISOString(),
-    };
-    const { error } = await supabase
-      .from('scout_intakes')
-      .update(toColumns<TablesUpdate<'scout_intakes'>>(patch))
-      .eq('id', intake.id);
-    if (error) handleSupabaseError(error, OperationType.UPDATE, `scout_intakes/${intake.id}`);
-  };
-
   const handleApprove = (intake: ScoutIntake) => {
     if (!intake.bucket) return;
-    applyDecision(intake, intake.bucket, 'approved');
+    void run(intake, () => approve(intake, intake.bucket as ScoutBucket));
   };
 
   const openModal = (mode: ModalMode, intake: ScoutIntake) => {
     setModal({ mode, target: intake });
-    setModalBucket(intake.bucket ?? '');
+    setModalBucket(mode === 'reopen' ? (intake.bucket ?? intake.finalBucket ?? '') : (intake.bucket ?? ''));
     setModalNotes('');
   };
 
   const closeModal = () => setModal(null);
 
   const confirmModal = async () => {
-    if (!modal || !modalBucket) return;
-    await applyDecision(modal.target, modalBucket, modal.mode === 'edit' ? 'edited' : 'redirected', modalNotes || undefined);
+    if (!modal) return;
+    const { mode, target } = modal;
+    const notes = modalNotes.trim();
+    await run(target, async () => {
+      if (mode === 'edit') {
+        if (!modalBucket) return;
+        await approve(target, modalBucket, notes || undefined);
+      } else if (mode === 'reopen') {
+        if (!modalBucket) return;
+        await approve(target, modalBucket, notes || undefined, true);
+        setTab('approved');
+      } else if (mode === 'info') {
+        await updateReview(target, { reviewStatus: 'needs_info', reviewNotes: notes });
+      } else {
+        if (!modalBucket) return;
+        await updateReview(target, {
+          reviewStatus: 'reviewed',
+          reviewAction: 'redirected',
+          finalBucket: modalBucket,
+          onboardingKit: getOnboardingKitName(modalBucket),
+          reviewNotes: notes,
+        });
+      }
+    });
     closeModal();
   };
 
+  const open = tab === 'pending' || tab === 'needs_info';
+
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div>
       <ErrorBanner message={error} onDismiss={() => setError(null)} />
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-dssg-blue rounded-full text-[10px] font-bold uppercase tracking-widest mb-4">
-            <ClipboardList size={12} />
-            Scout Review Queue
-          </div>
-          <h1 className="text-4xl font-display font-bold text-dssg-blue tracking-tight leading-[1.1]">
-            Intake <span className="italic">Review</span>
-          </h1>
+          <h2 className="text-2xl font-display font-bold text-dssg-blue tracking-tight">
+            Scout <span className="italic">Intake Review</span>
+          </h2>
+          <p className="text-sm text-slate-500 mt-2 max-w-xl">
+            Scout recommends a bucket; you decide. Approving opens the engagement and hands the partner to Architect.
+          </p>
         </div>
-        <div className="flex gap-2 bg-slate-100 p-1 rounded-xl">
-          {(['pending', 'reviewed'] as const).map(t => (
+        <div className="flex flex-wrap gap-2 bg-slate-100 p-1 rounded-xl">
+          {TABS.map(({ key, label }) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={key}
+              onClick={() => setTab(key)}
               className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
-                tab === t ? 'bg-white text-dssg-blue shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                tab === key ? 'bg-white text-dssg-blue shadow-sm' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
-              {t} {t === 'pending' ? `(${intakes.filter(i => i.reviewStatus === 'pending').length})` : ''}
+              {label} ({count(key)})
             </button>
           ))}
         </div>
@@ -308,193 +391,213 @@ export default function ScoutReviewQueue({ isDemo }: ScoutReviewQueueProps) {
             <ClipboardList size={40} className="text-slate-300" />
           </div>
           <h3 className="text-2xl font-bold text-slate-900">Nothing here</h3>
-          <p className="text-slate-500 mt-2">No {tab} applications right now.</p>
+          <p className="text-slate-500 mt-2">{EMPTY_COPY[tab]}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {visible.map(intake => (
-            <div key={intake.id} className="bento-card p-6 flex flex-col gap-5">
-              <div className="flex justify-between items-start gap-4">
-                <div>
-                  <div className="flex items-center gap-2 text-slate-400 mb-1">
-                    <Building2 size={12} />
-                    <span className="text-[10px] font-bold uppercase tracking-widest">{intake.org_name}</span>
-                  </div>
-                  <h3 className="text-lg font-display font-bold text-dssg-blue leading-tight">{intake.contact_name_role}</h3>
-                  <div className="flex items-center gap-1.5 text-slate-400 mt-1">
-                    <Mail size={11} />
-                    <span className="text-[11px] font-medium">{intake.contact_email}</span>
-                  </div>
-                </div>
-                <Badge label={intake.hitlTier} className={intake.hitlTier === 'L2' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-purple-50 text-purple-600 border-purple-100'} />
-              </div>
+        <div className="flex flex-col gap-6">
+          {visible.map(intake => {
+            const p = tab === 'approved' ? progress(intake) : null;
+            return (
+              <div key={intake.id} className="bento-card p-6 flex flex-col gap-6">
+                <IntakeHeader
+                  intake={intake}
+                  right={
+                    tab === 'pending' ? (
+                      <>
+                        <Badge label={intake.hitlTier} className={intake.hitlTier === 'L2' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-purple-50 text-purple-600 border-purple-100'} />
+                        <span className="text-[10px] font-medium text-slate-400">{TIER_MEANING[intake.hitlTier]}</span>
+                      </>
+                    ) : tab === 'needs_info' ? (
+                      <>
+                        <Badge label="Waiting on applicant" className="bg-amber-50 text-amber-600 border-amber-100" />
+                        <span className="text-[10px] font-medium text-slate-400">
+                          asked by {intake.reviewedByEmail}{intake.reviewedAt?.seconds ? ` · ${relativeTime(intake.reviewedAt.seconds)}` : ''}
+                        </span>
+                      </>
+                    ) : tab === 'approved' ? (
+                      <>
+                        {p?.current ? (
+                          <div className="flex flex-wrap gap-2 justify-end">
+                            <Badge label={STAGE_LABEL[p.current.stage]} className="bg-dssg-blue text-white border-dssg-blue" />
+                            <Badge label={STATUS_LABEL[p.current.row.status].label} className={STATUS_LABEL[p.current.row.status].className} />
+                          </div>
+                        ) : (
+                          <Badge label={p ? 'No stage yet' : 'Not in pipeline'} className="bg-slate-50 text-slate-500 border-slate-200" />
+                        )}
+                        <span className="text-[10px] font-medium text-slate-400">
+                          {intake.reviewAction === 'edited' ? 'approved into a different bucket' : 'approved'} by {intake.reviewedByEmail}
+                          {intake.reviewedAt?.seconds ? ` · ${relativeTime(intake.reviewedAt.seconds)}` : ''}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Badge label="Declined" className="bg-rose-50 text-rose-600 border-rose-100" />
+                        <span className="text-[10px] font-medium text-slate-400">
+                          by {intake.reviewedByEmail}{intake.reviewedAt?.seconds ? ` · ${relativeTime(intake.reviewedAt.seconds)}` : ''}
+                        </span>
+                      </>
+                    )
+                  }
+                />
 
-              <p className="text-xs text-slate-500 leading-relaxed italic">"{intake.problem_description}"</p>
-
-              <div className="flex flex-wrap gap-2">
-                <Badge label={intake.bucket ?? 'Needs manual bucket'} className={intake.bucket ? 'bg-slate-50 text-slate-700 border-slate-200' : 'bg-rose-50 text-rose-600 border-rose-100'} />
-                {intake.confidence && <Badge label={`${intake.confidence} confidence`} className={CONFIDENCE_COLOR[intake.confidence]} />}
-                <Badge label={intake.composite_signal} className={SIGNAL_COLOR[intake.composite_signal]} />
-              </div>
-
-              <p className="text-[11px] text-slate-400 leading-relaxed">{intake.rationale}</p>
-
-              <div className="flex justify-around py-3 border-y border-slate-50">
-                <ScorePip label="POC" score={intake.poc_score} />
-                <ScorePip label="Clarity" score={intake.clarity_score} />
-                <ScorePip label="Foothold" score={intake.foothold_score} />
-              </div>
-
-              {intake.flags.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  {intake.flags.map((flag, idx) => (
-                    <div key={idx} className="flex items-start gap-2 text-[10px] font-bold text-amber-600">
-                      <Flag size={11} className="shrink-0 mt-0.5" />
-                      <span className="uppercase tracking-wide">{flag}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {tab === 'pending' ? (
-                <div className="flex gap-2 mt-auto pt-2">
-                  <button
-                    onClick={() => handleApprove(intake)}
-                    disabled={!intake.bucket || saving}
-                    className="flex-1 py-2.5 bg-emerald-500 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-emerald-600 transition-all disabled:opacity-40 flex items-center justify-center gap-1.5"
-                  >
-                    <CheckCircle2 size={14} /> Approve
-                  </button>
-                  <button
-                    onClick={() => openModal('edit', intake)}
-                    disabled={saving}
-                    className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <Pencil size={14} /> Edit
-                  </button>
-                  <button
-                    onClick={() => openModal('redirect', intake)}
-                    disabled={saving}
-                    className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <CornerUpRight size={14} /> Redirect
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-auto pt-2 border-t border-slate-50 space-y-3">
-                  <div className="flex items-center justify-between">
+                {tab === 'needs_info' && intake.reviewNotes && (
+                  <div className="flex items-start gap-2 bg-amber-50/60 border border-amber-100 rounded-xl px-4 py-3">
+                    <MessageSquareText size={14} className="text-amber-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.2em]">{intake.reviewAction} → {intake.finalBucket}</p>
-                      <p className="text-[10px] text-slate-400 font-medium mt-0.5">{intake.onboardingKit ?? (intake.finalBucket ? getOnboardingKitName(intake.finalBucket) : '')}</p>
+                      <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-amber-600">What we asked for</p>
+                      <p className="text-xs text-slate-700 leading-relaxed">{intake.reviewNotes}</p>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-medium">{intake.reviewedByEmail}</p>
                   </div>
-                  {assessedIds.has(intake.id) ? (
+                )}
+
+                {!open && (
+                  <div className={`flex items-start gap-3 rounded-xl px-4 py-3 border ${tab === 'declined' ? 'bg-rose-50/60 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                        {tab === 'declined' ? 'Why not now' : 'Decision'} · {intake.finalBucket}
+                      </p>
+                      {tab === 'approved' && intake.finalBucket !== intake.bucket && (
+                        <p className="text-[11px] text-slate-500 mt-0.5">Scout had suggested {intake.bucket ?? 'no bucket'}.</p>
+                      )}
+                      <p className="text-[10px] text-slate-400 font-medium mt-0.5">{intake.onboardingKit ?? (intake.finalBucket ? getOnboardingKitName(intake.finalBucket) : '')}</p>
+                      {intake.reviewNotes
+                        ? <p className="text-xs text-slate-700 italic mt-1">“{intake.reviewNotes}”</p>
+                        : <p className="text-xs text-slate-400 mt-1">No notes.</p>}
+                    </div>
+                  </div>
+                )}
+
+                <IntakeBody intake={intake} />
+
+                {open ? (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 pt-4 border-t border-slate-100">
                     <button
-                      onClick={() => navigate(`/architect/plan/${intake.id}`)}
-                      className="w-full py-2.5 bg-dssg-blue text-white rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-dssg-blue-light transition-all flex items-center justify-center gap-1.5"
+                      onClick={() => handleApprove(intake)}
+                      disabled={!intake.bucket || saving}
+                      className={`${BTN} bg-emerald-500 text-white hover:bg-emerald-600`}
+                      title={intake.bucket ? `Accept Scout's card as is — ${intake.bucket}; opens the first engagement stage` : 'Scout could not pick a bucket — use "Edit intake card" to choose one'}
                     >
-                      <CalendarRange size={14} /> View 90-Day Plan
+                      <CheckCircle2 size={14} /> Approve
                     </button>
-                  ) : (
                     <button
-                      onClick={() => navigate(`/architect/assess/${intake.id}`)}
-                      className="w-full py-2.5 bg-slate-100 text-dssg-blue rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-blue-50 transition-all flex items-center justify-center gap-1.5"
+                      onClick={() => openModal('edit', intake)}
+                      disabled={saving}
+                      className={`${BTN} bg-slate-100 text-slate-600 hover:bg-slate-200`}
+                      title="Change the bucket on Scout's card, then approve; the override is recorded"
                     >
-                      <DraftingCompass size={14} /> Architect Assessment →
+                      <Pencil size={14} /> Edit intake card
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                    <button
+                      onClick={() => openModal('info', intake)}
+                      disabled={saving}
+                      className={`${BTN} bg-slate-100 text-slate-600 hover:bg-amber-50 hover:text-amber-700`}
+                      title="Park this application until the applicant sends what is missing; it stays out of the pipeline"
+                    >
+                      <HelpCircle size={14} /> {tab === 'needs_info' ? 'Ask again' : 'Needs more info'}
+                    </button>
+                    <button
+                      onClick={() => openModal('decline', intake)}
+                      disabled={saving}
+                      className={`${BTN} bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-700`}
+                      title="Close this application without opening an engagement; it can be reopened from the Declined tab"
+                    >
+                      <XCircle size={14} /> Decline
+                    </button>
+                  </div>
+                ) : tab === 'approved' ? (
+                  <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t border-slate-100">
+                    {p && (
+                      <button
+                        onClick={() => navigate(`/business/${p.businessId}`)}
+                        className={`${BTN} flex-1 bg-slate-100 text-slate-700 hover:bg-slate-200`}
+                      >
+                        <Building2 size={14} /> Open partner
+                      </button>
+                    )}
+                    {assessedIds.has(intake.id) ? (
+                      <button
+                        onClick={() => navigate(`/architect/plan/${intake.id}`)}
+                        className={`${BTN} flex-1 bg-dssg-blue text-white hover:bg-dssg-blue-light`}
+                      >
+                        <CalendarRange size={14} /> View 90-Day Plan
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => navigate(`/architect/assess/${intake.id}`)}
+                        className={`${BTN} flex-1 bg-slate-100 text-dssg-blue hover:bg-blue-50`}
+                      >
+                        <DraftingCompass size={14} /> Architect Assessment <ArrowRight size={12} />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex pt-4 border-t border-slate-100">
+                    <button
+                      onClick={() => openModal('reopen', intake)}
+                      disabled={saving}
+                      className={`${BTN} flex-1 bg-slate-100 text-dssg-blue hover:bg-blue-50`}
+                      title="Reverse the decline: approve into the pipeline under your name"
+                    >
+                      <RotateCcw size={14} /> Reopen &amp; approve
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
       <AnimatePresence>
-        {modal && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={closeModal}
-              className="absolute inset-0 bg-gray-900/40 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden p-8"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-display italic font-black">
-                  {modal.mode === 'edit' ? 'Edit Bucket' : 'Reject & Redirect'}
-                </h2>
-                <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
-                  <X />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">Bucket</label>
-                  <select
-                    value={modalBucket}
-                    onChange={e => setModalBucket(e.target.value as ScoutBucket)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-dssg-blue"
-                  >
-                    <option value="" disabled>Choose a bucket…</option>
-                    {SCOUT_BUCKETS.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 ml-1">
-                    Notes {modal.mode === 'redirect' ? '(why was Scout wrong?)' : '(optional)'}
-                  </label>
-                  <textarea
-                    value={modalNotes}
-                    onChange={e => setModalNotes(e.target.value)}
-                    className="w-full h-24 p-4 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-dssg-blue resize-none"
-                  />
-                </div>
-
-                <button
-                  onClick={confirmModal}
-                  disabled={!modalBucket || saving}
-                  className="w-full py-4 bg-dssg-blue text-white rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all disabled:opacity-50"
-                >
-                  Confirm
-                </button>
-              </div>
-            </motion.div>
-          </div>
+        {modal?.mode === 'edit' && (
+          <ReviewModal
+            title="Edit intake card"
+            intro="Change the bucket Scout put on the card, then approve. The application enters the pipeline under your bucket; Scout's recommendation stays on record so overrides can be measured."
+            bucket={{ label: 'Bucket', value: modalBucket, onChange: setModalBucket }}
+            notes={{ label: 'Why a different bucket?', value: modalNotes, onChange: setModalNotes, required: false }}
+            confirmLabel="Approve with this bucket"
+            busy={saving}
+            onConfirm={confirmModal}
+            onClose={closeModal}
+          />
+        )}
+        {modal?.mode === 'info' && (
+          <ReviewModal
+            title="Needs more info"
+            intro="The application waits on the applicant and stays out of the pipeline. Nothing is sent automatically — reach out with what you write here."
+            notes={{ label: 'What is missing?', value: modalNotes, onChange: setModalNotes, required: true, placeholder: 'e.g. Which systems hold the visit data, and who would own the work on their side?' }}
+            confirmLabel="Park until they reply"
+            busy={saving}
+            onConfirm={confirmModal}
+            onClose={closeModal}
+          />
+        )}
+        {modal?.mode === 'decline' && (
+          <ReviewModal
+            title="Decline this application"
+            intro="No engagement is opened and the applicant is not notified. The decision is kept on the Declined tab, where it can be reopened."
+            bucket={{ label: 'Closest fit, for the record', value: modalBucket, onChange: setModalBucket }}
+            notes={{ label: 'Why not now?', value: modalNotes, onChange: setModalNotes, required: true, placeholder: 'e.g. No data to work from yet; suggested they start with a volunteer data audit.' }}
+            confirmLabel="Decline application"
+            danger
+            busy={saving}
+            onConfirm={confirmModal}
+            onClose={closeModal}
+          />
+        )}
+        {modal?.mode === 'reopen' && (
+          <ReviewModal
+            title="Reopen & approve"
+            intro="The decline is replaced by an approval under your name, the business is created and the first engagement stage opens. The original decline stays in the audit trail."
+            bucket={{ label: 'Bucket', value: modalBucket, onChange: setModalBucket }}
+            notes={{ label: 'What changed?', value: modalNotes, onChange: setModalNotes, required: true, placeholder: 'e.g. They came back with two years of visit data and a named data lead.' }}
+            confirmLabel="Reopen and approve"
+            busy={saving}
+            onConfirm={confirmModal}
+            onClose={closeModal}
+          />
         )}
       </AnimatePresence>
     </div>
   );
-}
-
-/** What the review banner says for each `/api/scout-approve` error code. */
-function decisionErrorMessage(code: string): string {
-  switch (code) {
-    case 'unauthorized':
-    case 'network_error':
-      return 'Could not reach the server. Check your connection and sign-in, then try again. The intake is still pending.';
-    case 'forbidden':
-      return 'Only an admin of the organization this intake belongs to can approve it.';
-    case 'already_approved':
-      return 'This intake is already in the pipeline — its business has an engagement. Nothing was changed.';
-    case 'already_reviewed':
-      return 'This intake was already reviewed with a different bucket. Nothing was changed.';
-    case 'guard_unmet':
-      return 'This intake was redirected, so it cannot enter the pipeline. Nothing was changed.';
-    case 'organization_required':
-      return 'You administer more than one organization; this intake needs one chosen before it can be approved.';
-    case 'bucket_required':
-      return 'Choose a bucket with Edit before approving — Scout could not assign one.';
-    default:
-      return 'Could not save the review decision. The intake is still pending.';
-  }
 }

@@ -103,15 +103,15 @@ export interface Lane {
 }
 
 export const LANE_LABEL: Record<LaneKey, string> = {
-  heuristic: 'Template · exact match',
-  judge: 'Template · judge',
+  heuristic: 'Fallback · exact match',
+  judge: 'Fallback · judge',
   modelJudge: 'Model · judge',
   model: 'Model · exact match',
 };
 
 export const PILL_LABEL: Record<LaneKey, string> = {
-  heuristic: 'Template',
-  judge: 'Judge on template',
+  heuristic: 'Fallback',
+  judge: 'Judge on fallback',
   modelJudge: 'Judge on model',
   model: 'Model',
 };
@@ -144,7 +144,7 @@ export function lanesFor(def: MetricDefinition, s: MetricSummary, report: EvalRe
   return lanes;
 }
 
-/** The gate's view: template judge when it ran, heuristic otherwise, null when neither. */
+/** The gate's view: fallback judge when it ran, heuristic otherwise, null when neither. */
 export function effectiveRate(summary: MetricSummary): number | null {
   return summary.judgePassRate !== null ? summary.judgePassRate : summary.heuristicPassRate;
 }
@@ -228,14 +228,14 @@ export const laneTone = (view: MetricView, lane: Lane): Tone => (lane.ran ? tone
 
 /** Short value text for a lane: the rate, or why there is none. */
 export function laneValue(lane: Lane): string {
-  if (!lane.ran) return 'not run';
-  if (lane.rate === null) return lane.errored > 0 ? 'all errored' : 'no cases';
+  if (!lane.ran) return 'Not evaluated';
+  if (lane.rate === null) return lane.errored > 0 ? 'Evaluation error' : 'No cases';
   return pct(lane.rate);
 }
 
 /** "10 of 21 cases exactly right" — counts behind a rate, errored cases called out apart. */
 export function laneCounts(lane: Lane): string {
-  if (!lane.ran) return 'Skipped — no model key for this run.';
+  if (!lane.ran) return 'Not evaluated — no model key for this run.';
   const graded = lane.n - lane.errored;
   const passed = lane.rate === null ? 0 : Math.round(lane.rate * graded);
   const verb = lane.kind === 'exact' ? 'exactly right' : 'passed by the judge';

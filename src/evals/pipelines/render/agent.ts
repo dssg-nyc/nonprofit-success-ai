@@ -35,7 +35,7 @@ export function checkRates(view: MetricView): Map<string, Record<'template' | 'm
 }
 
 export function checkCell(cell: CheckCell, target: number | undefined): string {
-  if (cell.n === 0) return '<td class="none">—</td>';
+  if (cell.n === 0) return '<td class="none">Not evaluated</td>';
   const rate = cell.passed / cell.n;
   const tone = toneFor(rate, target);
   return `<td class="check"><div class="bar-row"><div class="track thin"><div class="fill t-bg-${tone}" style="width:${Math.round(rate * 1000) / 10}%"></div></div><b class="t-${tone}">${pct(rate)}</b></div><small>${cell.passed} / ${cell.n}</small></td>`;
@@ -69,7 +69,7 @@ export function renderChecks(views: MetricView[]): string {
           ? 'Holds on both paths.'
           : v.def.judgeCls
             ? tWeak
-              ? `The template string misses this rubric line${mWeak ? ' and so does the model' : '; the model meets it'} — a string fix${tWeak && v.gate.kind !== 'ungated' ? ', and it is gated' : ''}.`
+              ? `The fallback text misses this rubric line${mWeak ? ' and so does the model' : '; the model meets it'} — a string fix${tWeak && v.gate.kind !== 'ungated' ? ', and it is gated' : ''}.`
               : 'Only the model text misses this rubric line — a prompt gap, reported not gated.'
             : tWeak
               ? `The fallback rule that sets this field is wrong on ${cell.template.n - cell.template.passed} of ${cell.template.n} cases${v.gate.kind !== 'ungated' ? ' — this is what fails the gate' : ''}.`
@@ -92,7 +92,7 @@ export function renderChecks(views: MetricView[]): string {
     ${
       blocks.length
         ? `<div class="fields-wrap"><table class="fields score-table check-table">
-      <thead><tr><th>Check</th><th>Template</th><th>Model</th><th>What it means</th></tr></thead>
+      <thead><tr><th>Check</th><th>Fallback</th><th>Model</th><th>What it means</th></tr></thead>
       <tbody>${blocks.join('')}</tbody>
     </table></div>`
         : '<p class="t-good">No check lost a case on either path.</p>'
@@ -102,7 +102,7 @@ export function renderChecks(views: MetricView[]): string {
 }
 
 // ---------------------------------------------------------------------------------------
-// Template vs model comparison
+// Fallback vs model comparison
 // ---------------------------------------------------------------------------------------
 
 export function bar(lane: Lane | undefined, tone: Tone, target: number | undefined, tag: string): string {
@@ -123,7 +123,7 @@ export function renderComparison(views: MetricView[]): string {
       rows.push(`<div class="cmp-row">
         <div class="cmp-label"><a href="#${escapeHtml(v.summary.metric)}">${escapeHtml(v.summary.metric)}</a><small>${escapeHtml(v.agent)} · ${kind === 'exact' ? 'exact match' : 'judge pass rate'}</small></div>
         <div class="cmp-bars">
-          ${bar(template, template ? laneTone(v, template) : 'none', template ? laneTarget(v, template) : undefined, 'Template')}
+          ${bar(template, template ? laneTone(v, template) : 'none', template ? laneTarget(v, template) : undefined, 'Fallback')}
           ${bar(model, model ? laneTone(v, model) : 'none', undefined, 'Model')}
         </div>
       </div>`);
@@ -142,7 +142,7 @@ export function renderComparison(views: MetricView[]): string {
     ${
       scatters.length
         ? `<h3>Which text did the judge prefer?</h3>
-    <p class="muted">One point per case the judge scored both ways. Above the diagonal the model text scored higher than the template text; below, lower. Scores are banded (1, 0.5, 0.2 — how many rubric dimensions failed), so points stack: a bigger circle is more cases, and hovering lists them.</p>
+    <p class="muted">One point per case the judge scored both ways. Above the diagonal the model text scored higher than the fallback text; below, lower. Scores are banded (1, 0.5, 0.2 — how many rubric dimensions failed), so points stack: a bigger circle is more cases, and hovering lists them.</p>
     <div class="scatters">${scatters.join('')}</div>`
         : ''
     }

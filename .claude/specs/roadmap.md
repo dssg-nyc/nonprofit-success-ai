@@ -88,6 +88,7 @@ suite (green 2026-10-08). "Hosted" means nothing until #27 and #28 land.
 | D42 | Anonymous-to-member conversion — an intake visitor who later signs up keeps the `auth.users` row but `handle_new_user` never fires; needs an on-update trigger or first-sign-in provisioning before sign-up from the intake flow ships | GAP · accepted 2026-10-07 | — | `platform/agents/scout.md` Rules; 0001_core |
 | D45 | `POST /api/send-communication` — the Envoy send step: provider, `sent_at`, the L4 question | GAP (R16) | #28 provider decision, D10 | `platform/agents/envoy.md` |
 | D46 | `achievedOutcomes?: string[]` on `ChronicleInput` — Chronicle reads achieved outcomes from `engagement_events`; until then the template's `outcomes` stays empty and a success criterion is quoted as the definition of success, never promoted to an outcome | GAP (R17, 2026-10-08) | — | `platform/agents/chronicle.md` |
+| D48 | Chronicle caller reads `engagement_events` into `eventSummaries` — `api/_engagement.ts` turns each event row into one short line (≤10, ≤200 chars, PII-free) for `ChronicleInput.eventSummaries`; the schema, template and prompt already consume it, so until then only eval fixtures and tests supply it | GAP (R18, 2026-10-13) | — | `platform/agents/chronicle.md` §2 |
 
 ### Open — Tony (#29), logic wiring by Ramsey (R15)
 
@@ -150,7 +151,7 @@ All four land as comments on #28 before any migration is written.
 
 ## Adding an entry
 
-1. Append a row with the next free number (next: **D48**, **C5**). Never reuse, never renumber.
+1. Append a row with the next free number (next: **D49**, **C5**). Never reuse, never renumber.
 2. Put it in the section for its owner and milestone; move it to **Built** when it lands, keeping
    the number.
 3. Cite it from the spec as `D19` — do not restate the description.

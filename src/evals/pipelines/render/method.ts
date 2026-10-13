@@ -65,7 +65,7 @@ export function renderFixtureProfile(views: MetricView[]): string {
 
 
 export const GLOSSARY: Array<[string, string]> = [
-  ['Template path', 'The agent’s deterministic fallback: plain code, no AI. It is what runs when the model call fails, so it must always be right.'],
+  ['Fallback path', 'The agent’s deterministic path: plain code, no AI. It is what runs when the model call fails, so it must always be right.'],
   ['Model path', 'The same agent asking Gemini for the answer. Measured on the same cases, reported but never gated — model output varies between runs.'],
   ['Exact match', 'A heuristic grader: compares structured fields (bucket, tier, shape…) with the expected answer written in the fixture. All fields must match.'],
   ['Judge', 'An AI from a different vendor (OpenAI) that scores written prose 0–1 against a rubric and decides pass/fail, with its reasoning.'],
@@ -74,7 +74,9 @@ export const GLOSSARY: Array<[string, string]> = [
   ['Gated', 'targets.yaml sets a minimum pass rate; `npm run eval:grade -- --gate` fails below it.'],
   ['Ungated', 'No threshold yet, usually because the rate has not been measured often enough. Informational — not a failure.'],
   ['Errored', 'The grader could not produce a verdict (e.g. the judge call failed). Neither pass nor fail; excluded from the rate. A gated metric with errors cannot pass.'],
-  ['Not run', 'The path was skipped (no API key) or does not exist for this metric.'],
+  ['Not evaluated', 'The path exists but was skipped this run (no API key), so there is no verdict — not a zero.'],
+  ['Not applicable', 'The metric has no such path: an exact-match metric has no judge, a judge metric has no exact match.'],
+  ['Evaluation error', 'Every grader call on the path failed, so there is no rate to show. Rerun before reading anything into it.'],
   ['Colours', 'Green: at or above the gate target, or ≥ 90% when ungated. Amber: 70% up to that. Red: below 70%.'],
   ['Keyed run', 'A grade run that called a judge or a model (an API key was set). Only these are logged and compared; heuristic-only runs are deterministic.'],
   ['Δ / pts', 'The change in percentage points against the previous keyed run. † beside it: the fixture changed in between, so the two rates graded different cases.'],
@@ -109,11 +111,11 @@ export function renderMethodSection(views: MetricView[], report: EvalReport, inp
         <dt><span class="pill pass">pass</span></dt><dd>the output met every check (exact match) or every rubric dimension (judge)</dd>
         <dt><span class="pill fail">fail</span></dt><dd>a verdict was produced and at least one check was lost — counted in the rate</dd>
         <dt><span class="pill errored">errored</span></dt><dd>the grader call failed (timeout, bad JSON): no verdict, left out of the rate, never a fail</dd>
-        <dt><span class="pill absent">—</span></dt><dd>never run: no model key, or the metric has no such lane — not a zero</dd>
+        <dt><span class="pill absent">not evaluated</span></dt><dd>no verdict was sought: the path was skipped (no model key) or the metric has no such path (not applicable) — not a zero</dd>
       </dl></div>
       <div class="card"><h3>The gate rule</h3><ul>
         <li>A metric is gated when <code>targets.yaml</code> holds a threshold for it; the rate must be at or above it.</li>
-        <li>The gate reads the template judge when it ran, the heuristic otherwise — never the model path.</li>
+        <li>The gate reads the fallback judge when it ran, the heuristic otherwise — never the model path.</li>
         <li>An errored verdict cannot certify: a gated metric with errors is marked, not passed.</li>
         <li>A judge is trusted at ${pct(JUDGE_TRUST_AGREEMENT)}+ agreement on ${CALIBRATION_FLOOR}+ labelled outputs; a metric is gated over ${FIXTURE_FLOOR}+ cases.</li>
       </ul></div>

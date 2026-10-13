@@ -21,7 +21,7 @@ data models, and open items (U4, U5, U7).
 | Agents | Vercel AI SDK (`ai` + `@ai-sdk/google`), called only through `src/model/gateway.ts` |
 | Data / auth | Supabase — Postgres, Auth, RLS, Realtime *(live — `src/lib/supabase.ts`)*. Stage changes go only through `transition_engagement()` (0005_lifecycle; partners hold no write on `engagements`); a business enters the pipeline only through `approve_scout_intake()` (0008, `POST /api/scout-approve`), the one writer of `businesses.scout_intake_id`. Migrations were squashed 2026-10-08 into `0001_core`–`0006_views`; `0007` onward is post-squash |
 | Tests | Vitest (`src/**/*.test.ts` + `api/**/*.test.ts`, node) — 47 files in `__tests__/` dirs; integration suite `api/__tests__/*.int.test.ts` (`vitest.integration.config.ts`, `make api-test`, CI `api-test` job) runs the handlers against the local stack with only the model mocked; `cd.yml` polls `/api/health` after every deploy; pgTAP suite in `supabase/tests/` (`core` / `spine` / `rpcs.test.sql` + `_shared/fixtures.psql`, one transaction per file, counts scoped to fixture ids; `make db-test`, runs in CI as the `db-test` job; `make metrics` prints the `agent_run_metrics` view (0006_views), needs `psql` — `brew install libpq`) |
-| Evals | `src/evals/` + `targets.yaml` — heuristic + LLM-judge graders. `npm run eval:grade -- --gate` gates `scoutRouting`, `architectScoring`, `architectPlanStructure`, `pulseHealth`, `envoyDraftStructure`, `chronicleReadiness` at 1.0; judges stay `UNGATED` until a keyed run measures them; not yet a CI job |
+| Evals | `src/evals/` + `targets.yaml` — heuristic + LLM-judge graders. `npm run eval:grade -- --gate` gates ten heuristic metrics at 1.0 (six structural: `scoutRouting`, `architectScoring`, `architectPlanStructure`, `pulseHealth`, `envoyDraftStructure`, `chronicleReadiness`; four grounding lints: `scoutGrounding`, `architectGrounding`, `envoyGrounding`, `chronicleGrounding`); judges stay `UNGATED` until a keyed run measures them; not yet a CI job |
 
 The Firebase-to-Supabase migration is **complete**: `firebase` is out of `package.json`,
 RLS policies are the access-control layer. Do not add Firebase surface area.
@@ -63,7 +63,7 @@ until that audit is no longer needed. See `supabase/migrations/reference/README.
 - No code changes without a GitHub issue.
 - Before any commit batch: `make gate` (`type-check lint test build`). CI runs the same
   four jobs per PR, plus `eval-heuristics` and `db-test` in `ci.yml`; `cd.yml` calls `ci.yml` as a reusable workflow and deploys (preview on
-  PRs, `--prod` on push to `main`) only after it passes. Six metrics are gated locally
+  PRs, `--prod` on push to `main`) only after it passes. Ten metrics are gated locally
   (`eval:grade --gate`); the heuristic eval job is live in `ci.yml`, the judge job is J3.
 - `.env*` is unreadable to Claude by policy.
 

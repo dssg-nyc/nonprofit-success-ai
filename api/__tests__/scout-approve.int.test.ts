@@ -109,6 +109,28 @@ describe('POST /api/scout-approve (integration)', () => {
     expect(await res.json()).toEqual({ error: 'guard_unmet', condition: 'intake_approved' });
     const { count } = await s.service.from('businesses').select('id', { count: 'exact', head: true }).eq('scout_intake_id', filed.intakeId);
     expect(count).toBe(0);
+
+    // Reopening is explicit (0010): the same intake, approved under the caller's name.
+    const reopened = await POST(jsonRequest('/api/scout-approve', { intakeId: filed.intakeId, idempotencyKey: key(), reopen: true, reviewNotes: 'Reopened after a call' }, staff.token));
+    expect(reopened.status).toBe(201);
+    expect(await reopened.json()).toMatchObject({ reviewAction: 'approved', reopened: true, businessCreated: true });
+    const { data: row } = await s.service.from('scout_intakes').select('review_status, review_action, reviewed_by, review_notes').eq('id', filed.intakeId).single();
+    expect(row).toEqual({ review_status: 'reviewed', review_action: 'approved', reviewed_by: staff.userId, review_notes: 'Reopened after a call' });
+  });
+
+  it('approves an intake parked as needs_info exactly like a pending one (0010)', async () => {
+    const filed = await intake(s);
+    cleanup.user(filed.userId);
+    cleanup.intake(filed.intakeId);
+    const { error } = await s.service
+      .from('scout_intakes')
+      .update({ review_status: 'needs_info', review_notes: 'Which systems hold the data?', reviewed_at: new Date().toISOString(), organization_id: staff.organizationId })
+      .eq('id', filed.intakeId);
+    expect(error).toBeNull();
+
+    const res = await POST(jsonRequest('/api/scout-approve', { intakeId: filed.intakeId, idempotencyKey: key() }, staff.token));
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ reviewAction: 'approved', reopened: false, businessCreated: true });
   });
 
   it('is a 404 for the anonymous session that filed the intake (RLS hides the row), and a 401 with no token', async () => {

@@ -39,6 +39,13 @@ export const chronicleInputSchema = z.object({
   objectives: z.array(z.string()).optional(),
   /** `ArchitectCharter.successCriteria`, when a plan exists. */
   successCriteria: z.array(z.string()).optional(),
+  /**
+   * One short line per recorded touchpoint, in order, for the draft to quote verbatim as
+   * the account of what the team did (roadmap D48: the route does not read them yet, so
+   * only eval fixtures and tests supply them). Partner-derived text: the prompt keeps it
+   * inside the partner-data block, and the template joins it without rewording.
+   */
+  eventSummaries: z.array(z.string().max(200)).max(10).optional(),
 });
 
 /** What the SPA sends: which engagement, and a key. Everything else is read server-side. */

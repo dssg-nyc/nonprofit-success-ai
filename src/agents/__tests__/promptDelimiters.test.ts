@@ -76,6 +76,7 @@ describe('prompt builders delimit partner text', () => {
   it('chronicle', () => {
     const prompt = buildChroniclePrompt({
       orgName: PAYLOAD,
+      status: 'completed',
       objectives: [PAYLOAD],
       successCriteria: [PAYLOAD],
       eventCount: 4,

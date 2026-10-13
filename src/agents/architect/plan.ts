@@ -31,13 +31,13 @@ export const WORKSTREAM_DEFS: Record<
     name: "Data Integration & Hygiene",
     required: true,
     description:
-      "Connect siloed systems, standardize collection across programs, and establish baseline data quality. Required workstream — flagged Foundational on the Data Infrastructure dimension.",
+      "Connect siloed systems, standardize collection across programs, and establish baseline data quality. Required workstream — flagged on the Data Infrastructure dimension.",
   },
   governance: {
     name: "Reporting Automation",
     required: true,
     description:
-      "Name an owner for every recurring funder and board report, write down the reporting calendar and the data each report draws on, then automate the most manual one. Required workstream — flagged Foundational on the Governance dimension.",
+      "Name an owner for every recurring funder and board report, write down the reporting calendar and the data each report draws on, then automate the most manual one. Required workstream — flagged on the Governance dimension.",
   },
 };
 
@@ -54,35 +54,64 @@ export const DATA_FOUNDATIONS: CharterWorkstream = {
     "Stand up the collection, storage and first summary the plan describes.",
 };
 
-const BUCKET_DELIVERABLES: Record<
+/**
+ * What kind of thing each bucket's deliverable is. The last success criterion of a
+ * ship_deliverable / accelerate charter is chosen by kind, so a roadmap or a model is
+ * never promised "a recurring report from the new pipeline" (run 2, 2026-10-08: 8 of the
+ * 11 architectCharter judge failures quoted that criterion on Advisory and ML shapes).
+ */
+export type DeliverableKind = "pipeline" | "dashboard" | "roadmap" | "model";
+
+export const BUCKET_DELIVERABLES: Record<
   ScoutBucket,
-  { name: string; description: string }
+  { name: string; description: string; kind: DeliverableKind }
 > = {
   "Data Infrastructure": {
     name: "Unified Data Pipeline",
     description:
       "Consolidate program data into a single, documented pipeline the org can maintain.",
+    kind: "pipeline",
   },
   "Analytics & Insight": {
     name: "Board-Facing Insight Report",
     description:
       "A repeatable quarterly analysis of program outcomes, built on the org's own data.",
+    // A repeatable analysis is a pipeline with a report at the end of it.
+    kind: "pipeline",
   },
   "ML / Predictive": {
     name: "Predictive Risk-Model Prototype",
     description:
       "A first working model on historical data, with an honest evaluation of what it can and can't predict.",
+    kind: "model",
   },
   "Tooling & Automation": {
     name: "Operational Dashboard v1",
     description:
       "A live dashboard for the workflow the assessment names as most manual.",
+    kind: "dashboard",
   },
   "Advisory / Strategy": {
     name: "Data-Strategy Roadmap",
     description:
       "A prioritized, right-sized roadmap for the org's next 12 months of data investment.",
+    kind: "roadmap",
   },
+};
+
+/**
+ * The deliverable-specific success criterion: the one claim the charter makes about the
+ * deliverable working, phrased for what the deliverable is. Exported so the grounding
+ * grader can hold a charter to the criterion its deliverable kind supports.
+ */
+export const DELIVERABLE_CRITERION: Record<DeliverableKind, string> = {
+  pipeline:
+    "One recurring report produced from the new pipeline without manual steps",
+  dashboard:
+    "One recurring report produced from the new pipeline without manual steps",
+  roadmap: "Roadmap adopted by the board with a named owner per initiative",
+  model:
+    "Model evaluated against a held-out period with its error stated to the org",
 };
 
 export function generateNinetyDayPlan(
@@ -293,7 +322,10 @@ export function generateCharter(input: PlanGenerationInput): ArchitectCharter {
   const deliverable = BUCKET_DELIVERABLES[bucket];
 
   const scopeByLevel: Record<string, string> = {
-    Foundational: `Infrastructure and data-hygiene engagement. This charter scopes the basics — systematic collection, a stable home for data, and a first internal summary. The plan's three phases (map and stabilize, standardize, prove the habit) are the core work${plan.workstreams.length > 0 ? `, with the required ${plan.workstreams.map((w) => w.name).join(" and ")} workstream${plan.workstreams.length > 1 ? "s" : ""} running inside them` : ""}. No analysis or modeling is promised in this window.`,
+    // Only a flagged dimension is "required" in the prose: Data Foundations stands in
+    // when nothing is flagged, and calling it required reads as a flag the assessment
+    // never raised (run 2, 2026-10-08).
+    Foundational: `Infrastructure and data-hygiene engagement. This charter scopes the basics — systematic collection, a stable home for data, and a first internal summary. The plan's three phases (map and stabilize, standardize, prove the habit) are the core work${maturity.flaggedDimensions.length > 0 ? `, with the required ${plan.workstreams.map((w) => w.name).join(" and ")} workstream${plan.workstreams.length > 1 ? "s" : ""} running inside them` : ""}. No analysis or modeling is promised in this window.`,
     Developing: maturity.remediationOnly
       ? `Remediation-only engagement. Both flagged workstreams (${plan.workstreams.map((w) => w.name).join(" and ")}) are the deliverable for this 90-day window; the ${deliverable.name} is deferred to Phase 2.`
       : `One scoped ${bucket} project: the ${deliverable.name}, shipped within the 90-day window${maturity.flaggedDimensions.length > 0 ? `, with the required ${WORKSTREAM_DEFS[maturity.flaggedDimensions[0]].name} workstream running alongside` : ""}.`,
@@ -365,7 +397,7 @@ export function generateCharter(input: PlanGenerationInput): ArchitectCharter {
               ...(maturity.flaggedDimensions.includes("governance")
                 ? ["Every recurring funder and board report has a named owner and a documented data source"]
                 : []),
-              "One recurring report produced from the new pipeline without manual steps",
+              DELIVERABLE_CRITERION[deliverable.kind],
             ],
     cadence:
       maturity.compositeLevel === "Foundational"

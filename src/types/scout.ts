@@ -37,7 +37,8 @@ export type PrimaryNeed =
 export type ScoutConfidence = 'High' | 'Medium' | 'Low' | null;
 export type ScoutCompositeSignal = 'Ready' | 'Conditional' | 'Not Ready';
 export type ScoutHitlTier = 'L2' | 'L3';
-export type ScoutReviewStatus = 'pending' | 'reviewed';
+/** `needs_info` (0010): parked while the applicant answers a question; reviewed like `pending` on approve. */
+export type ScoutReviewStatus = 'pending' | 'needs_info' | 'reviewed';
 export type ScoutReviewAction = 'approved' | 'edited' | 'redirected';
 
 export interface ScoutRoutingInput {

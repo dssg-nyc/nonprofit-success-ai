@@ -47,8 +47,8 @@ export const pts = (delta: number): string => {
 /** One scoreboard cell: the rate, then passed/graded and the change since the previous keyed run. */
 export function scoreCell(view: MetricView, key: LaneKey, report: EvalReport, previous: RunHistoryEntry | undefined): string {
   const lane = view.lanes.find((l) => l.key === key);
-  if (!lane) return '<td class="score none" title="No such path for this metric">—</td>';
-  if (!lane.ran) return '<td class="score none" title="Skipped — no model key for this run">not run</td>';
+  if (!lane) return '<td class="score none" title="No such path for this metric">Not applicable</td>';
+  if (!lane.ran) return '<td class="score none" title="Not evaluated — no model key for this run">Not evaluated</td>';
   const tone = laneTone(view, lane);
   if (lane.rate === null) return `<td class="score t-${tone}" title="${escapeHtml(laneCounts(lane))}">${laneValue(lane)}</td>`;
   const graded = lane.n - lane.errored;
@@ -115,7 +115,7 @@ export function renderScoreboard(views: MetricView[], report: EvalReport, histor
     ? `Small print under each rate: cases passed / graded, then the change in points against the previous keyed run (<a href="#trends">${escapeHtml(shortStamp(previous.generatedAt))}${previous.label ? ` · ${escapeHtml(previous.label)}` : ''}</a>). ${FIXTURE_MARK} means the fixture changed in between, so that change is not like for like.`
     : 'Small print under each rate: cases passed / graded. The change against the previous keyed run appears once there is one.';
   const failing = views.filter((v) => v.gate.kind === 'failed').length;
-  const lede = `${failing ? `<strong class="t-bad">${plural(failing, 'gated metric')} failing</strong>` : '<strong>No gated metric is failing</strong>'} across ${plural(views.length, 'metric')}. One row per metric, one column per way of grading it. Read left to right: the <strong>template</strong> columns are the deterministic fallback and carry the gate; the <strong>model</strong> columns are the same cases through Gemini. ${vs}`;
+  const lede = `${failing ? `<strong class="t-bad">${plural(failing, 'gated metric')} failing</strong>` : '<strong>No gated metric is failing</strong>'} across ${plural(views.length, 'metric')}. One row per metric, one column per way of grading it. Read left to right: the <strong>fallback</strong> columns are the deterministic fallback and carry the gate; the <strong>model</strong> columns are the same cases through Gemini. ${vs}`;
   return `<section class="section-block" aria-labelledby="score-h">
     ${sectionHead('score-h', 'Calibration', 'What did every metric score, on every path?', lede)}
     <div class="fields-wrap"><table class="fields score-table">
@@ -168,7 +168,7 @@ export function renderTrends(views: MetricView[], report: EvalReport, history: R
       const target = key === gatedLaneKey(v.summary) ? v.gate.target : undefined;
       const cells = rates
         .map((rate, i) => {
-          if (rate === null) return '<td class="none">—</td>';
+          if (rate === null) return '<td class="none">Not evaluated</td>';
           const mark = i > 0 && fixtureChanged(v.def, runs[i], runs[i - 1]) ? FIXTURE_MARK : '';
           return `<td class="t-${toneFor(rate, target)} ${runs[i].id === currentId ? 'current' : ''}"><b>${pct(rate)}</b>${mark}</td>`;
         })

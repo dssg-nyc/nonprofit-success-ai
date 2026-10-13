@@ -47,7 +47,7 @@ Scored from the intake answers (`src/agents/scout/routing.ts`):
 
 `routeScoutIntake()` in `src/agents/scout/routing.ts` is the deterministic fallback and runs
 the same three-step process the model path also produces. On the model path
-(`src/agents/scout/model.ts`, prompt `scout-routing-0.05` — the tiebreak, foothold floor and confidence rule in the heuristic's own words, R17) only step 1 is the model's: code
+(`src/agents/scout/model.ts`, prompt `scout-routing-0.06` — the tiebreak, foothold floor and confidence rule in the heuristic's own words, R17; 0.06 states the floor as a prohibition above the tiebreak, adds a worked example per shape run 2 missed, and has the rationale name the intake detail instead of quoting a score, R18) only step 1 is the model's: code
 scores readiness first (`scoreReadiness()`, the same rubric as the fallback) and hands the
 three scores and the signal to the model as facts; the model returns bucket, confidence,
 rationale and flags; `enforceRoutingRules()` then nulls a `something_else` bucket and caps a
@@ -186,7 +186,7 @@ Target: moves to `src/agents/scout/routing.ts` with tests. No tests exist yet.
 - A bucket other than the stated need's default is never High confidence (the description-wins rule gives it Low). `enforceRoutingRules()` in `model.ts` caps such an answer at Low with a flag, so a re-bucket cannot reach `L2` whatever the model returns.
 - `something_else` primary_need bypasses auto-bucket entirely: `bucket = null`, `confidence = null`, `hitlTier = 'L3'` always.
 - `/api/route-intake` requires a Supabase bearer token. The applicant has no account, so `ScoutIntakeForm` signs them in anonymously first (Supabase Auth, rate-limited per IP; no `users` profile is created — 0001_core) and the SPA treats that session as signed out. No token, or a failed route → nothing is filed and the form shows an error; the applicant is never thanked for an application that does not exist. Each session also has an hourly model-call budget (`check_model_budget()`, 0007; 429 past `MODEL_CALLS_PER_HOUR`).
-- Intake fields are written once, through `submit_scout_intake()` only — `anon` and `authenticated` have no insert grant on `scout_intakes`. Review fields (`reviewStatus`, `reviewAction`, `finalBucket`, `reviewedBy`, etc.) are admin-only update.
+- Intake fields are written once, through `submit_scout_intake()` only — `anon` and `authenticated` have no insert grant on `scout_intakes`. Review fields (`reviewStatus`, `reviewAction`, `finalBucket`, `reviewedBy`, etc.) are admin-only update. `reviewStatus` is `pending` → `needs_info` (parked while the admin asks the applicant something; no action or bucket) → `reviewed` (`approved`/`edited` only through `approve_scout_intake()`; `redirected` = declined, a direct update). A declined intake can be reopened by the same function with `p_reopen` (0010), which is how a declined intake re-enters the pipeline.
 - Deterministic fallback must produce the identical output shape as the model path — a drop-in swap, not a degraded path.
 - No new Firebase surface area. Screens must retarget to `scout_intakes` (Supabase), not `demoStore`.
 - `composite_signal`, the three readiness scores and `hitlTier` are **derived, never model-supplied** — the model call replaces only the deterministic bucket/confidence heuristic; readiness and routing tier stay computed in code, not asserted by the model.

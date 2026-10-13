@@ -33,9 +33,36 @@ These local keys are fixed dev values, identical on every machine — not secret
 
 `studio` and `analytics` are disabled in `config.toml` (2026-08-21): their containers
 failed health checks on this machine and neither is needed for schema work. `storage` is
-enabled (nothing uses it yet). `[db.seed]` is disabled: there is no `seed.sql`, and the
-pgTAP suite seeds its own rows inside each test transaction. Re-enable Studio if you want
-the UI on :54323.
+enabled (nothing uses it yet). `[db.seed]` runs `seed.sql` on every `db reset` (see
+"Local seed" below); the pgTAP suite does not depend on it and seeds its own rows inside
+each test transaction. Re-enable Studio if you want the UI on :54323.
+
+## Local seed
+
+`seed.sql` gives the local stack accounts and a partner to click through — the hosted
+project never runs it. It is idempotent (fixed `dddddddd-…` ids, `on conflict do nothing`),
+so it applies on `make db-reset` or at any time without a reset:
+
+```bash
+psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -f supabase/seed.sql
+```
+
+Every account shares the password `dssg-admin-2026`:
+
+| Email | Role | Sees |
+|---|---|---|
+| `ramsey.wise@gmail.com` | admin (org owner) | every partner, the Scout review queue, Architect assessment |
+| `tony.j.amodeo@gmail.com`, `jianyinroachell@gmail.com`, `carlosfc@umich.edu`, `karthik.chakravartula@gmail.com` | admin | same |
+| `dana@harlempantry.org` | client | only Harlem Community Pantry |
+| `priya@bktenants.org` | client | only Brooklyn Tenants Union |
+
+Seeded data: organization **DSSG NYC**; five Scout intakes (two reviewed and approved,
+two pending at L2 and L3, one declined — it shows under Declined on `/scout/decisions`,
+where an admin can reopen it); two businesses, **Harlem Community Pantry** (Dana's, a completed
+initial meeting and a budget check in progress) and **Brooklyn Tenants Union** (Priya's,
+initial meeting in progress). An admin's dashboard lists both (`businesses_select_admin`,
+0009); each client sees only their own. Google sign-in stays disabled
+locally; use the email form.
 
 ## Hosted project
 
@@ -105,6 +132,9 @@ history to preserve. `0001_core.sql` keeps the `-- rules:NN` citations (about a 
 | `0005_lifecycle.sql` | `current_engagement_stage()`, `transition_engagement()` — the only stage writer; guards, L3 approval row, `stage_advanced` / `stage_reverted` events |
 | `0006_views.sql` | `agent_run_metrics` (Q5 errors, latency, cost, override rate per agent per day), `provenance_chain` — the §7 reconstruction query |
 | `0007_scout_intake_and_budget.sql` | `submit_scout_intake()` — the only writer of `scout_intakes`, derives `hitl_tier` from the Scout run; `check_model_budget()` per-user hourly model-call limit |
+| `0008_scout_approve.sql` | `approve_scout_intake()` — the one writer of `businesses.scout_intake_id`; opens the pipeline from a reviewed intake through `transition_engagement()` |
+| `0009_businesses_admin_read.sql` | `businesses_select_admin` — staff read every business in their org, matching the engagement read they already held; no write |
+| `0010_scout_review_needs_info_and_reopen.sql` | `needs_info` review status (parked, no action or bucket); `approve_scout_intake()` gains `p_reopen` so an admin can re-review a declined (`redirected`) intake, recorded as `reopened` in the audit row |
 
 Nineteen tables, RLS enabled and forced on every one; every id defaults to
 `gen_random_uuid()`. Every `organization_id` references `organizations`, and admin reads

@@ -10,7 +10,12 @@ import {
 import type { ArchitectEnrichment, ArchitectTemplate } from "./schema";
 import { architectEnrichmentSchema, buildArchitectPrompt } from "./schema";
 
-export const ARCHITECT_PLAN_PROMPT_VERSION = "architect-plan-0.04";
+/**
+ * 0.05 changes no instruction: the embedded template's success criteria are now chosen by
+ * deliverable kind (`plan.ts` `DELIVERABLE_CRITERION`) and the zero-flag scope statement
+ * no longer calls Data Foundations "required", so the prompt text moved (R18).
+ */
+export const ARCHITECT_PLAN_PROMPT_VERSION = "architect-plan-0.05";
 
 /**
  * One call must fit inside the handler's 30s `maxDuration` with the database write after

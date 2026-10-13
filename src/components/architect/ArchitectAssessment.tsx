@@ -3,6 +3,7 @@ import { ErrorBanner } from '../ErrorBanner';
 import { reportSupabaseError } from '../supabaseErrors';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase, rowToDomain, OperationType } from '../../lib/supabase';
+import { scoutIntakeFromRow } from '../../lib/scoutIntake';
 import { ApiError, postJson } from '../../lib/api';
 import { architectPlanResponseSchema } from '../../schemas';
 import {
@@ -13,9 +14,11 @@ import {
   localDraft, nextAttempt, submitDraft, unsavedMessage,
 } from '../../agents/architect/draft';
 import type { DraftAttempt, LocalDraft } from '../../agents/architect/draft';
+import { suggestCsaAnswers } from '../../agents/architect/suggest';
+import type { SuggestableField, SuggestionSource } from '../../agents/architect/suggest';
 import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
 import { motion } from 'motion/react';
-import { DraftingCompass, ChevronLeft, ArrowRight, RotateCcw } from 'lucide-react';
+import { DraftingCompass, ChevronLeft, ArrowRight, RotateCcw, Sparkles, Check } from 'lucide-react';
 
 interface Props {
   isDemo?: boolean;
@@ -38,6 +41,11 @@ export default function ArchitectAssessment({ isDemo }: Props) {
   const navigate = useNavigate();
   const [intake, setIntake] = useState<ScoutIntake | null>(null);
   const [answers, setAnswers] = useState(emptyAnswers);
+  // Architect's drafted answers still waiting for a human: field -> which intake answer it
+  // came from. An answer leaves the map when the reviewer edits it or clicks Confirm; the
+  // form cannot submit while any remain (HITL — scoring runs on confirmed answers only).
+  const [pending, setPending] = useState<Map<SuggestableField, SuggestionSource>>(new Map());
+  const [draftedCount, setDraftedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -47,6 +55,21 @@ export default function ArchitectAssessment({ isDemo }: Props) {
   // The last submit's idempotency key, reused while the answers are unchanged so a retry
   // replays rather than submits twice (design-system.md §8.1).
   const attemptRef = useRef<DraftAttempt | null>(null);
+
+  /** A fresh assessment starts from Architect's draft; an existing one is shown as saved. */
+  const startFromSuggestions = (source: ScoutIntake) => {
+    const suggestions = suggestCsaAnswers(source);
+    const drafted = { ...emptyAnswers };
+    const map = new Map<SuggestableField, SuggestionSource>();
+    for (const sug of suggestions) {
+      if (sug.field === 'q14_tools') drafted.q14_tools = sug.value as CsaTool[];
+      else drafted[sug.field] = sug.value as string;
+      map.set(sug.field, sug.source);
+    }
+    setAnswers(drafted);
+    setPending(map);
+    setDraftedCount(suggestions.length);
+  };
 
   useEffect(() => {
     if (!intakeId) return;
@@ -58,6 +81,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
         setIntake(demoIntake);
         const existing = demoAssessments.get(intakeId);
         if (existing) setAnswers({ ...emptyAnswers, ...pickAnswers(existing) });
+        else startFromSuggestions(demoIntake);
         setLoading(false);
         return;
       }
@@ -72,7 +96,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
         if (intakeErr) throw intakeErr;
 
         const loaded = intakeRow
-          ? rowToDomain<ScoutIntake>(intakeRow, ['submittedAt', 'reviewedAt'])
+          ? scoutIntakeFromRow(rowToDomain(intakeRow, ['submittedAt', 'reviewedAt']))
           : null;
 
         // An assessment may only be built on an intake a reviewer has already approved and
@@ -95,6 +119,8 @@ export default function ArchitectAssessment({ isDemo }: Props) {
             ...emptyAnswers,
             ...pickAnswers(rowToDomain<ArchitectAssessmentDoc>(existing, [])),
           });
+        } else {
+          startFromSuggestions(loaded);
         }
       } catch (err) {
         // Was reported as "not found", which tells staff the intake does not exist when
@@ -111,11 +137,29 @@ export default function ArchitectAssessment({ isDemo }: Props) {
     load();
   }, [intakeId, isDemo]);
 
+  const reviewed = (field: keyof typeof emptyAnswers) => {
+    // Rebuilt without the field (a Map's mutating remove would read as a DB write to the
+    // source lint in draft.test.ts, which keeps /api/architect-plan the only writer).
+    setPending(prev => prev.has(field as SuggestableField)
+      ? new Map([...prev].filter(([k]) => k !== field))
+      : prev);
+  };
+
+  const confirmAll = () => setPending(new Map());
+
   const update = (field: keyof typeof emptyAnswers, value: string) => {
     setAnswers(prev => ({ ...prev, [field]: value }));
+    reviewed(field);
+  };
+
+  /** The marker and Confirm button a drafted field carries until a human has looked at it. */
+  const sug = (field: SuggestableField) => {
+    const source = pending.get(field);
+    return source ? { suggestion: { source, onConfirm: () => reviewed(field) } } : {};
   };
 
   const toggleTool = (tool: CsaTool) => {
+    reviewed('q14_tools');
     setAnswers(prev => ({
       ...prev,
       q14_tools: prev.q14_tools.includes(tool)
@@ -125,7 +169,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
   };
 
   const submit = async () => {
-    if (!intake || !intakeId) return;
+    if (!intake || !intakeId || pending.size > 0) return;
 
     const bucket = intake.finalBucket as ScoutBucket;
     // The form's `required` fields guarantee every answer is filled before submit fires.
@@ -197,9 +241,9 @@ export default function ArchitectAssessment({ isDemo }: Props) {
         <ErrorBanner message={error} onDismiss={() => setError(null)} />
         <h2 className="text-2xl font-display font-bold text-dssg-blue mb-3">No reviewed intake found</h2>
         <p className="text-slate-500 text-sm mb-8">
-          Architect assessments start from an approved Scout intake. {isDemo && 'In Demo Mode, approve an intake in the Review Queue first (demo data resets on page reload).'}
+          Architect assessments start from an approved Scout intake. {isDemo && 'In Demo Mode, approve an application under Admin Review first (demo data resets on page reload).'}
         </p>
-        <button onClick={() => navigate('/scout/review')} className="btn-primary">Go to Review Queue</button>
+        <button onClick={() => navigate('/admin/applications')} className="btn-primary">Go to Admin Review</button>
       </div>
     );
   }
@@ -208,10 +252,10 @@ export default function ArchitectAssessment({ isDemo }: Props) {
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
       <ErrorBanner message={error} onDismiss={() => setError(null)} />
       <button
-        onClick={() => navigate('/scout/review')}
+        onClick={() => navigate('/admin/assessments')}
         className="flex items-center gap-2 text-slate-400 hover:text-dssg-blue transition-all font-bold text-[10px] uppercase tracking-[0.2em] mb-8"
       >
-        <ChevronLeft size={14} /> Review Queue
+        <ChevronLeft size={14} /> Admin Review · Assessments
       </button>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -233,25 +277,49 @@ export default function ArchitectAssessment({ isDemo }: Props) {
           </p>
         </div>
 
+        {draftedCount > 0 && (
+          <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border px-5 py-4 mb-8 ${
+            pending.size > 0 ? 'bg-amber-50/60 border-amber-200' : 'bg-emerald-50/60 border-emerald-200'
+          }`}>
+            <div className="flex items-start gap-3">
+              <Sparkles size={16} className={`shrink-0 mt-0.5 ${pending.size > 0 ? 'text-amber-500' : 'text-emerald-500'}`} />
+              <div>
+                <p className="text-xs font-bold text-slate-800">
+                  Architect drafted {draftedCount} of 18 answers from the Scout intake.
+                  {pending.size > 0 ? ` ${pending.size} still need your confirmation.` : ' All confirmed.'}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Each drafted answer names the intake answer it came from. Confirm it or correct it on the call; nothing is scored until a person has.
+                </p>
+              </div>
+            </div>
+            {pending.size > 0 && (
+              <button type="button" onClick={confirmAll} className="shrink-0 px-4 py-2 rounded-xl bg-white border border-amber-200 text-amber-800 text-[10px] font-bold uppercase tracking-widest hover:bg-amber-100 flex items-center gap-1.5">
+                <Check size={12} /> Confirm all drafted
+              </button>
+            )}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-10">
           <Section n={1} title="Organization Context" note="Narrative only — not scored">
-            <Field label="Q1 — What does the organization do?">
+            <Field label="Q1 — What does the organization do?" {...sug('q1_org_context')}>
               <textarea required value={answers.q1_org_context} onChange={e => update('q1_org_context', e.target.value)} className={`${inputClass} h-20 resize-none`} />
             </Field>
-            <Field label="Q2 — Organization size (staff, volunteers, budget scale)">
+            <Field label="Q2 — Organization size (staff, volunteers, budget scale)" {...sug('q2_org_size')}>
               <input required value={answers.q2_org_size} onChange={e => update('q2_org_size', e.target.value)} className={inputClass} />
             </Field>
-            <Field label="Q3 — Who is the point of contact for this engagement?">
+            <Field label="Q3 — Who is the point of contact for this engagement?" {...sug('q3_poc')}>
               <input required value={answers.q3_poc} onChange={e => update('q3_poc', e.target.value)} className={inputClass} />
             </Field>
           </Section>
 
           <Section n={2} title="What Data You Have" note="→ Data Infrastructure dimension">
-            <SelectField label="Q4 — How systematic is data collection across programs?" value={answers.q4_collection_scope} onChange={v => update('q4_collection_scope', v)} options={CSA_OPTIONS.q4_collection_scope} />
-            <Field label="Q5 — Where does the data live today?">
+            <SelectField label="Q4 — How systematic is data collection across programs?" value={answers.q4_collection_scope} {...sug('q4_collection_scope')} onChange={v => update('q4_collection_scope', v)} options={CSA_OPTIONS.q4_collection_scope} />
+            <Field label="Q5 — Where does the data live today?" {...sug('q5_data_locations')}>
               <input required value={answers.q5_data_locations} onChange={e => update('q5_data_locations', e.target.value)} className={inputClass} placeholder="e.g. Salesforce + 12 spreadsheets + paper files" />
             </Field>
-            <SelectField label="Q6 — How well do your systems talk to each other?" value={answers.q6_system_integration} onChange={v => update('q6_system_integration', v)} options={CSA_OPTIONS.q6_system_integration} />
+            <SelectField label="Q6 — How well do your systems talk to each other?" value={answers.q6_system_integration} {...sug('q6_system_integration')} onChange={v => update('q6_system_integration', v)} options={CSA_OPTIONS.q6_system_integration} />
             <SelectField label="Q7 — How familiar is the team with system integration?" value={answers.q7_integration_familiarity} onChange={v => update('q7_integration_familiarity', v)} options={CSA_OPTIONS.q7_integration_familiarity} />
             <SelectField label="Q8 — How confident are you in your data's quality?" value={answers.q8_quality_confidence} onChange={v => update('q8_quality_confidence', v)} options={CSA_OPTIONS.q8_quality_confidence} />
           </Section>
@@ -260,7 +328,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
             <Field label="Q9 — What decisions get made from data today?">
               <textarea required value={answers.q9_current_decisions} onChange={e => update('q9_current_decisions', e.target.value)} className={`${inputClass} h-20 resize-none`} />
             </Field>
-            <Field label="Q10 — What decisions do you wish data could inform?">
+            <Field label="Q10 — What decisions do you wish data could inform?" {...sug('q10_wished_decisions')}>
               <textarea required value={answers.q10_wished_decisions} onChange={e => update('q10_wished_decisions', e.target.value)} className={`${inputClass} h-20 resize-none`} />
             </Field>
             <SelectField label="Q11 — Who is empowered to act on data?" value={answers.q11_decision_empowerment} onChange={v => update('q11_decision_empowerment', v)} options={CSA_OPTIONS.q11_decision_empowerment} />
@@ -275,7 +343,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
 
           <Section n={5} title="Tools & Capacity" note="→ Tooling + Team Capacity dimensions">
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">Q14 — Which tools does the org use today? (check all that apply)</label>
+              <FieldLabel label="Q14 — Which tools does the org use today? (check all that apply)" {...sug('q14_tools')} />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
                 {CSA_TOOL_OPTIONS.map(opt => (
                   <label key={opt.value} className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all text-xs font-medium ${
@@ -297,7 +365,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
           </Section>
 
           <Section n={6} title="Goals & Readiness" note="Narrative — feeds charter rationale and risks directly">
-            <Field label="Q17a — Data wish list: if this works, what do you want in a year?">
+            <Field label="Q17a — Data wish list: if this works, what do you want in a year?" {...sug('q17a_wish_list')}>
               <textarea required value={answers.q17a_wish_list} onChange={e => update('q17a_wish_list', e.target.value)} className={`${inputClass} h-20 resize-none`} />
             </Field>
             <Field label="Q17b — What's your biggest data worry?">
@@ -317,9 +385,14 @@ export default function ArchitectAssessment({ isDemo }: Props) {
             />
           )}
 
+          {pending.size > 0 && (
+            <p className="text-center text-[11px] font-bold text-amber-700">
+              Confirm or edit the {pending.size} drafted answer{pending.size === 1 ? '' : 's'} above before scoring.
+            </p>
+          )}
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || pending.size > 0}
             className="w-full py-4 bg-dssg-blue text-white rounded-xl font-bold shadow-lg shadow-blue-900/10 hover:bg-dssg-blue-light active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {saving ? (
@@ -350,23 +423,49 @@ function pickAnswers(a: ArchitectAssessmentDoc) {
 
 const inputClass = 'w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-dssg-blue focus:border-transparent transition-all outline-none text-sm';
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/** Set while Architect's draft for the field awaits a human: where it came from, and the Confirm. */
+interface Suggestion { source: SuggestionSource; onConfirm: () => void }
+
+function FieldLabel({ label, suggestion }: { label: string; suggestion?: Suggestion }) {
   return (
-    <div className="space-y-1">
-      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400 ml-1">{label}</label>
+    <div className="flex flex-wrap items-center justify-between gap-2 ml-1">
+      <label className="text-[10px] uppercase tracking-widest font-bold text-slate-400">{label}</label>
+      {suggestion && (
+        <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-amber-700">
+            <Sparkles size={10} /> drafted from “{suggestion.source}”
+          </span>
+          <button
+            type="button"
+            onClick={suggestion.onConfirm}
+            className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-bold uppercase tracking-widest hover:bg-amber-200 flex items-center gap-1"
+          >
+            <Check size={10} /> Confirm
+          </button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Field({ label, suggestion, children }: { label: string; suggestion?: Suggestion; children: React.ReactNode }) {
+  return (
+    <div className={`space-y-1 ${suggestion ? 'rounded-xl ring-2 ring-amber-200 ring-offset-2 ring-offset-white' : ''}`}>
+      <FieldLabel label={label} suggestion={suggestion} />
       {children}
     </div>
   );
 }
 
-function SelectField({ label, value, onChange, options }: {
+function SelectField({ label, value, onChange, options, suggestion }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: readonly { readonly value: string; readonly label: string }[];
+  suggestion?: Suggestion;
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} suggestion={suggestion}>
       <select required value={value} onChange={e => onChange(e.target.value)} className={inputClass}>
         <option value="" disabled>Choose…</option>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}

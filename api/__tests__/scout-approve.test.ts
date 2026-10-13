@@ -63,6 +63,7 @@ const RPC_RESULT = {
   engagement_id: ENGAGEMENT_ID,
   event_id: EVENT_ID,
   transitioned_at: '2026-10-08T12:00:00.123456+00:00',
+  reopened: false,
   replayed: false,
 };
 
@@ -158,6 +159,7 @@ describe('POST /api/scout-approve — the RPC', () => {
       businessCreated: true,
       reviewAction: 'approved',
       finalBucket: 'Analytics & Insight',
+      reopened: false,
       engagementId: ENGAGEMENT_ID,
       eventId: EVENT_ID,
       transitionedAt: '2026-10-08T12:00:00.123456+00:00',
@@ -174,6 +176,19 @@ describe('POST /api/scout-approve — the RPC', () => {
         },
       },
     ]);
+  });
+
+  it('passes p_reopen only when the caller asks to reopen a declined intake', async () => {
+    db.rpc = { data: { ...RPC_RESULT, reopened: true }, error: null };
+    const res = await post({ ...BODY, reopen: true });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ reopened: true });
+    expect(db.rpcCalls[0]?.args).toMatchObject({ p_reopen: true });
+
+    db.rpcCalls = [];
+    db.rpc = { data: RPC_RESULT, error: null };
+    await post({ ...BODY, reopen: false });
+    expect(db.rpcCalls[0]?.args).not.toHaveProperty('p_reopen');
   });
 
   it.each([

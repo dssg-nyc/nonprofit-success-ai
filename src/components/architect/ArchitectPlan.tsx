@@ -107,7 +107,7 @@ export default function ArchitectPlan({ isDemo }: Props) {
           This organization hasn't been through the Architect assessment yet.
           {isDemo && ' (Demo Mode data resets on page reload.)'}
         </p>
-        <button onClick={() => navigate('/scout/review')} className="btn-primary">Go to Review Queue</button>
+        <button onClick={() => navigate('/admin/assessments')} className="btn-primary">Go to Admin Review</button>
       </div>
     );
   }
@@ -123,10 +123,10 @@ export default function ArchitectPlan({ isDemo }: Props) {
       <ErrorBanner message={error} onDismiss={() => setError(null)} />
       <div className="flex items-center justify-between mb-8">
         <button
-          onClick={() => navigate('/scout/review')}
+          onClick={() => navigate('/admin/assessments')}
           className="flex items-center gap-2 text-slate-400 hover:text-dssg-blue transition-all font-bold text-[10px] uppercase tracking-[0.2em]"
         >
-          <ChevronLeft size={14} /> Review Queue
+          <ChevronLeft size={14} /> Admin Review
         </button>
         <Link
           to={`/architect/assess/${a.id}`}

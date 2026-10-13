@@ -5,7 +5,7 @@
 
 \ir _shared/fixtures.psql
 
-select plan(229);
+select plan(235);
 
 -- submit_architect_draft() — 0004_drafts (assessment + L3 charter approval + audit, one txn)
 -- ---------------------------------------------------------------------------
@@ -2144,13 +2144,75 @@ select throws_ok(
   'a pending intake Scout could not bucket needs the reviewer''s bucket (0008)'
 );
 
+-- 0010: reopening a declined intake is explicit, and the reopened review is the caller's.
+select is(
+  (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
+     from approve_scout_intake('cccccccc-0000-0000-0000-000000000009', 'approve-0009',
+                               null, 'Reopened after a call', 'nonprofit', null, true) r),
+  jsonb_build_object(
+    'intake_id', 'cccccccc-0000-0000-0000-000000000009',
+    'business_created', true, 'review_action', 'approved',
+    'final_bucket', 'Analytics & Insight', 'reopened', true, 'replayed', false
+  ),
+  'p_reopen takes a redirected intake back through review with Scout''s bucket and opens the pipeline (0010)'
+);
+
+select results_eq(
+  $$ select review_status::text, review_action::text, final_bucket::text, reviewed_by, review_notes
+       from scout_intakes where id = 'cccccccc-0000-0000-0000-000000000009' $$,
+  $$ values ('reviewed', 'approved', 'Analytics & Insight',
+             '33333333-3333-3333-3333-333333333333'::uuid, 'Reopened after a call') $$,
+  'the reopened intake is re-reviewed under the reopening admin, replacing the decline (0010)'
+);
+
+select results_eq(
+  $$ select (detail ->> 'reopened')::boolean from audit_events
+      where action = 'scout_intake.approve'
+        and entity_id = 'cccccccc-0000-0000-0000-000000000009' $$,
+  $$ values (true) $$,
+  'the audit row records that the intake was reopened (0010)'
+);
+
+-- 0010: a parked (needs_info) intake is approved exactly like a pending one.
+reset role;
+update scout_intakes
+   set review_status = 'needs_info', review_notes = 'Which systems hold the data?',
+       reviewed_by = '33333333-3333-3333-3333-333333333333', reviewed_at = now()
+ where id = 'abcd0008-0000-0000-0000-0000000000a2';
+select tests.login_as(:admin_id);
+
+select throws_ok(
+  $$ select approve_scout_intake('abcd0008-0000-0000-0000-0000000000a2', 'approve-0001') $$,
+  '22023', 'bucket_required',
+  'a parked intake with no bucket still needs the reviewer''s bucket (0010)'
+);
+
+select is(
+  (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
+     from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a2', 'approve-00a2',
+                               'Advisory / Strategy', 'They sent the details') r),
+  jsonb_build_object(
+    'intake_id', 'abcd0008-0000-0000-0000-0000000000a2',
+    'business_created', true, 'review_action', 'edited',
+    'final_bucket', 'Advisory / Strategy', 'reopened', false, 'replayed', false
+  ),
+  'a needs_info intake is reviewed on approve like a pending one (0010)'
+);
+
+select results_eq(
+  $$ select review_status::text, review_notes from scout_intakes
+      where id = 'abcd0008-0000-0000-0000-0000000000a2' $$,
+  $$ values ('reviewed', 'They sent the details') $$,
+  'approving a parked intake closes the wait and replaces the request note (0010)'
+);
+
 select is(
   (select r - 'engagement_id' - 'event_id' - 'transitioned_at' - 'business_id'
      from approve_scout_intake('abcd0008-0000-0000-0000-0000000000a1', 'approve-0001') r),
   jsonb_build_object(
     'intake_id', 'abcd0008-0000-0000-0000-0000000000a1',
     'business_created', true, 'review_action', 'approved',
-    'final_bucket', 'Analytics & Insight', 'replayed', false
+    'final_bucket', 'Analytics & Insight', 'reopened', false, 'replayed', false
   ),
   'approving a pending intake reviews it as approved, creates the business and opens the pipeline (0008)'
 );
@@ -2205,7 +2267,7 @@ select is(
     'intake_id', 'abcd0008-0000-0000-0000-0000000000a1',
     'business_id', (select id from businesses where scout_intake_id = 'abcd0008-0000-0000-0000-0000000000a1'),
     'business_created', false, 'review_action', 'approved',
-    'final_bucket', 'Analytics & Insight', 'replayed', true
+    'final_bucket', 'Analytics & Insight', 'reopened', false, 'replayed', true
   ),
   'the same key replays: the same business, nothing created, replayed true (0008)'
 );
@@ -2229,7 +2291,7 @@ select is(
   jsonb_build_object(
     'intake_id', 'abcd0008-0000-0000-0000-0000000000a3',
     'business_created', true, 'review_action', 'approved',
-    'final_bucket', 'Tooling & Automation', 'replayed', false
+    'final_bucket', 'Tooling & Automation', 'reopened', false, 'replayed', false
   ),
   'an intake the review queue approved is taken as reviewed and opens the pipeline (0008)'
 );
@@ -2241,7 +2303,7 @@ select is(
   jsonb_build_object(
     'intake_id', 'abcd0008-0000-0000-0000-0000000000a4',
     'business_created', true, 'review_action', 'edited',
-    'final_bucket', 'Analytics & Insight', 'replayed', false
+    'final_bucket', 'Analytics & Insight', 'reopened', false, 'replayed', false
   ),
   'a different final bucket reviews the intake as edited (0008)'
 );

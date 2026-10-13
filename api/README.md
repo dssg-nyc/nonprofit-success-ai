@@ -75,19 +75,23 @@ structural guards in code (`src/lib/lifecycle.ts`) so the error names the proble
 then calls `transition_engagement()`, which is the authority and re-checks everything.
 
 **`scout-approve`** — the Scout-approve command (lifecycle §4 row 1), the way a
-business enters the pipeline. One call to `approve_scout_intake()` (0008): reviews a
-pending intake as `approved` (or `edited` when a different `finalBucket` is given), or
-takes one the review queue already approved; creates the `businesses` row linked by
-`scout_intake_id` if absent — the one column the 0001_core trigger lets only a non-API
-role set, which is why the browser cannot do this; then opens `initial_meeting` through
-`transition_engagement()` under the caller's `idempotencyKey`, so the event, the audit
-row and replay come from the single writer of stage. A `redirected` intake is refused
-(422 `guard_unmet` / `intake_approved`); an intake already in the pipeline under a new
-key is 422 `already_approved`. The business is owned by the approving staff member
-until the partner has an account. The review queue's Approve and Edit buttons call
-this route (`approveScoutIntake` in `src/lib/api.ts`, one `idempotencyKey` per click);
-Redirect stays a direct admin update of `scout_intakes`, since a redirected intake
-never enters the pipeline.
+business enters the pipeline. One call to `approve_scout_intake()` (0008, redefined in
+0010): reviews a `pending` or `needs_info` intake as `approved` (or `edited` when a
+different `finalBucket` is given), or takes one the review queue already approved;
+creates the `businesses` row linked by `scout_intake_id` if absent — the one column the
+0001_core trigger lets only a non-API role set, which is why the browser cannot do this;
+then opens `initial_meeting` through `transition_engagement()` under the caller's
+`idempotencyKey`, so the event, the audit row and replay come from the single writer of
+stage. A declined (`redirected`) intake is refused (422 `guard_unmet` /
+`intake_approved`) unless the caller sends `reopen: true`, which re-reviews it as
+`approved`/`edited` and records `reopened: true` in the reply and the audit row; an
+intake already in the pipeline under a new key is 422 `already_approved`. The business
+is owned by the approving staff member until the partner has an account. The review
+queue's "Approve" and "Change bucket & approve" buttons call this route
+(`approveScoutIntake` in `src/lib/api.ts`, one `idempotencyKey` per click), as does
+"Reopen & approve" on the Decisions page; "Needs more info" (`needs_info`, no
+action or bucket) and "Decline" (`redirected`) stay direct admin updates of
+`scout_intakes`, since neither enters the pipeline.
 
 ## Request lifecycle
 

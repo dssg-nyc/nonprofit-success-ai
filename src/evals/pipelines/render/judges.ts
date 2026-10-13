@@ -37,7 +37,7 @@ export function calibrationTable(cal: CalibrationSummary, rows: CalibrationResul
         .join(' · ');
       return `<tr><th scope="row">${escapeHtml(j.judge)}</th><td class="t-${toneFor(j.agreement)}"><b>${pct(j.agreement)}</b></td>${
         rows.length ? confusionCells(c) : `<td colspan="6" class="none">${j.n - j.nErrored} graded${j.nErrored ? `, ${j.nErrored} errored` : ''}</td>`
-      }<td class="dims-cell">${dims || '—'}</td></tr>`;
+      }<td class="dims-cell">${dims || '<span class="muted">no dimensions</span>'}</td></tr>`;
     })
     .join('');
   return `<div class="fields-wrap"><table class="fields cal-table"><thead><tr><th>Judge</th><th>Agreement</th><th>Agreed pass</th><th>Agreed fail</th><th>Lenient</th><th>Harsh</th><th>Errored</th><th>Graded</th><th>Per dimension</th></tr></thead><tbody>${body}</tbody></table></div>`;
@@ -83,7 +83,7 @@ export function calibrationTrend(report: EvalReport, rows: CalibrationResult[], 
       const cells = window
         .map((h) => {
           const j = h.calibration?.judges.find((x) => x.judge === judge);
-          if (!j) return '<td class="none">—</td>';
+          if (!j) return '<td class="none">Not evaluated</td>';
           const c = h.id === report.run?.id && rows.length ? judgeConfusion(rows, judge) : h.calibrationRows.length ? judgeConfusion(h.calibrationRows, judge) : null;
           const sub = c ? `<small><span class="${c.lenient ? 't-bad' : ''}">${c.lenient} lenient</span> · <span class="${c.harsh ? 't-warn' : ''}">${c.harsh} harsh</span></small>` : `<small>${j.n - j.nErrored} graded</small>`;
           return `<td class="t-${toneFor(j.agreement)} ${h.id === report.run?.id ? 'current' : ''}"><b>${pct(j.agreement)}</b>${sub}</td>`;
@@ -101,7 +101,7 @@ export function calibrationTrend(report: EvalReport, rows: CalibrationResult[], 
 
 
 /**
- * Why the labelled set is the size it is, and what it is made of: untouched template
+ * Why the labelled set is the size it is, and what it is made of: untouched fallback
  * outputs that must pass, and outputs with one planted fault that must fail. The card
  * says per judge how far the sample is from the floor, so "agreement 67%" is read next
  * to "on 3 outputs".
@@ -122,7 +122,7 @@ export function sampleCard(report: EvalReport, cases: CalibrationCase[], rows: C
   });
   return `<div class="sample-card">
     <h4>Why the labelled set is ${plural(cal.nCases, 'output')}</h4>
-    <p>Every judge is scored against outputs a careful reader labelled by hand: the agent's own template output left as it is (it must pass) and the same output with one planted fault — an invented date, a wrong bucket argued for, an overclaim on a thin record (it must fail). Labels are written by a person, never by a model, and the set only grows; a judge's agreement is read beside the number of outputs it was measured on. ${CALIBRATION_FLOOR} per judge is the floor before agreement counts as evidence; ${FIXTURE_FLOOR} is the target.</p>
+    <p>Every judge is scored against outputs a careful reader labelled by hand: the agent's own fallback output left as it is (it must pass) and the same output with one planted fault — an invented date, a wrong bucket argued for, an overclaim on a thin record (it must fail). Labels are written by a person, never by a model, and the set only grows; a judge's agreement is read beside the number of outputs it was measured on. ${CALIBRATION_FLOOR} per judge is the floor before agreement counts as evidence; ${FIXTURE_FLOOR} is the target.</p>
     <div class="fields-wrap"><table class="fields"><thead><tr><th>Judge</th><th>Labelled</th><th>Untouched (must pass)</th><th>Planted fault (must fail)</th><th>Graded</th><th>Against the ${CALIBRATION_FLOOR}-output floor</th></tr></thead><tbody>${judges.join('')}</tbody></table></div>
   </div>`;
 }

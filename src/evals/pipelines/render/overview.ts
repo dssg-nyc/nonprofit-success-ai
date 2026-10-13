@@ -29,7 +29,7 @@ export function attentionItems(views: MetricView[]): string[] {
 
 /** One overview cell: the rate in colour, the counts beside it, errors called out. */
 export function overviewCell(view: MetricView, lane: Lane | undefined): string {
-  if (!lane) return '<td class="ov none" title="No such path for this metric">—</td>';
+  if (!lane) return '<td class="ov none" title="No such path for this metric">Not applicable</td>';
   const tone = laneTone(view, lane);
   if (!lane.ran || lane.rate === null) return `<td class="ov t-${tone}" title="${escapeHtml(laneCounts(lane))}">${laneValue(lane)}</td>`;
   const target = laneTarget(view, lane);
@@ -44,11 +44,11 @@ export function overviewCell(view: MetricView, lane: Lane | undefined): string {
  * renders muted with the count, so a 2/3 can never read as a 67% that settles anything.
  */
 export function trustCell(view: MetricView, report: EvalReport): string {
-  if (!view.def.judgeCls) return '<td class="ov none" title="No judge on this metric">—</td>';
+  if (!view.def.judgeCls) return '<td class="ov none" title="No judge on this metric">Not applicable</td>';
   const j = report.calibration?.judges.find((x) => x.judge === view.summary.metric);
   if (!j) return '<td class="ov none" title="This judge was not calibrated in this run">not calibrated</td>';
   const graded = j.n - j.nErrored;
-  if (j.agreement === null || graded === 0) return `<td class="ov t-err" title="Every labelled output errored for this judge">all errored (${j.nErrored})</td>`;
+  if (j.agreement === null || graded === 0) return `<td class="ov t-err" title="Every labelled output errored for this judge">Evaluation error (${j.nErrored})</td>`;
   const agreed = Math.round(j.agreement * graded);
   const thin = graded < CALIBRATION_FLOOR;
   const title = thin
@@ -157,9 +157,9 @@ export function renderTiles(views: MetricView[], report: EvalReport, calibration
   const p1 = actionsFor(views, report, calibrationRows, input).filter((a) => a.priority === 1).length;
   const of = (a: number, b: number) => `${a}<small> / ${b}</small>`;
   return `<div class="grid-4">
-    ${tile('Gated metrics passing', gated.length ? of(gatesOk, gated.length) : '—', gated.length ? (gatesOk === gated.length ? 'every gate certifies its fallback' : `${gated.length - gatesOk} failing — blocks a deploy`) : 'no metric is gated yet', gated.length === 0 ? 'none' : gatesOk === gated.length ? 'good' : 'bad', '#calibration')}
-    ${tile('Model metrics at the 90% bar', !report.modelCallsRan ? 'not run' : measured.length ? of(atBar, measured.length) : '—', !report.modelCallsRan ? 'the model path was skipped this run' : measured.length ? 'reported, never gated' : 'no metric measured', !report.modelCallsRan || measured.length === 0 ? 'none' : atBar === measured.length ? 'good' : atBar === 0 ? 'bad' : 'warn', '#calibration')}
-    ${tile('Judges trusted', !report.judgesRan ? 'not run' : judges.total ? of(judges.trusted, judges.total) : '—', !report.judgesRan ? 'the judges were skipped this run' : judges.total ? `${pct(JUDGE_TRUST_AGREEMENT)}+ agreement on ${CALIBRATION_FLOOR}+ labelled outputs` : 'not calibrated this run', !report.judgesRan || judges.total === 0 ? 'none' : judges.trusted === judges.total ? 'good' : judges.trusted === 0 ? 'bad' : 'warn', '#calibration')}
+    ${tile('Gated metrics passing', gated.length ? of(gatesOk, gated.length) : 'Not applicable', gated.length ? (gatesOk === gated.length ? 'every gate certifies its fallback' : `${gated.length - gatesOk} failing — blocks a deploy`) : 'no metric is gated yet', gated.length === 0 ? 'none' : gatesOk === gated.length ? 'good' : 'bad', '#calibration')}
+    ${tile('Model metrics at the 90% bar', !report.modelCallsRan ? 'Not evaluated' : measured.length ? of(atBar, measured.length) : 'Not applicable', !report.modelCallsRan ? 'the model path was skipped this run' : measured.length ? 'reported, never gated' : 'no metric measured', !report.modelCallsRan || measured.length === 0 ? 'none' : atBar === measured.length ? 'good' : atBar === 0 ? 'bad' : 'warn', '#calibration')}
+    ${tile('Judges trusted', !report.judgesRan ? 'Not evaluated' : judges.total ? of(judges.trusted, judges.total) : 'Not applicable', !report.judgesRan ? 'the judges were skipped this run' : judges.total ? `${pct(JUDGE_TRUST_AGREEMENT)}+ agreement on ${CALIBRATION_FLOOR}+ labelled outputs` : 'not calibrated this run', !report.judgesRan || judges.total === 0 ? 'none' : judges.trusted === judges.total ? 'good' : judges.trusted === 0 ? 'bad' : 'warn', '#calibration')}
     ${tile('Open P1 actions', String(p1), p1 ? 'each blocks a gate — see the actions table' : 'nothing blocks a gate', p1 ? 'bad' : 'good', '#actions')}
   </div>`;
 }
@@ -178,9 +178,9 @@ export function renderRoster(views: MetricView[], report: EvalReport): string {
       const j = report.calibration?.judges.find((x) => x.judge === v.summary.metric);
       return j && j.n - j.nErrored >= CALIBRATION_FLOOR && j.agreement !== null && j.agreement >= JUDGE_TRUST_AGREEMENT;
     }).length;
-    const cell = (v: BarValue | null, target?: number) => (v ? `<td class="ov t-${toneFor(v.rate, target)}"><b>${pct(v.rate)}</b> <span class="n">${v.n}</span></td>` : '<td class="ov none">—</td>');
+    const cell = (v: BarValue | null, target?: number) => (v ? `<td class="ov t-${toneFor(v.rate, target)}"><b>${pct(v.rate)}</b> <span class="n">${v.n}</span></td>` : '<td class="ov none" title="No such path on this agent">Not applicable</td>');
     const gateText = gated.length === 0 ? '<span class="muted">none gated</span>' : failedGates ? `<span class="t-bad">${failedGates} of ${gated.length} failing</span>` : `<span class="t-good">${gated.length} of ${gated.length} pass</span>`;
-    const judgeText = judged.length === 0 ? '<span class="muted">—</span>' : report.calibration ? `${trusted} of ${judged.length} trusted` : '<span class="muted">not calibrated</span>';
+    const judgeText = judged.length === 0 ? '<span class="muted">Not applicable</span>' : report.calibration ? `${trusted} of ${judged.length} trusted` : '<span class="muted">not calibrated</span>';
     return `<tr class="${failedGates ? 'failing' : ''}"><th scope="row"><a href="#${escapeHtml(agent.toLowerCase())}">${escapeHtml(agent)}</a><small>${escapeHtml(AGENT_ROLES[agent] ?? '')}</small></th><td class="num">${mine.length}</td>${cell(fallback, 0.9)}${cell(model, 0.9)}<td>${gateText}</td><td>${judgeText}</td><td class="num">${failing ? `<span class="t-bad">${failing}</span>` : '0'}</td></tr>`;
   });
   return `<div class="fields-wrap"><table class="fields roster"><thead><tr><th>Agent</th><th>Metrics</th><th>Fallback</th><th>Model</th><th>Gates</th><th>Judges</th><th>Failing cases</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;

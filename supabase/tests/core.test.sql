@@ -5,7 +5,7 @@
 
 \ir _shared/fixtures.psql
 
-select plan(105);
+select plan(111);
 
 -- user provisioning — the auth.users trigger
 -- ---------------------------------------------------------------------------
@@ -201,6 +201,34 @@ select throws_ok(
   null,
   null,
   'reviewed_by must be the acting admin (rules:191)'
+);
+
+-- 0010: an admin can park an intake as needs_info with a request note; the parked row
+-- carries no decision and cannot go back to pending.
+reset role;
+select tests.intake_values('cccccccc-0000-0000-0000-000000000002');
+select tests.login_as(:admin_id);
+
+select lives_ok(
+  $$ update scout_intakes
+        set review_status = 'needs_info', review_notes = 'Which systems hold the data?',
+            reviewed_by = '33333333-3333-3333-3333-333333333333', reviewed_at = now()
+      where id = 'cccccccc-0000-0000-0000-000000000002' $$,
+  'an admin CAN park an intake as needs_info with the request in review_notes (0010)'
+);
+
+select throws_ok(
+  $$ update scout_intakes set review_action = 'approved', final_bucket = 'ML / Predictive'
+     where id = 'cccccccc-0000-0000-0000-000000000002' $$,
+  '23514', null,
+  'a needs_info intake never carries a decision (0010: scout_intakes_needs_info_undecided)'
+);
+
+select throws_ok(
+  $$ update scout_intakes set review_status = 'pending'
+     where id = 'cccccccc-0000-0000-0000-000000000002' $$,
+  '42501', null,
+  'a parked intake cannot be put back to pending — the queue reads needs_info as pending (0010)'
 );
 
 select throws_ok(
@@ -546,6 +574,32 @@ select throws_ok(
   '42501',
   null,
   'an admin CANNOT write engagements directly — transition_engagement() is the only writer (0001_core)'
+);
+
+-- 0009_businesses_admin_read: staff read the businesses those engagements belong to.
+-- Both fixture businesses plus the one alice created earlier in this suite — the admin
+-- owns none of them. Narrowing this policy would break the admin dashboard, which lists
+-- businesses, not engagements.
+select results_eq(
+  $$ select count(*)::int from businesses $$,
+  $$ values (3) $$,
+  'an admin CAN read every business in their org (0009: businesses_select_admin)'
+);
+
+-- Read authority only: the admin owns no business, so the owner-scoped update matches nothing.
+select is(
+  tests.affected($$ update businesses set name = 'Renamed by admin'
+                    where id = 'aaaaaaaa-0000-0000-0000-000000000001' $$),
+  0,
+  'an admin CANNOT update a business they do not own (0009 adds no write)'
+);
+
+-- Org-scoped: the rival org's owner is an admin by is_admin(), but of a different org.
+select tests.login_as(:rival_id);
+
+select is_empty(
+  $$ select id from businesses $$,
+  'an admin of another org reads none of this org''s businesses (0009: user_org_ids() scope)'
 );
 
 -- KNOWN WRONG — 0001_core model, replaced by C1.

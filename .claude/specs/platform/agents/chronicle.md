@@ -70,7 +70,22 @@ Assembled from Supabase by the caller:
   for outcomes at all: `outcomes` is omitted from `chronicleModelSchema` and set to `[]`
   in code, so a restated criterion cannot reach the draft.
   *(R17, 2026-10-08: run 1's model lane restated criteria as achieved outcomes under 0.05.)*
+  Prompt `chronicle-draft-0.07` (R18, 2026-10-13) fixes the thin branch's tense: it states the
+  record's `status` ("The record says the engagement is completed; do not say it is starting
+  or ongoing"), offers "set out to" / "aimed to" / "was scoped to" and no longer "began", and
+  asks for "provisional" or "needs review" within the first two sentences; the template puts
+  its provisional sentence second for the same reason. *(Run 2: 4 model stories said a
+  completed engagement "began", 3 thin stories never said they were thin.)*
 - `eventCount` from `engagement_events` (0003_delivery) as the activity signal.
+- `eventSummaries?: string[]` (at most 10, each at most 200 characters) — one short line per
+  recorded touchpoint, in order, for the draft to quote verbatim. The template writes them as
+  the narrative's second paragraph ("Over {eventCount} recorded touchpoints the team
+  {summary 1}; {summary 2}…"), joined and never reworded; the prompt lists them as a
+  `Recorded activity, in order` field inside the partner-data block and tells the model to
+  quote, not embellish. Partner-derived text, so it goes through `partnerDataBlock`. The route
+  does not read them yet — only eval fixtures and tests supply them (roadmap **D48**; R18,
+  2026-10-13: run 2's template lane lost `clear` on 6 cases that had nothing but a count to
+  say).
 
 ## §3 Outputs
 
@@ -190,7 +205,7 @@ This is registry rows **D15** (the edge) and **D21** (the artifact).
 
 ## Contract
 
-- **Input:** `ChronicleDraftRequest` — `engagementId` (guid), `idempotencyKey` (8-200 chars) only (v4, 2026-10-08). `orgName`, `status`, `hasPlan`, `eventCount`, `objectives?` and `successCriteria?` are read by the route through RLS (`api/_engagement.ts`) into `ChronicleInput`; a caller can no longer supply the facts readiness is derived from.
+- **Input:** `ChronicleDraftRequest` — `engagementId` (guid), `idempotencyKey` (8-200 chars) only (v4, 2026-10-08). `orgName`, `status`, `hasPlan`, `eventCount`, `objectives?` and `successCriteria?` are read by the route through RLS (`api/_engagement.ts`) into `ChronicleInput`; a caller can no longer supply the facts readiness is derived from. `eventSummaries?` (§2) is on `ChronicleInput` but not yet read by the route (D48).
 - **Model caps:** `headline` ≤200 and `narrative` ≤4,000 chars in `chronicleModelSchema`; `outcomes` is not model-generated.
 - **Output:** `ChronicleDraftResponse` — see §3
 - **Side effects:** On `thin` and `ready`, `submit_chronicle_draft()` (0004_drafts) writes, in one transaction, one `chronicle_drafts` row (with its factors), one pending L3 `story` approval, one audit event and the engagement's lesson candidate (upsert; a promoted lesson is left alone) and returns its `lessonId`; a replay with the same key returns the original, lesson included. `not_ready` writes nothing and makes no model or RPC call.

@@ -154,6 +154,77 @@ describe("generateChronicleDraft — thin", () => {
     expect(result.readiness).toBe("thin");
     expect(result.narrative).toContain("provisional");
   });
+
+  it.each([
+    ["by event count", { eventCount: 1 }],
+    ["by missing plan", { hasPlan: false, eventCount: 8 }],
+    ["with summaries", { eventCount: 2, eventSummaries: ["mapped the intake sheet"] }],
+  ] as Array<[string, Partial<ChronicleInput>]>)(
+    "thin %s says provisional within the first two sentences (R18)",
+    (_label, overrides) => {
+      const sentences = draft(overrides).narrative.split(/(?<=\.)\s+/);
+      expect(sentences.slice(0, 2).join(" ")).toMatch(/provisional|needs review/i);
+    },
+  );
+});
+
+describe("generateChronicleDraft — a completed record is never told as starting (R18)", () => {
+  it.each([
+    ["ready", {}],
+    ["thin by event count", { eventCount: 1 }],
+    ["thin by missing plan", { hasPlan: false, eventCount: 8 }],
+    ["thin with no material", { eventCount: 2, objectives: undefined, successCriteria: undefined }],
+  ] as Array<[string, Partial<ChronicleInput>]>)("%s", (_label, overrides) => {
+    const result = draft({ ...overrides, status: "completed" });
+    expect(result.narrative).not.toMatch(/\bbegan\b|\bbegins\b|\bis starting\b|\bongoing\b/i);
+    expect(result.narrative).toContain("completed an engagement");
+  });
+});
+
+describe("generateChronicleDraft — event summaries (R18, D48)", () => {
+  const SUMMARIES = [
+    "mapped the two intake spreadsheets",
+    "agreed the three figures the quarterly report needs",
+    "handed over a refresh checklist",
+  ];
+
+  it("quotes them verbatim, in order, as the second paragraph on a ready record", () => {
+    const result = draft({ eventCount: 3, eventSummaries: SUMMARIES });
+    const [first, second, ...rest] = result.narrative.split("\n\n");
+    expect(rest).toEqual([]);
+    expect(first).toContain("Success was defined as");
+    expect(first).not.toContain("recorded touchpoints");
+    expect(second).toBe(
+      "Over 3 recorded touchpoints the team mapped the two intake spreadsheets; agreed the three figures the quarterly report needs; handed over a refresh checklist.",
+    );
+  });
+
+  it("uses them on a thin record too, after the provisional marker", () => {
+    const result = draft({ eventCount: 2, eventSummaries: SUMMARIES.slice(0, 2) });
+    expect(result.readiness).toBe("thin");
+    const [first, second] = result.narrative.split("\n\n");
+    expect(first).toContain("This account is provisional");
+    expect(second).toBe(
+      "Over 2 recorded touchpoints the team mapped the two intake spreadsheets; agreed the three figures the quarterly report needs.",
+    );
+  });
+
+  it("adds nothing the summaries do not say", () => {
+    const result = draft({ eventCount: 3, eventSummaries: SUMMARIES });
+    const paragraph = result.narrative.split("\n\n")[1];
+    const quoted = paragraph.replace(/^Over 3 recorded touchpoints the team /, "").replace(/\.$/, "");
+    expect(quoted.split("; ")).toEqual(SUMMARIES);
+  });
+
+  it("treats an empty or blank list as absent", () => {
+    expect(draft({ eventSummaries: [] }).narrative).toBe(draft().narrative);
+    expect(draft({ eventSummaries: ["  "] }).narrative).toBe(draft().narrative);
+    expect(draft({ eventCount: 1, eventSummaries: [] }).narrative).not.toContain("recorded touchpoints");
+  });
+
+  it("is still suppressed on a not_ready record", () => {
+    expect(draft({ status: "in_progress", eventSummaries: SUMMARIES }).narrative).toBe("");
+  });
 });
 
 describe("draft invariants", () => {

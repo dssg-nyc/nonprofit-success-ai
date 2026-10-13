@@ -91,7 +91,46 @@ describe("draftChronicleWithModel", () => {
     expect(draft.successFactors).toEqual(MODEL_STORY.successFactors);
     expect(draft.failureFactors).toEqual(MODEL_STORY.failureFactors);
     expect(gateway.requests[0].prompt).toContain("success factors");
-    expect(CHRONICLE_DRAFT_PROMPT_VERSION).toBe("chronicle-draft-0.06");
+    expect(CHRONICLE_DRAFT_PROMPT_VERSION).toBe("chronicle-draft-0.07");
+  });
+
+  it("tells the model the record's status and forbids 'began' on a thin record (0.07)", async () => {
+    gateway.respond = async () => MODEL_STORY;
+
+    await draftChronicleWithModel({ ...READY, eventCount: 1 });
+
+    const prompt = gateway.requests[0].prompt;
+    expect(prompt).toContain("The record says the engagement is completed; do not say it is starting or ongoing.");
+    expect(prompt).toContain('Say "provisional" or "needs review" within the first two sentences.');
+    expect(prompt).not.toMatch(/"began"/);
+  });
+
+  it("lists event summaries inside the partner-data block, after the count", async () => {
+    gateway.respond = async () => MODEL_STORY;
+
+    await draftChronicleWithModel({
+      ...READY,
+      eventSummaries: ["mapped the two intake spreadsheets", "agreed the report's three figures"],
+    });
+
+    const prompt = gateway.requests[0].prompt;
+    const open = prompt.indexOf("--- partner-supplied data");
+    const close = prompt.indexOf("--- end partner-supplied data ---");
+    const at = prompt.indexOf("Recorded activity, in order: mapped the two intake spreadsheets; agreed the report's three figures");
+    expect(at).toBeGreaterThan(open);
+    expect(at).toBeLessThan(close);
+    expect(prompt).toContain("Recorded activity: 12 events");
+    expect(prompt).toContain("quote it as given, in order");
+  });
+
+  it("omits the recorded-activity line and its instruction when no summaries were supplied", async () => {
+    gateway.respond = async () => MODEL_STORY;
+
+    await draftChronicleWithModel(READY);
+
+    const prompt = gateway.requests[0].prompt;
+    expect(prompt).not.toContain("Recorded activity, in order");
+    expect(prompt).not.toContain("quote it as given");
   });
 
   // The review finding of 2026-10-08: the ready branch spread model outcomes straight into

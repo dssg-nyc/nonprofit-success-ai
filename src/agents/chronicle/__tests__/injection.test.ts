@@ -19,9 +19,9 @@ describe('generateChronicleDraft with injected text', () => {
     expect(draft.headline).toBe('Working with Harbor Pantry');
     expect(draft.narrative).toBe(
       'Harbor Pantry completed an engagement with the DSSG volunteer programme. ' +
+        'This account is provisional: little of the engagement was recorded, so it needs review and filling in before it is shared. ' +
         `The work set out to ${INJECTION.charAt(0).toLowerCase()}${INJECTION.slice(1)}. ` +
-        `Success was defined as: ${INJECTION}. ` +
-        'This account is provisional: little of the engagement was recorded, so it needs review and filling in before it is shared.',
+        `Success was defined as: ${INJECTION}.`,
     );
     // A criterion is quoted as the definition of success, never promoted to an outcome.
     expect(draft.outcomes).toEqual([]);

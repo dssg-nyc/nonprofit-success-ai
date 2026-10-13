@@ -28,7 +28,7 @@ export const STATE_ORDER: Record<CaseState, number> = { fail: 0, errored: 1, non
 
 export function pill(lane: Lane, g: GraderResult | undefined): string {
   const name = escapeHtml(PILL_LABEL[lane.key]);
-  if (!g) return `<span class="pill absent" title="${lane.ran ? 'not run for this case' : 'skipped — no model key'}">${name}: —</span>`;
+  if (!g) return `<span class="pill absent" title="${lane.ran ? 'Not evaluated for this case' : 'Not evaluated — no model key for this run'}">${name}: not evaluated</span>`;
   if (g.status === 'errored') return `<span class="pill errored" title="${escapeHtml(g.error ?? 'errored')}">${name}: errored</span>`;
   const score = lane.kind === 'judge' ? ` ${g.score.toFixed(2)}` : '';
   return `<span class="pill ${g.isCorrect ? 'pass' : 'fail'}">${name}: ${g.isCorrect ? 'pass' : 'fail'}${score}</span>`;
@@ -97,7 +97,7 @@ export function renderOutput(output: unknown, store?: OutputStore): string {
 
 export function renderGradeDetail(lane: Lane, g: GraderResult | undefined, store?: OutputStore): string {
   const head = `<h4>${escapeHtml(lane.label)}</h4>`;
-  if (!g) return `<div class="grade absent">${head}<p class="muted">${lane.ran ? 'Not run for this case.' : 'Skipped — no model key for this run.'}</p></div>`;
+  if (!g) return `<div class="grade absent">${head}<p class="muted">${lane.ran ? 'Not evaluated for this case.' : 'Not evaluated — no model key for this run.'}</p></div>`;
   if (g.status === 'errored') {
     return `<div class="grade errored">${head}<p><span class="pill errored">errored</span> <code>${escapeHtml(g.error ?? 'unknown')}</code> — no verdict, so this case is left out of the rate.</p>${
       g.reasoning ? `<p class="reasoning">${escapeHtml(g.reasoning)}</p>` : ''
@@ -281,7 +281,7 @@ function dims(d) {
 function gradeHtml(d, g) {
   var lane = d.lanes[g.l] || { label: g.l, exact: false };
   var head = '<h4>' + esc(lane.label) + '</h4>';
-  if (g.a !== undefined) return '<div class="grade absent">' + head + '<p class="muted">' + (g.a ? 'Not run for this case.' : 'Skipped — no model key for this run.') + '</p></div>';
+  if (g.a !== undefined) return '<div class="grade absent">' + head + '<p class="muted">' + (g.a ? 'Not evaluated for this case.' : 'Not evaluated — no model key for this run.') + '</p></div>';
   if (g.x !== undefined) return '<div class="grade errored">' + head + '<p><span class="pill errored">errored</span> <code>' + esc(g.x) + '</code> — no verdict, so this case is left out of the rate.</p>' + (g.r ? '<p class="reasoning">' + esc(g.r) + '</p>' : '') + output(g) + '</div>';
   var body = lane.exact ? comparisons(g.r || '') : dims(g.d) + (g.r ? '<p class="reasoning"><span class="muted">Judge’s reasoning:</span> ' + esc(g.r) + '</p>' : '');
   return '<div class="grade ' + (g.c ? 'pass' : 'fail') + '">' + head + body + output(g) + '</div>';

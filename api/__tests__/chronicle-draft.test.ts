@@ -395,7 +395,7 @@ describe('POST /api/chronicle-draft — authority and unrecorded runs', () => {
     const [call] = db.rpcCalls;
     expect(call.args).not.toHaveProperty('p_agent_run_id');
     expect(call.args).toMatchObject({
-      p_payload: { source: 'model', model: 'gemini-test', prompt_version: 'chronicle-draft-0.06' },
+      p_payload: { source: 'model', model: 'gemini-test', prompt_version: 'chronicle-draft-0.07' },
     });
   });
 });

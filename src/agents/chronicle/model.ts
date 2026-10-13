@@ -4,7 +4,7 @@ import type { ChronicleDraft, ChronicleInput } from "../../types";
 import { assessChronicleReadiness, generateChronicleDraft } from "./draft";
 import { buildChroniclePrompt, chronicleModelSchema } from "./schema";
 
-export const CHRONICLE_DRAFT_PROMPT_VERSION = "chronicle-draft-0.06";
+export const CHRONICLE_DRAFT_PROMPT_VERSION = "chronicle-draft-0.07";
 
 /**
  * The model-backed Chronicle path; `draft.ts` `generateChronicleDraft()` is its

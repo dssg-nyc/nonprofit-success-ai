@@ -38,6 +38,15 @@ describe("chronicleInputSchema", () => {
     expect(chronicleInputSchema.safeParse(FACTS).success).toBe(true);
   });
 
+  it("accepts up to ten event summaries of up to 200 characters, and rejects more (D48)", () => {
+    const ten = Array.from({ length: 10 }, (_, i) => `touchpoint ${i}`);
+    expect(chronicleInputSchema.safeParse({ ...FACTS, eventSummaries: ten }).success).toBe(true);
+    expect(chronicleInputSchema.safeParse({ ...FACTS, eventSummaries: [...ten, "one more"] }).success).toBe(false);
+    expect(chronicleInputSchema.safeParse({ ...FACTS, eventSummaries: ["x".repeat(200)] }).success).toBe(true);
+    expect(chronicleInputSchema.safeParse({ ...FACTS, eventSummaries: ["x".repeat(201)] }).success).toBe(false);
+    expect(chronicleInputSchema.parse(FACTS)).not.toHaveProperty("eventSummaries");
+  });
+
   it("rejects a negative or fractional event count", () => {
     expect(chronicleInputSchema.safeParse({ ...FACTS, eventCount: -1 }).success).toBe(false);
     expect(chronicleInputSchema.safeParse({ ...FACTS, eventCount: 1.5 }).success).toBe(false);

@@ -96,7 +96,7 @@ export function renderCalibrationTab(views: MetricView[], report: EvalReport, ro
   const answer = cal ? `<strong>${trusted.length} of ${judges.length}</strong> judges trusted (${pct(JUDGE_TRUST_AGREEMENT)}+ agreement on ${CALIBRATION_FLOOR}+ outputs). ` : '';
   const lede =
     answer +
-    'Each judge also grades a fixed set of hand-labelled outputs: template outputs left alone (they must pass) and outputs with one planted fault — an invented date, a wrong bucket argued for, an overclaim on a thin record (they must fail). <strong>Agreement</strong> is how often the judge’s pass/fail matched the label. <strong>Lenient</strong> verdicts are the ones that matter: the judge passed an output a careful reader failed, so a bad agent output would pass the gate. <strong>Harsh</strong> verdicts fail good outputs — noise. Judge rates elsewhere on this page are only as trustworthy as these numbers.';
+    'Each judge also grades a fixed set of hand-labelled outputs: fallback outputs left alone (they must pass) and outputs with one planted fault — an invented date, a wrong bucket argued for, an overclaim on a thin record (they must fail). <strong>Agreement</strong> is how often the judge’s pass/fail matched the label. <strong>Lenient</strong> verdicts are the ones that matter: the judge passed an output a careful reader failed, so a bad agent output would pass the gate. <strong>Harsh</strong> verdicts fail good outputs — noise. Judge rates elsewhere on this page are only as trustworthy as these numbers.';
   return `<section class="section-block" id="calibration" aria-labelledby="cal-h">
     ${sectionHead('cal-h', 'Calibration', 'Can the AI judges be trusted, and how does this run compare with the last?', lede)}
     ${frame(`${judgeClaim} ${runClaim(report, history)}`, caveat)}
@@ -108,7 +108,7 @@ export function renderCalibrationTab(views: MetricView[], report: EvalReport, ro
       ${fold('Scoreboard — every metric, every lane, with the change since the previous keyed run', renderScoreboard(views, report, history))}
       ${fold('Trend — the same rates across keyed runs', renderTrends(views, report, history))}
       ${fold('Checks — which field or rubric line each metric loses on', renderChecks(views))}
-      ${fold('Template vs model — where the model falls short of the fallback', renderComparison(views))}
+      ${fold('Fallback vs model — where the model falls short of the fallback', renderComparison(views))}
       ${fold('Latency and tokens — p50 / p95 per agent and judge', renderLatency(report))}
     </div>
   </section>`;

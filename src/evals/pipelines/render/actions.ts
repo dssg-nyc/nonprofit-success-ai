@@ -16,13 +16,13 @@ export const TRIAGE: Record<TriageKey, { title: string; means: string; tone: Ton
     tone: 'bad',
   },
   templateTextFails: {
-    title: 'Judge fails the template text, passes the model text',
-    means: 'The fallback prose misses a rubric dimension the model prose meets on the same case. Fix the template string — or, if the dimension recurs across cases, the judge is harsh on it (check calibration).',
+    title: 'Judge fails the fallback text, passes the model text',
+    means: 'The fallback prose misses a rubric dimension the model prose meets on the same case. Fix the fallback string — or, if the dimension recurs across cases, the judge is harsh on it (check calibration).',
     tone: 'bad',
   },
   bothTextsFail: {
     title: 'Judge fails both texts',
-    means: 'Template and model prose miss the rubric on the same case. Either the rubric asks for something the input cannot support, or the fixture is wrong. Read the case before changing anything.',
+    means: 'Fallback and model prose miss the rubric on the same case. Either the rubric asks for something the input cannot support, or the fixture is wrong. Read the case before changing anything.',
     tone: 'warn',
   },
   modelWrong: {
@@ -31,7 +31,7 @@ export const TRIAGE: Record<TriageKey, { title: string; means: string; tone: Ton
     tone: 'warn',
   },
   modelTextFails: {
-    title: 'Judge fails the model text, passes the template text',
+    title: 'Judge fails the model text, passes the fallback text',
     means: 'A prompt gap, or model variance. One case is noise; the same dimension across several cases is the prompt.',
     tone: 'warn',
   },
@@ -93,7 +93,7 @@ export function triageRow(key: TriageKey, item: TriageItem): string {
   const { view, row, lane, grade } = item;
   const metric = view.summary.metric;
   const lost = lostChecks(lane, grade);
-  const what = grade.status === 'errored' ? `<code>${escapeHtml(grade.error ?? 'unknown')}</code>` : lost.length ? lost.map((l) => `<code>${escapeHtml(l)}</code>`).join(' ') : '<span class="muted">—</span>';
+  const what = grade.status === 'errored' ? `<code>${escapeHtml(grade.error ?? 'unknown')}</code>` : lost.length ? lost.map((l) => `<code>${escapeHtml(l)}</code>`).join(' ') : '<span class="muted">no check named</span>';
   // A judge score of 0.5 is one dimension short — worth a human read; 0.2 or below is two or more.
   const severity =
     lane.kind === 'judge' && grade.status === 'graded'
@@ -104,7 +104,7 @@ export function triageRow(key: TriageKey, item: TriageItem): string {
         ? '<span class="pill errored">errored</span>'
         : '<span class="pill fail">fail</span>';
   const twin = key === 'bothTextsFail' ? row.grades.find((g) => laneOfGrade(g) === 'modelJudge') : undefined;
-  const twinNote = twin && twin.status === 'graded' ? ` <small class="muted">model ${twin.score.toFixed(2)}: ${escapeHtml(lostChecks(lane, twin).join(', ') || '—')}</small>` : '';
+  const twinNote = twin && twin.status === 'graded' ? ` <small class="muted">model ${twin.score.toFixed(2)}: ${escapeHtml(lostChecks(lane, twin).join(', ') || 'none lost')}</small>` : '';
   return `<tr><td>${metricLink(view)}<br><small class="muted">${escapeHtml(PILL_LABEL[lane.key])}</small></td>` +
     `<td><a href="#${escapeHtml(caseAnchor(metric, row.caseId))}"><code>${escapeHtml(row.caseId)}</code></a></td>` +
     `<td>${what}${twinNote}</td><td>${severity}</td></tr>`;
@@ -112,7 +112,7 @@ export function triageRow(key: TriageKey, item: TriageItem): string {
 
 /**
  * Every failing verdict in the run, bucketed by what it says about the agent rather than by
- * metric: a wrong fallback is a code bug, a failing template text is a string to fix, a
+ * metric: a wrong fallback is a code bug, a failing fallback text is a string to fix, a
  * failing model text is a prompt. Each row links to its case. Empty buckets are omitted.
  */
 export function renderTriage(views: MetricView[], report: EvalReport, calibrationRows: CalibrationResult[]): string {
@@ -154,7 +154,7 @@ export type QueueKey = TriageKey | 'judgeDisagreement';
 /** The decision a human makes on an item of each queue — the question, not the fix. */
 export const HUMAN_DECISION: Record<QueueKey, string> = {
   fallbackWrong: 'Is the fixture right? Yes → fix the code. No → fix the fixture.',
-  templateTextFails: 'Read the template text: is the judge right? Yes → fix the string. No → the judge is harsh on this dimension.',
+  templateTextFails: 'Read the fallback text: is the judge right? Yes → fix the string. No → the judge is harsh on this dimension.',
   bothTextsFail: 'Can this input support the rubric? No → relax the fixture or the rubric line. Yes → both texts need work.',
   modelWrong: 'Is the case ambiguous? Yes → fixture. No → prompt.',
   modelTextFails: 'Same dimension across cases → prompt. One case → noise, leave it.',
@@ -164,7 +164,7 @@ export const HUMAN_DECISION: Record<QueueKey, string> = {
 
 export const QUEUE_TITLE: Record<QueueKey, string> = {
   fallbackWrong: 'Wrong fallback',
-  templateTextFails: 'Template text fails',
+  templateTextFails: 'Fallback text fails',
   bothTextsFail: 'Both texts fail',
   modelWrong: 'Model disagrees with spec',
   modelTextFails: 'Model text fails',
@@ -187,7 +187,7 @@ export function firstSentence(text: string): string {
 /** "expected B, got A" for an exact match; "lost grounded" plus the judge's first sentence for a judge. */
 export function expectedVsGot(item: TriageItem): { expected: string; got: string; why: string } {
   const { lane, grade, row, view } = item;
-  if (grade.status === 'errored') return { expected: '—', got: `<code>${escapeHtml(grade.error ?? 'unknown')}</code>`, why: 'The grader call failed; the case is in no rate.' };
+  if (grade.status === 'errored') return { expected: '<span class="muted">not applicable</span>', got: `<code>${escapeHtml(grade.error ?? 'unknown')}</code>`, why: 'The grader call failed; the case is in no rate.' };
   if (lane.kind === 'exact') {
     const pairs = (parseComparisons(grade.reasoning) ?? []).filter((p) => p.got.replace(/^\[|\]$/g, '').trim() !== p.expected.replace(/^\[|\]$/g, '').trim() && !(p.got === '[]' && p.expected === 'none'));
     if (pairs.length) {
@@ -197,13 +197,13 @@ export function expectedVsGot(item: TriageItem): { expected: string; got: string
         why: escapeHtml(firstSentence(view.cases.get(row.caseId)?.note ?? '')) || 'Field mismatch.',
       };
     }
-    return { expected: escapeHtml(JSON.stringify(view.cases.get(row.caseId)?.expected ?? {})), got: escapeHtml(grade.reasoning || '—'), why: 'Field mismatch.' };
+    return { expected: escapeHtml(JSON.stringify(view.cases.get(row.caseId)?.expected ?? {})), got: escapeHtml(grade.reasoning || 'no reasoning recorded'), why: 'Field mismatch.' };
   }
   const lost = Object.entries(grade.dimensions).filter(([, v]) => v < 1).map(([k]) => k);
   return {
     expected: 'every rubric dimension met',
     got: lost.length ? `lost ${lost.map((d) => `<code>${escapeHtml(d)}</code>`).join(', ')} · score ${grade.score.toFixed(2)}` : `score ${grade.score.toFixed(2)}`,
-    why: escapeHtml(firstSentence(grade.reasoning)) || '—',
+    why: escapeHtml(firstSentence(grade.reasoning)) || 'no reasoning recorded',
   };
 }
 
@@ -260,7 +260,7 @@ export function renderQueues(views: MetricView[], calibrationRows: CalibrationRe
 // ---------------------------------------------------------------------------------------
 
 export interface Action {
-  /** The kind of fix: code, template, prompt, fixture / rubric, infrastructure. */
+  /** The kind of fix: code, fallback text, prompt, fixture / rubric, infrastructure. */
   where: string;
   action: string;
   outcome: string;
@@ -275,7 +275,7 @@ export const effortFor = (n: number): Action['effort'] => (n <= 2 ? 'S' : n <= 5
 
 export const ACTION_WHERE: Record<QueueKey, string> = {
   fallbackWrong: 'Code',
-  templateTextFails: 'Template',
+  templateTextFails: 'Fallback text',
   bothTextsFail: 'Fixture / rubric',
   modelWrong: 'Prompt',
   modelTextFails: 'Prompt',
@@ -326,7 +326,7 @@ export function actionsFor(views: MetricView[], report: EvalReport, calibrationR
     actions.push({ where: ACTION_WHERE.judgeDisagreement, action: `Check the <strong>${escapeHtml(judge)}</strong> labels or soften its rubric: it failed ${list(rows.map((r) => r.id))} that a reader passed.`, outcome: 'Harsh verdicts stop costing good outputs.', effort: effortFor(rows.length), priority: 2 });
   }
   for (const g of itemsByMetric(buckets.get('templateTextFails')!)) {
-    actions.push({ where: ACTION_WHERE.templateTextFails, action: `Revise the template text for ${name(g.view)}${checks(g.checks)}: ${list(g.cases)}.`, outcome: `Template judge rate on ${escapeHtml(nameOf(g.view))} rises by ${plural(g.cases.length, 'case')}.`, effort: effortFor(g.cases.length), priority: 2 });
+    actions.push({ where: ACTION_WHERE.templateTextFails, action: `Revise the fallback text for ${name(g.view)}${checks(g.checks)}: ${list(g.cases)}.`, outcome: `Fallback judge rate on ${escapeHtml(nameOf(g.view))} rises by ${plural(g.cases.length, 'case')}.`, effort: effortFor(g.cases.length), priority: 2 });
   }
   for (const g of itemsByMetric(buckets.get('bothTextsFail')!)) {
     actions.push({ where: ACTION_WHERE.bothTextsFail, action: `Read ${list(g.cases)} on ${name(g.view)}${checks(g.checks)}: decide whether the fixture or the rubric line is wrong.`, outcome: 'The case either passes or is relabelled; nothing is tuned to it.', effort: effortFor(g.cases.length), priority: 2 });
@@ -344,7 +344,7 @@ export function renderActions(views: MetricView[], report: EvalReport, calibrati
   const actions = actionsFor(views, report, calibrationRows, input);
   const p1 = actions.filter((a) => a.priority === 1).length;
   const lede = actions.length
-    ? `<strong>${plural(actions.length, 'action')}</strong>, ${p1} at priority 1. Each row is derived from a queue above or the readiness ladder: a wrong fallback is code, a failing template is a string, a lenient judge is a rubric line, a model-only miss is a prompt. Priority 1 blocks a gate; 3 is reported-only work.`
+    ? `<strong>${plural(actions.length, 'action')}</strong>, ${p1} at priority 1. Each row is derived from a queue above or the readiness ladder: a wrong fallback is code, a failing fallback text is a string, a lenient judge is a rubric line, a model-only miss is a prompt. Priority 1 blocks a gate; 3 is reported-only work.`
     : 'Nothing to do from this run: every verdict passed, every judge agreed with its labels, and the ladder is complete.';
   const row = (a: Action, i: number) =>
     `<tr class="p${a.priority}"><td class="num">${i + 1}</td><td>${escapeHtml(a.where)}</td><td>${a.action}</td><td>${a.outcome}</td><td class="num">${a.effort}</td><td class="num">P${a.priority}</td></tr>`;
@@ -355,7 +355,7 @@ export function renderActions(views: MetricView[], report: EvalReport, calibrati
   const rest = actions.slice(ACTIONS_SHOWN).map((a, i) => row(a, i + ACTIONS_SHOWN)).join('');
   return `<section class="section-block" id="actions" aria-labelledby="actions-h">
     ${sectionHead('actions-h', 'Overview', 'What do we do before the next run?', lede)}
-    ${actions.length ? `${table(top)}${rest ? `<details class="metric-table"><summary>${actions.length - ACTIONS_SHOWN} more actions</summary>${table(rest)}</details>` : ''}<p class="legend">Effort: S one sitting, M a day, L more. Where names the surface to change: code, a template string, a prompt, a fixture or rubric line, or infrastructure.</p>` : ''}
+    ${actions.length ? `${table(top)}${rest ? `<details class="metric-table"><summary>${actions.length - ACTIONS_SHOWN} more actions</summary>${table(rest)}</details>` : ''}<p class="legend">Effort: S one sitting, M a day, L more. Where names the surface to change: code, a fallback string, a prompt, a fixture or rubric line, or infrastructure.</p>` : ''}
   </section>`;
 }
 

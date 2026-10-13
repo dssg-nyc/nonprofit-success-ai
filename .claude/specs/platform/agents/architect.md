@@ -32,6 +32,16 @@ prose and milestone wording; plan shape and maturity level are derived, never mo
 Nine of the eighteen questions feed scoring directly (Q4, Q6, Q7, Q8, Q11, Q13, Q14,
 Q15, Q16); the rest are narrative inputs to the charter.
 
+**Drafted answers (2026-10-13).** `suggestCsaAnswers()` (`agents/architect/suggest.ts`) reads
+the approved intake and proposes up to nine answers (Q1–Q3, Q4, Q5, Q6, Q10, Q14, Q17a), each
+tagged with the intake answer it came from. It never proposes the strongest scored option
+(`systematic`, `most_share_auto`) and leaves fields without evidence empty. The form marks
+every drafted answer and refuses to submit until a human has confirmed or edited each one, so
+the maturity score is computed from confirmed answers only. Deterministic and pure — the
+fallback half of the four-rule contract; a model-backed draft through the gateway would return
+the same shape. Surfaced from Admin Review → Assessments (`/admin/assessments`), which lists
+approved partners by name with how many answers were drafted.
+
 ## §2 Maturity model
 
 **Not a stand-in for an LLM call.** The spec itself defines this as a mechanical rubric
@@ -192,7 +202,8 @@ the approval's state. Direct client writes to `architect_assessments` are revoke
 - Remediation-only: `flaggedDimensions.length >= 2` (both DI and Governance at Foundational).
 - Cross-check flag: `compositeLevel === 'Foundational' && scoutBucket === 'ML / Predictive'` → redirect signal, do not charter. (The code still drafts a `build_basics` charter that leads with the redirect — §4 open item.)
 - DI and Governance Foundational scores become named required workstreams in the charter and the plan, at every composite level — never generic "areas to improve" language. A `build_basics` plan with nothing flagged carries one required workstream, Data Foundations ("Stand up the collection, storage and first summary the plan describes"), so `workstreams` is never empty.
-- Every deliverable and success criterion traces to a flagged dimension, the bucket, or a sentence in the assessment (prompt `architect-plan-0.04`). The templates promise no funder-facing improvement and no maturity level ("Developing level"); the dashboard deliverable is for "the workflow the assessment names as most manual", and the model names that workflow from the assessment text. Gated by `architectGrounding` (R17, 2026-10-08).
+- Every deliverable and success criterion traces to a flagged dimension, the bucket, or a sentence in the assessment (prompt `architect-plan-0.05`). The templates promise no funder-facing improvement and no maturity level ("Developing level"); the dashboard deliverable is for "the workflow the assessment names as most manual", and the model names that workflow from the assessment text. Gated by `architectGrounding` (R17, 2026-10-08).
+- The last success criterion of a `ship_deliverable` / `accelerate` charter follows the deliverable's kind (`BUCKET_DELIVERABLES[bucket].kind`, `DELIVERABLE_CRITERION` in `plan.ts`): a pipeline or dashboard (Data Infrastructure, Tooling & Automation, Analytics & Insight) promises "One recurring report produced from the new pipeline without manual steps"; Advisory promises "Roadmap adopted by the board with a named owner per initiative"; ML promises "Model evaluated against a held-out period with its error stated to the org". A required workstream's description reads "flagged on the {dimension} dimension", never "flagged Foundational", and the zero-flag `build_basics` scope statement does not call Data Foundations required — only a flagged dimension is (R18, 2026-10-13; run 2: 8 of 11 charter judge failures quoted the pipeline criterion on Advisory and ML shapes).
 - Tooling's Developing tier covers either-direction pairing (CRM without reporting tool, or reporting tool without CRM) — this is a documented, intentional extension of the original rubric.
 
 ## Dependencies

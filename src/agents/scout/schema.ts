@@ -61,6 +61,19 @@ function readinessFacts(readiness: ScoutReadiness): string[] {
 }
 
 /**
+ * The foothold floor, stated as what the model must not do, and placed before the
+ * tiebreak list so the list is read as the only way a bucket moves.
+ */
+export const FOOTHOLD_FLOOR_RULE =
+  "- Paper, spreadsheets or no systems never change the bucket — they only cap readiness (the foothold floor, already applied below). A stated need on paper systems keeps its starting bucket; only the tiebreak below, and only on an ambiguous description, moves a bucket.";
+
+/** One example per shape run 2 missed; each is the heuristic's answer on the matching fixture. */
+export const WORKED_EXAMPLES: readonly string[] = [
+  "- A three-way match on a mid-size org: stated need build_tool, 'a growing regional nonprofit', a description that wants a dashboard, trend analysis and predictive models at once, systems 'a mix of internal tools we built ourselves'. Ambiguous (three kinds of work); the org is neither under 20 staff nor 20+ with a system of record, so the tie falls to 'anything else' → Advisory / Strategy, confidence Low.",
+  "- An ML need on paper systems: stated need ml_predictive, staff of 28, a description that wants a risk score flagging which tenants are likely to fall behind on rent, systems 'paper sign-in sheets and a filing cabinet'. The description clearly describes ML / Predictive and nothing else → ML / Predictive, confidence High; the paper systems cap readiness at Conditional and move nothing.",
+];
+
+/**
  * 0.02 carried the spec's full routing rubric and had the model score readiness; it
  * scored generously — 7 of its 10 misses were a `Ready` the rubric did not give.
  * 0.03 computes readiness in code (`scoreReadiness()`) and hands the model the scores as
@@ -74,6 +87,12 @@ function readinessFacts(readiness: ScoutReadiness): string[] {
  * that caps readiness without moving the bucket, and the confidence rule the tier derives
  * from — so the model and `routing.ts` apply one rule (run 1, 2026-10-08: the model lane
  * missed 5 of 21 routings, all on ambiguous descriptions).
+ * 0.06 states the foothold floor as a prohibition *before* the tiebreak list, in the
+ * model's own terms, adds one worked example per shape run 2 missed (a three-way match
+ * on a mid-size org; an ML need on paper systems) and tells the rationale to name the
+ * intake detail rather than quote a score (run 2, 2026-10-08: 4 of 29 model routings
+ * missed on those two shapes, and 2 rationales quoted "3/3 foothold" at a judge who never
+ * saw the scores). The heuristic is unchanged.
  */
 export function buildRoutingPrompt(
   input: ScoutRoutingInput,
@@ -91,20 +110,23 @@ export function buildRoutingPrompt(
     "- The problem description clearly describes the starting bucket's kind of work, and no other: keep it, confidence High.",
     "- It clearly describes exactly one other bucket's kind of work: the description wins — use that bucket, confidence Low.",
     "- It is under 8 words but points at the starting bucket: keep it, confidence Medium.",
+    FOOTHOLD_FLOOR_RULE,
     "- It points at no bucket's kind of work, or at two or more: it is ambiguous. Break the tie on scale and systems, in this order:",
     "  - a small org (under 20 staff, volunteer-run, one or two people) with only spreadsheets, paper or nothing → Advisory / Strategy, confidence Low, whatever the stated need;",
     "  - a larger org (20+ staff) with a real system of record (CRM, Salesforce, database, warehouse, ERP) → keep the starting bucket, confidence Medium;",
     "  - anything else → Advisory / Strategy, confidence Low.",
-    "- Paper or no systems is a foothold floor: it caps the readiness at Conditional (already applied below), but it does not move the bucket away from the stated need. Only the tiebreak above moves a bucket.",
     "- Confidence: High only when the stated need and the description agree and the description is specific; Medium when they agree but the description is short or the tie was broken for the starting bucket; Low whenever the bucket is not the stated need's default or the tie fell to Advisory / Strategy. A bucket other than the starting one is never High.",
+    "",
+    "Worked examples:",
+    ...WORKED_EXAMPLES,
     "",
     "Readiness has already been scored from the intake by a fixed rubric; these are facts, not your call:",
     ...readinessFacts(readiness),
     "",
     "Step 2 — rationale and flags.",
     "- rationale: two sentences a staff reviewer can act on. First, name the bucket and the specific intake detail that decided it (a phrase from the problem, the stated need, the org's scale or systems).",
-    "  Second, state the readiness exactly as given above, with the score that holds it back and the intake fact behind that score (the contact and timeline, the description's length, the systems named).",
-    "  Never describe the org as more or less ready than the readiness above. No step numbers or form-question labels like Q6/Q7.",
+    "  Second, state the readiness exactly as given above and what holds it back, as the intake fact behind it (the contact and timeline, the description's length, the systems named).",
+    "  Never quote a numeric score; name the intake detail instead. Never describe the org as more or less ready than the readiness above. No step numbers or form-question labels like Q6/Q7.",
     "- flags: short phrases for anything a reviewer should check — a need/description mismatch, a vague description, an ambiguous tiebreak, the something_else bypass. Empty when the intake is clean.",
     "",
     PARTNER_DATA_NOTICE,

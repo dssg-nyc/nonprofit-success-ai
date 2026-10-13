@@ -65,7 +65,7 @@ export function groupedBars(groups: BarGroup[], series: BarSeries[], opts: { tar
       const y = top + si * (GB_BAR_H + GB_GAP);
       const v = g.values[si] ?? null;
       const title = `${g.label} — ${s.label}: ${v ? `${pct(v.rate)} (${v.n})` : 'not run'}`;
-      if (!v) return `<g class="gb-row"><title>${escapeHtml(title)}</title><text class="tip none" x="${x0 + 4}" y="${r1(y + GB_BAR_H - 2)}">—</text></g>`;
+      if (!v) return `<g class="gb-row"><title>${escapeHtml(title)}</title><text class="tip none" x="${x0 + 4}" y="${r1(y + GB_BAR_H - 2)}">not evaluated</text></g>`;
       const w = Math.max(1, v.rate * GB_PLOT_W);
       return `<g class="gb-row"><title>${escapeHtml(title)}</title><path class="gb s-${si}" d="${barPath(x0, y, w, GB_BAR_H)}"/><text class="tip" x="${r1(x0 + w + 4)}" y="${r1(y + GB_BAR_H - 2)}">${pct(v.rate)} <tspan class="n">${escapeHtml(v.n)}</tspan></text></g>`;
     });
@@ -146,7 +146,7 @@ export function dumbbellCell(view: MetricView, template: Lane | undefined, model
   const rate = (lane: Lane | undefined) => (lane && lane.ran && lane.rate !== null ? lane.rate : null);
   const t = rate(template);
   const m = rate(model);
-  if (t === null && m === null) return '<td class="ov none">—</td>';
+  if (t === null && m === null) return '<td class="ov none" title="Neither path was evaluated">Not evaluated</td>';
   const x = (r: number) => (6 + r * (DUMBBELL_W - 12)).toFixed(1);
   const bar = view.gate.target ?? 0.9;
   const parts = [`<line class="rail" x1="6" x2="${DUMBBELL_W - 6}" y1="10" y2="10"/>`];
@@ -177,7 +177,7 @@ export function promptsChanged(view: MetricView, judged: boolean, run: RunHistor
  * line stops being like for like.
  */
 export function sparklineCell(view: MetricView, runs: RunHistoryEntry[]): string {
-  if (runs.length < 2) return '<td class="ov none" title="Appears after the second keyed run">—</td>';
+  if (runs.length < 2) return '<td class="ov none" title="Appears after the second keyed run">one run</td>';
   const { template, model } = pairedLanes(view);
   const series = (lane: Lane | undefined): Array<number | null> =>
     lane
@@ -189,7 +189,7 @@ export function sparklineCell(view: MetricView, runs: RunHistoryEntry[]): string
   const t = series(template);
   const m = series(model);
   const points = (values: Array<number | null>) => values.filter((x) => x !== null).length;
-  if (points(t) === 0 && points(m) === 0) return '<td class="ov none" title="No keyed run measured this metric">—</td>';
+  if (points(t) === 0 && points(m) === 0) return '<td class="ov none" title="No keyed run measured this metric">Not evaluated</td>';
   if (points(t) < 2 && points(m) < 2) return '<td class="ov none" title="Measured in one keyed run so far; the line appears with the next">new</td>';
   const px = (i: number) => (4 + (i * (SPARK_W - 8)) / (runs.length - 1)).toFixed(1);
   const py = (r: number) => (SPARK_H - 3 - r * (SPARK_H - 6)).toFixed(1);
@@ -215,7 +215,7 @@ export function sparklineCell(view: MetricView, runs: RunHistoryEntry[]): string
     .map((r, i) => (i > 0 && (fixtureChanged(view.def, r, runs[i - 1]) || promptsChanged(view, template?.kind === 'judge', r, runs[i - 1])) ? i : -1))
     .filter((i) => i >= 0);
   const ticks = breaks.map((i) => `<line class="break" x1="${px(i)}" x2="${px(i)}" y1="1" y2="${SPARK_H - 1}"/>`).join('');
-  const fmt = (values: Array<number | null>) => values.map((r) => (r === null ? '—' : pct(r))).join(' → ');
+  const fmt = (values: Array<number | null>) => values.map((r) => (r === null ? 'n/a' : pct(r))).join(' → ');
   const title = [
     `${runs.length} keyed runs, oldest first`,
     template && !t.every((x) => x === null) ? `fallback ${fmt(t)}` : '',
@@ -320,7 +320,7 @@ export function latencyChart(groups: LatencyGroup[], label: string): string {
 
 
 /**
- * One point per case where the judge scored both texts: template score across, model
+ * One point per case where the judge scored both texts: fallback score across, model
  * score up. Scores are banded (1, 0.5, 0.2), so points stack — the circle grows with the
  * count and its tooltip lists the cases. Above the diagonal the model text did better.
  */
@@ -351,7 +351,7 @@ export function renderScatter(view: MetricView): string {
     .map((s) => {
       const r = Math.min(12, 4 + 2 * Math.sqrt(s.cases.length - 1));
       const cls = s.m > s.t ? 'better' : s.m < s.t ? 'worse' : 'tie';
-      const title = `${s.cases.length === 1 ? s.cases[0] : `${s.cases.length} cases: ${s.cases.join(', ')}`} — template ${s.t.toFixed(2)}, model ${s.m.toFixed(2)}`;
+      const title = `${s.cases.length === 1 ? s.cases[0] : `${s.cases.length} cases: ${s.cases.join(', ')}`} — fallback ${s.t.toFixed(2)}, model ${s.m.toFixed(2)}`;
       return `<circle class="pt ${cls}" cx="${x(s.t).toFixed(1)}" cy="${y(s.m).toFixed(1)}" r="${r.toFixed(1)}"><title>${escapeHtml(title)}</title></circle>${
         s.cases.length > 1 ? `<text class="n" x="${x(s.t).toFixed(1)}" y="${(y(s.m) + 3).toFixed(1)}">${s.cases.length}</text>` : ''
       }`;
@@ -366,11 +366,11 @@ export function renderScatter(view: MetricView): string {
     .join('');
   return `<figure class="scatter">
     <figcaption><a href="#${escapeHtml(view.summary.metric)}">${escapeHtml(view.summary.metric)}</a><small>model better <b class="t-good">${better}</b> · worse <b class="t-bad">${worse}</b> · tie ${pairs.length - better - worse}</small></figcaption>
-    <svg viewBox="0 0 ${X0 + SIDE + 16} ${Y0 + SIDE + 32}" role="img" aria-label="Judge score of the template text against the model text, per case, for ${escapeHtml(view.summary.metric)}">
+    <svg viewBox="0 0 ${X0 + SIDE + 16} ${Y0 + SIDE + 32}" role="img" aria-label="Judge score of the fallback text against the model text, per case, for ${escapeHtml(view.summary.metric)}">
       <rect class="plot" x="${X0}" y="${Y0}" width="${SIDE}" height="${SIDE}"/>
       <line class="diag" x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}"/>
       ${ticks}
-      <text class="axis" x="${(X0 + SIDE / 2).toFixed(1)}" y="${(Y0 + SIDE + 28).toFixed(1)}" text-anchor="middle">template text</text>
+      <text class="axis" x="${(X0 + SIDE / 2).toFixed(1)}" y="${(Y0 + SIDE + 28).toFixed(1)}" text-anchor="middle">fallback text</text>
       <text class="axis" x="10" y="${(Y0 + SIDE / 2).toFixed(1)}" text-anchor="middle" transform="rotate(-90 10 ${(Y0 + SIDE / 2).toFixed(1)})">model text</text>
       ${points}
     </svg>

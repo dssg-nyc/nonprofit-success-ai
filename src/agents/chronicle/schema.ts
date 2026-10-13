@@ -31,6 +31,13 @@ export const chronicleModelSchema = chronicleDraftSchema
   });
 
 /**
+ * 0.07 fixes the thin branch's tense: 0.06 offered "began" as a provisional verb and the
+ * model used it on completed records (run 2, 2026-10-08: 4 of 7 chronicleDraft model
+ * failures), so the branch now states the record's `status`, forbids "starting" or
+ * "ongoing", offers "set out to" / "aimed to" / "was scoped to" instead, and asks for the
+ * provisional marker in the first two sentences (3 more failures were thin stories that
+ * never said so). Recorded activity, when the caller supplies `eventSummaries`, is listed
+ * inside the partner-data block for the model to quote, not embellish.
  * 0.06 stops asking for outcomes at all: the input holds no achievement (D46), so the
  * list was either empty or invented, and `model.ts` now sets it to `[]` in code (run 2,
  * 2026-10-08: the judge's `grounded` still failed the ready branch on restated criteria).
@@ -44,11 +51,14 @@ export const chronicleModelSchema = chronicleDraftSchema
  */
 export function buildChroniclePrompt(input: {
   orgName: string;
+  status: string;
   objectives?: string[];
   successCriteria?: string[];
   eventCount: number;
+  eventSummaries?: string[];
   readiness: "thin" | "ready";
 }): string {
+  const summaries = input.eventSummaries?.filter((s) => s.trim().length > 0) ?? [];
   return [
     'You are Chronicle, writing a short impact story about a completed volunteer data-science engagement with a nonprofit.',
     'A human reviews this before anything is published.',
@@ -59,8 +69,10 @@ export function buildChroniclePrompt(input: {
     input.readiness === 'thin'
       ? [
           'The record is THIN: too little activity or no plan to show what was achieved. Write it as',
-          'provisional — what the engagement set out to do ("set out to", "began", "aimed to"), not',
-          'what it accomplished. Keep it short rather than filling the gap.',
+          'provisional — what the engagement set out to do ("set out to", "aimed to", "was scoped to"),',
+          'not what it accomplished. Say "provisional" or "needs review" within the first two sentences.',
+          `The record says the engagement is ${input.status}; do not say it is starting or ongoing.`,
+          'Keep it short rather than filling the gap.',
         ].join('\n')
       : [
           'The record is complete enough to describe what happened. Claim only what the objectives,',
@@ -75,8 +87,16 @@ export function buildChroniclePrompt(input: {
       field('Objectives', input.objectives?.length ? input.objectives.join('; ') : '(none recorded)'),
       field('Success criteria', input.successCriteria?.length ? input.successCriteria.join('; ') : '(none recorded)'),
       `Recorded activity: ${input.eventCount} events`,
+      ...(summaries.length > 0 ? [field('Recorded activity, in order', summaries.join('; '))] : []),
     ]),
     '',
+    ...(summaries.length > 0
+      ? [
+          'The recorded activity is the account of what the team did: quote it as given, in order,',
+          'and do not add a step, a result or a detail it does not state.',
+          '',
+        ]
+      : []),
     'Also list up to five success factors and up to five failure factors: what helped the',
     'engagement land and what got in its way. Ground each in the objectives, success criteria',
     'or recorded activity above. Return an empty list when the record does not support one.',

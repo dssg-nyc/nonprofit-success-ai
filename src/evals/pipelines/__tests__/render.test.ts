@@ -126,11 +126,11 @@ describe('renderReport', () => {
       cases: {},
       metrics: METRICS,
     });
-    expect(html).toContain('Skipped — no model key');
+    expect(html).toContain('Not evaluated — no model key');
     const rationale = html.slice(html.indexOf('id="scoutRationale"'));
-    expect(rationale).toContain('not run');
+    expect(rationale).toContain('Not evaluated');
     const scoring = html.slice(html.indexOf('id="architectScoring"'), html.indexOf('</section>', html.indexOf('id="architectScoring"')));
-    expect(scoring).not.toContain('Template · judge');
+    expect(scoring).not.toContain('Fallback · judge');
   });
 
   it('an errored judge is neither pass nor fail and carries its error code', () => {
@@ -199,7 +199,7 @@ describe('renderReport', () => {
     });
     expect(html).toContain('<span>Model path</span> <strong>ran, 0 of 21 succeeded</strong>');
     expect(html).toContain('<span>Judges</span> <strong>ran, 0 of 21 succeeded</strong>');
-    expect(html).toContain('all errored');
+    expect(html).toContain('Evaluation error');
   });
 
   it('shows the template and model rates side by side in the comparison', () => {
@@ -393,7 +393,7 @@ describe('scoreboard, trends and calibration', () => {
     expect(trend).toContain('drift: scout');
     // scoutRouting template·exact across the three: 90%, 100%, 100%; model·exact: —, 75%, 85%.
     expect(trend).toMatch(/scoutRouting[\s\S]*?<b>90%<\/b>[\s\S]*?<b>100%<\/b>[\s\S]*?<b>100%<\/b>/);
-    expect(trend).toMatch(/Model · exact match[\s\S]*?<td class="none">—<\/td>[\s\S]*?<b>75%<\/b>[\s\S]*?<b>85%<\/b>/);
+    expect(trend).toMatch(/Model · exact match[\s\S]*?<td class="none">Not evaluated<\/td>[\s\S]*?<b>75%<\/b>[\s\S]*?<b>85%<\/b>/);
   });
 
   it('trends: says so with fewer than two keyed runs, and leaves heuristic-only runs to the loader', () => {
@@ -487,7 +487,7 @@ describe('triage, per-check rates, scatter and latency charts', () => {
   it('buckets every failing verdict by what it means, in fix order, each linking to its case', () => {
     const html = renderReport(input());
     const t = section(html, 'triage-h');
-    const order = ['Fallback gives the wrong answer', 'Judge fails the template text, passes the model text', 'Judge fails both texts', 'Model disagrees with the spec', 'Judge fails the model text, passes the template text'];
+    const order = ['Fallback gives the wrong answer', 'Judge fails the fallback text, passes the model text', 'Judge fails both texts', 'Model disagrees with the spec', 'Judge fails the model text, passes the fallback text'];
     const positions = order.map((h) => t.indexOf(h));
     expect(positions.every((p) => p > -1)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -528,7 +528,7 @@ describe('triage, per-check rates, scatter and latency charts', () => {
     expect(cmp).toContain('model better <b class="t-good">1</b> · worse <b class="t-bad">1</b> · tie 1');
     expect(cmp).toContain('class="pt better"');
     expect(cmp).toContain('class="pt worse"');
-    expect(cmp).toContain('e-1 — template 0.50, model 1.00');
+    expect(cmp).toContain('e-1 — fallback 0.50, model 1.00');
   });
 
   it('charts agent latency apart from judge latency, slowest first, and keeps the full table', () => {
@@ -703,7 +703,7 @@ describe('overview — one screen: status by path, counts beside rates, dumbbell
     for (const id of ['id="calibration"', 'id="judges"', 'id="runs"', 'id="score-h"', 'id="trends"', 'id="cmp-h"']) expect(tab('calibration')).toContain(id);
     // The old #judges, #runs and #method hashes resolve: each is a real element id on the tab that now holds it, so route() opens that tab.
     for (const id of ['id="judges"', 'id="runs"']) expect(tab('calibration')).toContain(id);
-    for (const id of ['id="method"', 'id="readiness"', 'id="fixtures"', '<details class="glossary" id="glossary">']) expect(tab('overview')).toContain(id);
+    for (const id of ['id="method"', 'id="readiness"', '<details class="glossary" id="glossary">']) expect(tab('overview')).toContain(id);
     for (const id of ['id="judges"', 'id="runs"', 'id="method"', 'id="readiness"', 'id="glossary"']) expect(html.match(new RegExp(` ${id}`, 'g'))).toHaveLength(1);
     // The method block is collapsed to its head and first paragraph; the run material sits in collapsed details.
     const method = tab('overview').slice(tab('overview').indexOf('id="method"'));
@@ -874,7 +874,7 @@ describe('stakeholder sections — section pattern, readiness ladder, review que
     const t = section(html, 'triage-h');
     expect(t).toContain('<h3>Review queues <span class="count">4</span></h3>');
     expect(t).toContain('<th scope="row">Wrong fallback</th><td class="num">1</td><td>Is the fixture right? Yes → fix the code. No → fix the fixture.</td>');
-    expect(t).toContain('<th scope="row">Template text fails</th><td class="num">1</td>');
+    expect(t).toContain('<th scope="row">Fallback text fails</th><td class="num">1</td>');
     expect(t).toContain('<th scope="row">Judge disagrees with a hand label</th><td class="num">2</td><td>Is the hand label right? Yes → tighten the rubric line. No → relabel the output.</td>');
     expect(t).not.toContain('<th scope="row">No verdict</th>');
     // Examples: the exact-match row shows the mismatched field both ways and the fixture note; the judge row shows the lost dimension and the judge's first sentence.
@@ -902,7 +902,7 @@ describe('stakeholder sections — section pattern, readiness ladder, review que
     expect(rowsOf[0]).toContain('<td>Code</td><td>Fix the fallback for <strong>Routing accuracy</strong> on <code>bucket</code>: <code>r-1</code>.</td><td>Gate for Routing accuracy passes.</td><td class="num">S</td><td class="num">P1</td>');
     expect(rowsOf[1]).toContain('<td>Rubric</td><td>Tighten the <strong>scoutRationale</strong> rubric on <code>grounded</code>: it passed <code>sr-leak</code>.</td><td>No lenient verdict; scoutRationale trusted at 80%+.</td>');
     expect(a).toContain('<td>Rubric</td><td>Check the <strong>envoyDraft</strong> labels or soften its rubric: it failed <code>ed-strict</code> that a reader passed.</td>');
-    expect(a).toContain('<td>Template</td><td>Revise the template text for <strong>Email quality</strong> on <code>appropriate</code>: <code>e-1</code>.</td><td>Template judge rate on Email quality rises by 1 case.</td><td class="num">S</td><td class="num">P2</td>');
+    expect(a).toContain('<td>Fallback text</td><td>Revise the fallback text for <strong>Email quality</strong> on <code>appropriate</code>: <code>e-1</code>.</td><td>Fallback judge rate on Email quality rises by 1 case.</td><td class="num">S</td><td class="num">P2</td>');
     expect(a).toContain('<td>Readiness: fixtures written — <code>scoutRouting</code> 2, <code>envoyDraft</code> 1 under 20.</td><td>The next rung of the <a href="#readiness">ladder</a> turns green.</td>');
     expect(a).not.toContain('<td>Prompt</td>');
     // A clean run with a complete ladder has no table.
@@ -977,7 +977,7 @@ describe('stakeholder sections — section pattern, readiness ladder, review que
     const c = section(html, 'checks-h');
     expect(c).toContain('<th>Model</th><th>What it means</th>');
     expect(c).toContain('<td class="why">The fallback rule that sets this field is wrong on 1 of 2 cases — this is what fails the gate.</td>');
-    expect(c).toContain('<td class="why">The template string misses this rubric line; the model meets it — a string fix.</td>');
+    expect(c).toContain('<td class="why">The fallback text misses this rubric line; the model meets it — a string fix.</td>');
     expect(c).toContain('<td class="why">Holds on both paths.</td>');
   });
 });
@@ -1010,7 +1010,7 @@ describe('agent tabs — cases, the filter bar, the dimension chart, page weight
     const ok = caseBlock(html, 'e-ok');
     expect(ok).toContain('data-state="pass" data-search="e-ok"><summary>');
     expect(ok).toContain('<span class="note">a clean kickoff</span>');
-    expect(ok).toContain('<span class="pill pass">Judge on template: pass 1.00</span>');
+    expect(ok).toContain('<span class="pill pass">Judge on fallback: pass 1.00</span>');
     expect(ok).not.toContain('case-body');
     const blob = JSON.parse(html.slice(html.indexOf('id="case-data">') + 'id="case-data">'.length, html.indexOf('</script>', html.indexOf('id="case-data">')))) as {
       outputs: unknown[];
@@ -1049,7 +1049,7 @@ describe('agent tabs — cases, the filter bar, the dimension chart, page weight
     const html = renderReport(input());
     const tab = html.slice(html.indexOf('id="tab-envoy"'), html.indexOf('id="tab-calibration"'));
     expect(tab.match(/<div class="filter-bar" data-filter-bar>/g)).toHaveLength(1);
-    expect(tab).toContain('<option value="judge">Template · judge</option><option value="modelJudge">Model · judge</option>');
+    expect(tab).toContain('<option value="judge">Fallback · judge</option><option value="modelJudge">Model · judge</option>');
     expect(tab).toContain('<option value="appropriate">appropriate</option><option value="grounded">grounded</option>');
     expect(tab).toContain('<button type="button" class="chip" data-filter="fail" aria-pressed="false">Failing</button>');
     // Dimension × path, weakest first, each bar titled with rate and counts, legend beside.

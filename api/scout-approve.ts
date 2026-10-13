@@ -8,8 +8,9 @@ import { handler } from "./_request";
 /**
  * POST /api/scout-approve — the Scout-approve command (crm/lifecycle.md §4 row 1): the
  * "System" transition that opens the pipeline. One call to `approve_scout_intake()`
- * (0008_scout_approve): it reviews a pending intake (or takes one the review queue already
- * approved/edited), creates the `businesses` row linked by `scout_intake_id` if absent —
+ * (0008_scout_approve, reopen and `needs_info` in 0010): it reviews a pending or parked
+ * intake (or takes one the review queue already approved/edited; a declined one only
+ * with `reopen`), creates the `businesses` row linked by `scout_intake_id` if absent —
  * the column only a non-API role may set, which is why this cannot be done from the
  * browser — and opens `initial_meeting` through `transition_engagement()`, so the event,
  * the audit row and replay come from the single writer of stage. No model call: approving
@@ -31,6 +32,7 @@ const rpcResultSchema = z.object({
   business_created: z.boolean(),
   review_action: z.enum(["approved", "edited"]),
   final_bucket: z.string(),
+  reopened: z.boolean(),
   engagement_id: z.guid(),
   event_id: z.guid(),
   transitioned_at: z.string(),
@@ -106,6 +108,7 @@ export const POST = handler("scout-approve", async (request: Request) => {
     ...(req.reviewNotes ? { p_review_notes: req.reviewNotes } : {}),
     ...(req.businessType ? { p_business_type: req.businessType } : {}),
     ...(req.organizationId ? { p_organization_id: req.organizationId } : {}),
+    ...(req.reopen ? { p_reopen: true } : {}),
   });
   const out = rpcResultSchema.safeParse(result);
   if (rpcErr || !out.success) {
@@ -123,6 +126,7 @@ export const POST = handler("scout-approve", async (request: Request) => {
     businessCreated: out.data.business_created,
     reviewAction: out.data.review_action,
     finalBucket: out.data.final_bucket,
+    reopened: out.data.reopened,
     engagementId: out.data.engagement_id,
     eventId: out.data.event_id,
     transitionedAt: out.data.transitioned_at,

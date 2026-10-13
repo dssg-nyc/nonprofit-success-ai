@@ -65,6 +65,11 @@ export const scoutApproveRequestSchema = z.object({
   businessType: z.enum(["nonprofit", "small_business"]).optional(),
   /** Which organization to file under when the intake has none and the caller administers several. */
   organizationId: z.guid().optional(),
+  /**
+   * Reopen a declined (`redirected`) intake and approve it (0010). Off, a declined intake is
+   * refused with `guard_unmet`; reopening is an explicit act, recorded in the audit row.
+   */
+  reopen: z.boolean().optional(),
 });
 
 export const scoutApproveResponseSchema = z.object({
@@ -74,6 +79,8 @@ export const scoutApproveResponseSchema = z.object({
   businessCreated: z.boolean(),
   reviewAction: z.enum(["approved", "edited"]),
   finalBucket: z.enum(SCOUT_BUCKETS),
+  /** True when this call reopened a declined intake (`reopen` was sent and applied). */
+  reopened: z.boolean(),
   /** The `initial_meeting` row `transition_engagement()` opened. */
   engagementId: z.guid(),
   eventId: z.guid(),

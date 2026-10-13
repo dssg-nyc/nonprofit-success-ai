@@ -45,23 +45,44 @@ export function generateChronicleDraft(input: ChronicleInput): ChronicleDraft {
     ? `Success was defined as: ${input.successCriteria.join("; ")}.`
     : null;
 
-  const evidenceLine =
+  // The thin marker is the second sentence, not the last: a reviewer who reads two
+  // sentences has already learned the record is thin (chronicle.md §1; run 2,
+  // 2026-10-08: thin model stories said "provisional" late or not at all).
+  const provisionalLine =
     readiness === "thin"
       ? "This account is provisional: little of the engagement was recorded, so it needs review and filling in before it is shared."
-      : `The engagement ran to completion with ${input.eventCount} recorded touchpoints along the way.`;
+      : null;
+
+  // What the team did, in the caller's words and order — never reworded, never extended.
+  // Without summaries the count is all the record holds, and only a ready record can
+  // stand behind it as evidence.
+  const summaries = input.eventSummaries?.filter((s) => s.trim().length > 0) ?? [];
+  const activityParagraph =
+    summaries.length > 0
+      ? `Over ${input.eventCount} recorded touchpoints the team ${summaries.join("; ")}.`
+      : readiness === "ready"
+        ? `The engagement ran to completion with ${input.eventCount} recorded touchpoints along the way.`
+        : null;
+
+  const opening = [
+    `${input.orgName} completed an engagement with the DSSG volunteer programme.`,
+    provisionalLine,
+    objectiveLine,
+    criteriaLine,
+  ]
+    .filter((line): line is string => line !== null)
+    .join(" ");
 
   return {
     engagementId: input.engagementId,
     readiness,
     headline: `Working with ${input.orgName}`,
-    narrative: [
-      `${input.orgName} completed an engagement with the DSSG volunteer programme.`,
-      objectiveLine,
-      criteriaLine,
-      evidenceLine,
-    ]
-      .filter((line): line is string => line !== null)
-      .join(" "),
+    narrative:
+      activityParagraph === null
+        ? opening
+        : summaries.length > 0
+          ? `${opening}\n\n${activityParagraph}`
+          : `${opening} ${activityParagraph}`,
     // No achievement is recorded in the input, so none is claimed. A success criterion is
     // a definition, not a result.
     outcomes: [],
