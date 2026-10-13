@@ -1507,6 +1507,7 @@ export type Database = {
           p_idempotency_key: string;
           p_intake_id: string;
           p_organization_id?: string;
+          p_reopen?: boolean;
           p_review_notes?: string;
         };
         Returns: Json;
@@ -1592,7 +1593,7 @@ export type Database = {
       scout_confidence: "High" | "Medium" | "Low";
       scout_hitl_tier: "L2" | "L3";
       scout_review_action: "approved" | "edited" | "redirected";
-      scout_review_status: "pending" | "reviewed";
+      scout_review_status: "pending" | "reviewed" | "needs_info";
       staff_confidence: "low_comfort" | "some_adhoc" | "dedicated_staff";
       system_integration: "own_island" | "some_share" | "most_share_auto";
       user_role: "client" | "admin";
@@ -1756,7 +1757,7 @@ export const Constants = {
       scout_confidence: ["High", "Medium", "Low"],
       scout_hitl_tier: ["L2", "L3"],
       scout_review_action: ["approved", "edited", "redirected"],
-      scout_review_status: ["pending", "reviewed"],
+      scout_review_status: ["pending", "reviewed", "needs_info"],
       staff_confidence: ["low_comfort", "some_adhoc", "dedicated_staff"],
       system_integration: ["own_island", "some_share", "most_share_auto"],
       user_role: ["client", "admin"],

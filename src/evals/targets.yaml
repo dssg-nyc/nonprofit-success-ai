@@ -1,0 +1,90 @@
+# Eval metric targets — ARCHITECTURE.md's Evaluation section, made executable.
+#
+# `npm run eval:grade -- --gate` exits non-zero on any FAIL.
+# Keys are the name of a metric registered in registry.ts.
+#
+# Q0 gating (unit/schema/RLS tests) is already the gate via `npm run test`.
+# These are Q1 golden-set regression targets.
+
+# Interaction-eval metrics (pipelines/grade.ts, `--gate`) — gated on the judge
+# pass-rate when judges ran, heuristic pass-rate otherwise.
+#
+# --- Gated: measured over >= 20 fixtures --------------------------------------
+# scoutRouting: 21 hand-authored cases, 21 distinct inputs, expectations taken from
+# scout.md's composite and HITL rules (not read off the code). Measured 1.000 on
+# 2026-10-06 (heuristic, deterministic). A heuristic over a golden set has no noise
+# to allow for, so the threshold is the measured rate: any miss is a regression.
+scout_routing_pass_rate: 1.0
+
+# architectScoring: 25 hand-authored cases (band edges, the DI override, each flag, the
+# ML cross-check, the tooling and team-capacity score edges). Measured 1.000 on
+# 2026-10-06 (heuristic, deterministic) — threshold = measured rate.
+architect_scoring_pass_rate: 1.0
+
+# architectPlanStructure: the 23 architectCharter cases (fixture: 'architectCharter'),
+# every shape and all five buckets, expectations from architect.md's Rules. Measured
+# 1.000 on 2026-10-06 over the template path. The gate is the template path only; the
+# model path (`model pass`) is reported, never gated. Before the R5 plan.ts fix it
+# measured 0.957: established-governance-flag lost its required workstream.
+architect_plan_structure_pass_rate: 1.0
+
+# --- pulseHealth ---------------------------------------------------------------
+# Gated now that the set clears the eval-harness.md floor (>= 20 hand-authored cases):
+# 29 cases, measured 1.000 on 2026-10-07 (heuristic only, no model key). Covers both sides
+# of the 14/21-day silence thresholds, both sides of two stage windows, every stage in
+# STAGE_WINDOW_DAYS overdue, unknown stages, blocker ordering and the missing-plan note.
+pulse_health_pass_rate: 1.0
+
+# --- envoyDraftStructure -------------------------------------------------------
+# 25 hand-authored cases (fixture: 'envoyDraft'): every occasion x plan present/absent x
+# cadence present/absent, concerns on at_risk_follow_up, a long org name, an apostrophe.
+# Measured 1.000 on 2026-10-07 (heuristic only, no model key; template path).
+envoy_draft_structure_pass_rate: 1.0
+
+# --- chronicleReadiness --------------------------------------------------------
+# 23 hand-authored cases (fixture: 'chronicleDraft'): not_ready by status, thin at 0-2
+# events, ready at THIN_EVENT_THRESHOLD and above, criteria/objectives combinations.
+# Measured 1.000 on 2026-10-07 (heuristic only, no model key; template path).
+chronicle_readiness_pass_rate: 1.0
+
+# --- grounding lint (graders/heuristic/grounding.ts) ----------------------------
+# The judge findings of eval run 1 (2026-10-08) that a regex can detect, each graded on the
+# agent's existing cases (23 chronicleDraft, 25 envoyDraft, 23 architectCharter) over the
+# template path only. Measured 1.000 each on 2026-10-08 (heuristic only; template path)
+# after the R17 template fixes; before them chronicleGrounding and architectGrounding
+# failed on the templates that the judge had failed. A deny-list over a golden set has no
+# noise, so the threshold is the measured rate: any miss is a regression.
+chronicle_grounding_pass_rate: 1.0
+envoy_grounding_pass_rate: 1.0
+architect_grounding_pass_rate: 1.0
+# scoutGrounding (R18, 2026-10-13): run 2's Scout finding — rubric arithmetic ("3/3") and
+# wire field names in the rationale — on the 29 scoutRouting cases, template path, after
+# the scout-routing-0.06 prompt change. Measured 1.000 on 2026-10-13 (heuristic only).
+# The same run added the completed-told-as-beginning, late-provisional-marker, pipeline-
+# criterion and required-prose checks to the three lints above; still 1.000 each.
+scout_grounding_pass_rate: 1.0
+
+# --- Not gated -----------------------------------------------------------------
+# Procedure: eval-harness.md 'Keyed judge run' (R10, 2026-10-07)
+# A key absent from this file reports UNGATED in the gate output (grade.ts) rather
+# than being skipped silently — an ungated metric must look ungated.
+#
+# These stay commented because no one has observed their pass rates: judges need
+# OPENAI_API_KEY (judging the model path also needs GOOGLE_GENERATIVE_AI_API_KEY), and
+# a threshold invented without a measurement would gate production deploys (cd.yml) on
+# a guess. To activate: run `npm run eval:grade` with the keys set, note the judge
+# pass rate for each, then uncomment at a threshold at or just below the observed rate.
+#
+# envoy_draft_pass_rate: 0.8
+# chronicle_draft_pass_rate: 0.8
+# architect_charter_pass_rate: 0.8   # 23 cases now; judge never run
+#
+# scout_rationale_pass_rate was active at 0.8 with no fixtures, so it graded zero
+# cases — a gate that could never fire. It now grades the 21 scoutRouting cases
+# (registry `fixture: 'scoutRouting'`), but the judge has never run (no key), so
+# there is still no measured rate. Uncomment once one has been observed.
+# scout_rationale_pass_rate: 0.8
+#
+# Judge-on-model-output rates (`modelJudge*` in the summary) and model-path rates
+# are reported, never gated: model output varies run to run, and the gate certifies
+# the deterministic path the fallback contract guarantees.
