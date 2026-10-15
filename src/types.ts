@@ -24,6 +24,7 @@ export interface Engagement {
   notes?: string;
   budget_amount?: number;
   hackathon_project?: string;
+  stageLogs?: Array<{ text: string; timestamp: any }>;
   updatedAt: any;
 }
 

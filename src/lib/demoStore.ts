@@ -1,4 +1,4 @@
-import { ArchitectAssessment, ScoutIntake } from '../types';
+import { ArchitectAssessment, Business, Engagement, ScoutIntake } from '../types';
 
 /**
  * In-memory persistence for Demo Mode, which never touches Firestore.
@@ -14,3 +14,13 @@ export const demoAssessments = new Map<string, ArchitectAssessment>();
  * pages can read the handoff after navigation.
  */
 export const demoReviewedIntakes = new Map<string, ScoutIntake>();
+
+/**
+ * Demo-mode Business/Engagement records, keyed by business id. Populated by
+ * demoData.ts's seed pass and by ArchitectAssessment's graduation write, so
+ * Dashboard and BusinessPortal show the exact same partners that Review
+ * Queue and Ongoing Projects show — one connected demo dataset, not three
+ * disconnected hardcoded ones.
+ */
+export const demoBusinesses = new Map<string, Business>();
+export const demoEngagements = new Map<string, Engagement[]>();

@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
-import { LogOut, User as UserIcon, LayoutDashboard, Building2, Layers, Compass, ClipboardList } from 'lucide-react';
+import { LogOut, User as UserIcon, LayoutDashboard, Building2, Layers, Compass, ClipboardList, Rocket } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Components
@@ -14,6 +14,8 @@ import ScoutIntakeForm from './components/scout/ScoutIntakeForm';
 import ScoutReviewQueue from './components/scout/ScoutReviewQueue';
 import ArchitectAssessment from './components/architect/ArchitectAssessment';
 import ArchitectPlan from './components/architect/ArchitectPlan';
+import OngoingProjects from './components/architect/OngoingProjects';
+import FirstTimeIntakeGate from './components/onboarding/FirstTimeIntakeGate';
 
 function Navbar({ user, isAdmin, onLogout }: { user: any, isAdmin: boolean, onLogout: () => void }) {
   return (
@@ -64,6 +66,12 @@ function Navbar({ user, isAdmin, onLogout }: { user: any, isAdmin: boolean, onLo
                 Review Queue
               </Link>
             )}
+            {isAdmin && (
+              <Link to="/projects" className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2">
+                <Rocket size={14} />
+                Ongoing Projects
+              </Link>
+            )}
             <Link to="/apply" className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2">
               <Compass size={14} />
               Apply
@@ -87,18 +95,12 @@ function Navbar({ user, isAdmin, onLogout }: { user: any, isAdmin: boolean, onLo
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-6">
-            <Link to="/apply" className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2">
-              <Compass size={14} />
-              Apply
-            </Link>
-            <Link
-              to="/login"
-              className="btn-primary flex items-center gap-2"
-            >
-              Client Access
-            </Link>
-          </div>
+          <Link
+            to="/login"
+            className="btn-primary flex items-center gap-2"
+          >
+            Client Access
+          </Link>
         )}
       </div>
     </nav>
@@ -186,7 +188,17 @@ export default function App() {
             <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login onDemoMode={handleDemoMode} />} />
             <Route
               path="/dashboard"
-              element={user ? <Dashboard isDemo={isDemo} /> : <Navigate to="/login" />}
+              element={
+                !user ? (
+                  <Navigate to="/login" />
+                ) : isAdmin ? (
+                  <Dashboard isDemo={isDemo} />
+                ) : (
+                  <FirstTimeIntakeGate isDemo={isDemo}>
+                    <Dashboard isDemo={isDemo} />
+                  </FirstTimeIntakeGate>
+                )
+              }
             />
             <Route
               path="/business/:id"
@@ -196,6 +208,10 @@ export default function App() {
             <Route
               path="/scout/review"
               element={user && isAdmin ? <ScoutReviewQueue isDemo={isDemo} /> : <Navigate to={user ? "/dashboard" : "/login"} />}
+            />
+            <Route
+              path="/projects"
+              element={user && isAdmin ? <OngoingProjects isDemo={isDemo} /> : <Navigate to={user ? "/dashboard" : "/login"} />}
             />
             <Route
               path="/architect/assess/:intakeId"

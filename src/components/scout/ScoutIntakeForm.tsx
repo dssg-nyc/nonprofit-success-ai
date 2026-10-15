@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { PrimaryNeed, PRIMARY_NEED_OPTIONS } from '../../types';
 import { routeScoutIntake } from '../../lib/scoutRouting';
 import { motion } from 'motion/react';
@@ -8,6 +8,10 @@ import { CheckCircle2, Compass } from 'lucide-react';
 
 interface ScoutIntakeFormProps {
   isDemo?: boolean;
+  /** Instructional banner shown above the form — used by the post-login, first-time gate. */
+  introNote?: string;
+  /** When provided, the "thanks" screen offers a button to continue past this form. */
+  onSubmitted?: () => void;
 }
 
 const initialForm = {
@@ -24,8 +28,11 @@ const initialForm = {
   referral_source: '',
 };
 
-export default function ScoutIntakeForm({ isDemo }: ScoutIntakeFormProps) {
-  const [form, setForm] = useState(initialForm);
+export default function ScoutIntakeForm({ isDemo, introNote, onSubmitted }: ScoutIntakeFormProps) {
+  const [form, setForm] = useState(() => ({
+    ...initialForm,
+    contact_email: auth.currentUser?.email || '',
+  }));
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -86,6 +93,14 @@ export default function ScoutIntakeForm({ isDemo }: ScoutIntakeFormProps) {
           <p className="text-slate-500 text-sm font-medium leading-relaxed">
             We've received your application. A member of the DSSG NYC team will review it and follow up by email soon.
           </p>
+          {onSubmitted && (
+            <button
+              onClick={onSubmitted}
+              className="mt-8 w-full py-3.5 bg-dssg-blue text-white rounded-xl font-bold hover:bg-dssg-blue-light active:scale-[0.98] transition-all"
+            >
+              Continue to your dashboard
+            </button>
+          )}
         </motion.div>
       </div>
     );
@@ -98,6 +113,11 @@ export default function ScoutIntakeForm({ isDemo }: ScoutIntakeFormProps) {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-2xl bg-white p-8 sm:p-10 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-200"
       >
+        {introNote && (
+          <div className="mb-8 p-5 bg-blue-50 border border-blue-100 rounded-xl text-sm font-medium text-dssg-blue leading-relaxed">
+            {introNote}
+          </div>
+        )}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-50 rounded-2xl mb-4">
             <Compass className="text-dssg-blue" size={28} />

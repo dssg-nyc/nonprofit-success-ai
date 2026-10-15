@@ -8,7 +8,8 @@ import {
 } from '../../types';
 import { scoreAssessment } from '../../lib/architectScoring';
 import { generateCharter, generateNinetyDayPlan } from '../../lib/architectPlan';
-import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
+import { demoAssessments, demoBusinesses, demoEngagements, demoReviewedIntakes } from '../../lib/demoStore';
+import { businessIdForAssessment, buildGraduatedBusiness, buildGraduationEngagement } from '../../lib/graduation';
 import { motion } from 'motion/react';
 import { DraftingCompass, ChevronLeft, ArrowRight } from 'lucide-react';
 
@@ -132,12 +133,19 @@ export default function ArchitectAssessment({ isDemo }: Props) {
     };
 
     if (isDemo) {
-      demoAssessments.set(intakeId, {
+      const newAssessment = {
         id: intakeId,
         ...docBody,
         createdAt: { seconds: Date.now() / 1000 },
         updatedAt: { seconds: Date.now() / 1000 },
-      } as ArchitectAssessmentDoc);
+      } as ArchitectAssessmentDoc;
+      demoAssessments.set(intakeId, newAssessment);
+
+      const businessId = businessIdForAssessment(intakeId);
+      if (!demoBusinesses.has(businessId)) {
+        demoBusinesses.set(businessId, buildGraduatedBusiness(newAssessment, DEMO_USER.uid));
+        demoEngagements.set(businessId, [buildGraduationEngagement(businessId, DEMO_USER.uid)]);
+      }
       navigate(`/architect/plan/${intakeId}`);
       return;
     }
@@ -149,6 +157,21 @@ export default function ArchitectAssessment({ isDemo }: Props) {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+      // Graduate to a client account. There's no invite/claim flow yet for a
+      // prospective org's own login, so ownership is provisionally assigned
+      // to the staff member who conducted the assessment — same pattern as
+      // the "Account Manager" already shown on the Business Portal.
+      const businessId = businessIdForAssessment(intakeId);
+      const ownerId = auth.currentUser!.uid;
+      const businessSnap = await getDoc(doc(db, 'businesses', businessId));
+      if (!businessSnap.exists()) {
+        const business = buildGraduatedBusiness({ id: intakeId, org_name: intake.org_name }, ownerId);
+        await setDoc(doc(db, 'businesses', businessId), business);
+        const engagement = buildGraduationEngagement(businessId, ownerId);
+        await setDoc(doc(db, 'engagements', engagement.id), engagement);
+      }
+
       navigate(`/architect/plan/${intakeId}`);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `architectAssessments/${intakeId}`);
