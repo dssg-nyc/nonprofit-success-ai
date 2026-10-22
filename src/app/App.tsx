@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import { onAuthChange, fetchRole, signOut } from "../lib/supabase";
-import { LogOut, LayoutDashboard, Compass, ClipboardList } from "lucide-react";
+import { LogOut, LayoutDashboard, Compass, ClipboardList, Rocket } from "lucide-react";
 import { motion } from "motion/react";
 
 // Components
@@ -12,6 +12,8 @@ import ScoutIntakeForm from "../components/scout/ScoutIntakeForm";
 import ScoutReviewQueue from "../components/scout/ScoutReviewQueue";
 import ArchitectAssessment from "../components/architect/ArchitectAssessment";
 import ArchitectPlan from "../components/architect/ArchitectPlan";
+import OngoingProjects from "../components/architect/OngoingProjects";
+import FirstTimeIntakeGate from "../components/onboarding/FirstTimeIntakeGate";
 
 import type { AppUser } from "../lib/supabase";
 
@@ -84,6 +86,15 @@ function Navbar({
               >
                 <ClipboardList size={14} />
                 Review Queue
+              </Link>
+            )}
+            {isAdmin && (
+              <Link
+                to="/projects"
+                className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2"
+              >
+                <Rocket size={14} />
+                Ongoing Projects
               </Link>
             )}
             <Link
@@ -212,7 +223,15 @@ export default function App() {
             <Route
               path="/dashboard"
               element={
-                user ? <Dashboard isDemo={isDemo} /> : <Navigate to="/login" />
+                !user ? (
+                  <Navigate to="/login" />
+                ) : isAdmin ? (
+                  <Dashboard isDemo={isDemo} />
+                ) : (
+                  <FirstTimeIntakeGate isDemo={isDemo}>
+                    <Dashboard isDemo={isDemo} />
+                  </FirstTimeIntakeGate>
+                )
               }
             />
             <Route
@@ -238,6 +257,10 @@ export default function App() {
                   <Navigate to={user ? "/dashboard" : "/login"} />
                 )
               }
+            />
+            <Route
+              path="/projects"
+              element={user && isAdmin ? <OngoingProjects isDemo={isDemo} /> : <Navigate to={user ? "/dashboard" : "/login"} />}
             />
             <Route
               path="/architect/assess/:intakeId"

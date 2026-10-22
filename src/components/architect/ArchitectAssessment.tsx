@@ -9,7 +9,8 @@ import {
 } from '../../types';
 import { scoreAssessment } from '../../agents/architect/scoring';
 import { generateCharter, generateNinetyDayPlan } from '../../agents/architect/plan';
-import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
+import { demoAssessments, demoBusinesses, demoEngagements, demoReviewedIntakes } from '../../lib/demoStore';
+import { businessIdForAssessment, buildGraduatedBusiness, buildGraduationEngagement } from '../../lib/graduation';
 import { motion } from 'motion/react';
 import { DraftingCompass, ChevronLeft, ArrowRight } from 'lucide-react';
 
@@ -18,6 +19,65 @@ interface Props {
 }
 
 const DEMO_USER = { uid: 'demo-user-123', email: 'demo@nyc-dssg.org' };
+
+const GRADUATION_NOTE = 'Graduated from Architect assessment — charter and 90-day plan generated.';
+
+/**
+ * Idempotent live graduation. The business id is the assessment id (a uuid),
+ * so a second submit finds the row and does nothing. The scoping engagement
+ * and its first log land in `engagements` / `engagement_events`, which is
+ * where the portal reads stage history.
+ */
+async function graduateToClientAccount(intakeId: string, orgName: string, ownerId: string) {
+  const businessId = businessIdForAssessment(intakeId);
+  const { data: existing, error: lookupError } = await supabase
+    .from('businesses')
+    .select('id')
+    .eq('id', businessId)
+    .maybeSingle();
+
+  if (lookupError) handleSupabaseError(lookupError, OperationType.GET, `businesses/${businessId}`);
+  if (existing) return;
+
+  const { error: businessError } = await supabase.from('businesses').insert(
+    toColumns({
+      id: businessId,
+      name: orgName,
+      type: 'nonprofit',
+      ownerId,
+      certified: false,
+    }),
+  );
+  if (businessError) handleSupabaseError(businessError, OperationType.CREATE, `businesses/${businessId}`);
+
+  const { data: engagement, error: engagementError } = await supabase
+    .from('engagements')
+    .insert(
+      toColumns({
+        businessId,
+        ownerId,
+        stage: 'scoping',
+        status: 'completed',
+        assessmentId: intakeId,
+        notes: GRADUATION_NOTE,
+        updatedAt: new Date().toISOString(),
+      }),
+    )
+    .select('id')
+    .single();
+
+  if (engagementError || !engagement) {
+    handleSupabaseError(engagementError, OperationType.CREATE, 'engagements');
+  }
+
+  const { error: eventError } = await supabase.from('engagement_events').insert({
+    engagement_id: engagement.id,
+    kind: 'note_added',
+    detail: GRADUATION_NOTE,
+    created_by: ownerId,
+  });
+  if (eventError) handleSupabaseError(eventError, OperationType.CREATE, 'engagement_events');
+}
 
 const emptyAnswers = {
   q1_org_context: '', q2_org_size: '', q3_poc: '',
@@ -159,12 +219,19 @@ export default function ArchitectAssessment({ isDemo }: Props) {
     };
 
     if (isDemo) {
-      demoAssessments.set(intakeId, {
+      const newAssessment = {
         id: intakeId,
         ...docBody,
         createdAt: { seconds: Date.now() / 1000 },
         updatedAt: { seconds: Date.now() / 1000 },
-      } as ArchitectAssessmentDoc);
+      } as ArchitectAssessmentDoc;
+      demoAssessments.set(intakeId, newAssessment);
+
+      const businessId = businessIdForAssessment(intakeId);
+      if (!demoBusinesses.has(businessId)) {
+        demoBusinesses.set(businessId, buildGraduatedBusiness(newAssessment, DEMO_USER.uid));
+        demoEngagements.set(businessId, [buildGraduationEngagement(businessId, DEMO_USER.uid)]);
+      }
       navigate(`/architect/plan/${intakeId}`);
       return;
     }
@@ -179,6 +246,14 @@ export default function ArchitectAssessment({ isDemo }: Props) {
         .upsert(toColumns({ ...docBody, id: intakeId }), { onConflict: 'id' });
 
       if (error) handleSupabaseError(error, OperationType.WRITE, `architect_assessments/${intakeId}`);
+
+      // Graduate to a client account. There's no invite/claim flow yet for a
+      // prospective org's own login, so ownership is provisionally assigned
+      // to the staff member who conducted the assessment — same pattern as
+      // the "Account Manager" already shown on the Business Portal.
+      if (currentUser) {
+        await graduateToClientAccount(intakeId, intake.org_name, currentUser.id);
+      }
 
       navigate(`/architect/plan/${intakeId}`);
     } catch (err) {

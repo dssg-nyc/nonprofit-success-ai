@@ -28,6 +28,12 @@ export interface Business {
 export type EngagementStage = 'initial_meeting' | 'budget_check' | 'data_ethics_committee' | 'scoping' | 'hackathon_ready' | 'membership';
 export type EngagementStatus = 'pending' | 'in_progress' | 'completed';
 
+/** One entry in a stage's activity log. Demo mode keeps these on the engagement; live mode mirrors them into `engagement_events`. */
+export interface StageLog {
+  text: string;
+  timestamp: WriteTimestamp;
+}
+
 export interface Engagement {
   id: string;
   businessId: string;
@@ -39,6 +45,7 @@ export interface Engagement {
   notes?: string;
   budget_amount?: number;
   hackathon_project?: string;
+  stageLogs?: StageLog[];
   updatedAt: WriteTimestamp;
 }
 

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { motion } from 'motion/react';
-import { Mail, Lock, Globe, Eye } from 'lucide-react';
+import { Mail, Lock, Globe, Eye, Compass } from 'lucide-react';
 
 interface LoginProps {
   onDemoMode: () => void;
 }
 
 export default function Login({ onDemoMode }: LoginProps) {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -70,10 +72,10 @@ export default function Login({ onDemoMode }: LoginProps) {
             <img src="/logo.png" alt="DSSG NYC" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-3xl font-display font-bold text-dssg-blue tracking-tight">
-            {isRegistering ? 'Join the Mission' : 'Client Access'}
+            {isRegistering ? 'Join the Mission' : 'Partner Portal'}
           </h2>
-          <p className="text-slate-500 mt-2 text-sm font-medium">
-            NYC's premier customer success portal
+          <p className="text-slate-500 mt-2 text-xs font-medium whitespace-nowrap">
+            DSSG NYC's Success Portal for Partner Org and Project Managers
           </p>
         </div>
 
@@ -92,6 +94,14 @@ export default function Login({ onDemoMode }: LoginProps) {
           >
             <Eye className="text-blue-300" size={18} />
             Enter Demo Mode
+          </button>
+
+          <button
+            onClick={() => navigate('/apply')}
+            className="w-full py-3 px-4 bg-dssg-orange text-white rounded-xl font-bold hover:bg-dssg-orange-light transition-all flex items-center justify-center gap-3 shadow-lg shadow-orange-900/10"
+          >
+            <Compass size={18} />
+            Get Started with First Time Applicant Survey
           </button>
 
           <div className="relative py-4">
