@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { supabase, liveQuery, handleSupabaseError, OperationType } from '../../lib/supabase';
 import { ArchitectAssessment } from '../../types';
 import { demoAssessments } from '../../lib/demoStore';
+import '../../lib/demoData';
 import { businessIdForAssessment } from '../../lib/graduation';
 import {
   Rocket, Building2, CalendarRange, FileText, ArrowRight, UserSquare2,
@@ -31,13 +31,22 @@ export default function OngoingProjects({ isDemo }: Props) {
       return;
     }
 
-    const unsubscribe = onSnapshot(collection(db, 'architectAssessments'), (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ArchitectAssessment));
-      setProjects(data);
-      setLoading(false);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'architectAssessments');
-    });
+    // Admin-only at the database (architect_assessments policies check is_admin()).
+    const unsubscribe = liveQuery<ArchitectAssessment>(
+      'architect_assessments',
+      () => supabase.from('architect_assessments').select('*'),
+      (rows) => {
+        setProjects(rows);
+        setLoading(false);
+      },
+      (err) => {
+        setLoading(false);
+        try {
+          handleSupabaseError(err, OperationType.LIST, 'architect_assessments');
+        } catch { /* logged */ }
+      },
+      ['createdAt', 'updatedAt'],
+    );
 
     return unsubscribe;
   }, [isDemo]);

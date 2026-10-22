@@ -1,7 +1,10 @@
 import { ArchitectAssessment, CsaTool, PrimaryNeed, ScoutIntake } from '../types';
-import { routeScoutIntake, getOnboardingKitName, ScoutRoutingInput } from './scoutRouting';
-import { scoreAssessment, CsaScoredAnswers } from './architectScoring';
-import { generateCharter, generateNinetyDayPlan, PlanGenerationInput } from './architectPlan';
+import type { ScoutRoutingInput } from '../types';
+import { routeScoutIntake, getOnboardingKitName } from '../agents/scout/routing';
+import { scoreAssessment } from '../agents/architect/scoring';
+import type { CsaScoredAnswers } from '../agents/architect/scoring';
+import { generateCharter, generateNinetyDayPlan } from '../agents/architect/plan';
+import type { PlanGenerationInput } from '../agents/architect/plan';
 import {
   demoAssessments, demoBusinesses, demoEngagements,
 } from './demoStore';

@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { supabase, handleSupabaseError, rowToDomain, OperationType } from '../../lib/supabase';
 import { ArchitectAssessment } from '../../types';
-import { DIMENSION_LABELS, LEVEL_NAMES } from '../../lib/architectScoring';
+import { DIMENSION_LABELS, LEVEL_NAMES } from '../../agents/architect/scoring';
 import { demoAssessments } from '../../lib/demoStore';
 import { motion } from 'motion/react';
 import {
   DraftingCompass, ChevronLeft, AlertTriangle, ShieldAlert, Flag,
   CalendarRange, FileText, FileSignature, Presentation, Pencil, CheckCircle2,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 interface Props {
   isDemo?: boolean;
@@ -39,14 +39,24 @@ export default function ArchitectPlan({ isDemo }: Props) {
       return;
     }
 
-    getDoc(doc(db, 'architectAssessments', intakeId))
-      .then(snap => {
-        if (snap.exists()) setAssessment({ id: snap.id, ...snap.data() } as ArchitectAssessment);
-      })
-      .catch(err => {
-        try { handleFirestoreError(err, OperationType.GET, `architectAssessments/${intakeId}`); } catch { /* logged */ }
-      })
-      .finally(() => setLoading(false));
+    // `architect_assessments.id` IS the source intake id (a 1:1 with scout_intakes that
+    // firestore.rules:200 also enforced), so this stays a primary-key lookup, not a filter
+    // on a separate column.
+    supabase
+      .from('architect_assessments')
+      .select('*')
+      .eq('id', intakeId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          try {
+            handleSupabaseError(error, OperationType.GET, `architect_assessments/${intakeId}`);
+          } catch { /* logged */ }
+        } else if (data) {
+          setAssessment(rowToDomain<ArchitectAssessment>(data, ['createdAt', 'updatedAt']));
+        }
+        setLoading(false);
+      });
   }, [intakeId, isDemo]);
 
   if (loading) return <div className="h-screen flex items-center justify-center text-slate-400 text-sm font-medium">Loading plan…</div>;
@@ -256,7 +266,7 @@ export default function ArchitectPlan({ isDemo }: Props) {
   );
 }
 
-function Banner({ icon: Icon, tone, title, body }: { icon: any; tone: 'rose' | 'amber'; title: string; body: string }) {
+function Banner({ icon: Icon, tone, title, body }: { icon: LucideIcon; tone: 'rose' | 'amber'; title: string; body: string }) {
   const styles = tone === 'rose'
     ? 'bg-rose-50 border-rose-200 text-rose-700'
     : 'bg-amber-50 border-amber-200 text-amber-700';
@@ -271,7 +281,7 @@ function Banner({ icon: Icon, tone, title, body }: { icon: any; tone: 'rose' | '
   );
 }
 
-function TabButton({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: any; label: string }) {
+function TabButton({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: LucideIcon; label: string }) {
   return (
     <button
       onClick={onClick}

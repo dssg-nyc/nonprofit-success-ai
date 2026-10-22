@@ -2,13 +2,13 @@ import { ArchitectAssessment, Business, Engagement } from '../types';
 
 /**
  * Bridges the Scout/Architect pipeline to the client-facing Business/Engagement
- * model. Deterministic id derivation (rather than a stored pointer) keeps
- * "has this assessment graduated to a Business?" a pure existence check —
- * safe to call idempotently from both the demo and real write paths.
+ * model. The business id is the assessment id, so "has this graduated?" is an
+ * existence check. Live assessment ids are the scout-intake uuid, which is a
+ * valid `businesses.id`. Demo ids never reach Postgres.
  */
 
 export function businessIdForAssessment(assessmentId: string): string {
-  return `biz_${assessmentId}`;
+  return assessmentId;
 }
 
 export function buildGraduatedBusiness(

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
+import {
+  supabase, toColumns, rowToDomain, handleSupabaseError, OperationType,
+} from '../../lib/supabase';
 import {
   ScoutIntake, ArchitectAssessment as ArchitectAssessmentDoc,
   CSA_OPTIONS, CSA_TOOL_OPTIONS, CsaTool, ScoutBucket,
 } from '../../types';
-import { scoreAssessment } from '../../lib/architectScoring';
-import { generateCharter, generateNinetyDayPlan } from '../../lib/architectPlan';
+import { scoreAssessment } from '../../agents/architect/scoring';
+import { generateCharter, generateNinetyDayPlan } from '../../agents/architect/plan';
 import { demoAssessments, demoBusinesses, demoEngagements, demoReviewedIntakes } from '../../lib/demoStore';
 import { businessIdForAssessment, buildGraduatedBusiness, buildGraduationEngagement } from '../../lib/graduation';
 import { motion } from 'motion/react';
@@ -18,6 +19,65 @@ interface Props {
 }
 
 const DEMO_USER = { uid: 'demo-user-123', email: 'demo@nyc-dssg.org' };
+
+const GRADUATION_NOTE = 'Graduated from Architect assessment — charter and 90-day plan generated.';
+
+/**
+ * Idempotent live graduation. The business id is the assessment id (a uuid),
+ * so a second submit finds the row and does nothing. The scoping engagement
+ * and its first log land in `engagements` / `engagement_events`, which is
+ * where the portal reads stage history.
+ */
+async function graduateToClientAccount(intakeId: string, orgName: string, ownerId: string) {
+  const businessId = businessIdForAssessment(intakeId);
+  const { data: existing, error: lookupError } = await supabase
+    .from('businesses')
+    .select('id')
+    .eq('id', businessId)
+    .maybeSingle();
+
+  if (lookupError) handleSupabaseError(lookupError, OperationType.GET, `businesses/${businessId}`);
+  if (existing) return;
+
+  const { error: businessError } = await supabase.from('businesses').insert(
+    toColumns({
+      id: businessId,
+      name: orgName,
+      type: 'nonprofit',
+      ownerId,
+      certified: false,
+    }),
+  );
+  if (businessError) handleSupabaseError(businessError, OperationType.CREATE, `businesses/${businessId}`);
+
+  const { data: engagement, error: engagementError } = await supabase
+    .from('engagements')
+    .insert(
+      toColumns({
+        businessId,
+        ownerId,
+        stage: 'scoping',
+        status: 'completed',
+        assessmentId: intakeId,
+        notes: GRADUATION_NOTE,
+        updatedAt: new Date().toISOString(),
+      }),
+    )
+    .select('id')
+    .single();
+
+  if (engagementError || !engagement) {
+    handleSupabaseError(engagementError, OperationType.CREATE, 'engagements');
+  }
+
+  const { error: eventError } = await supabase.from('engagement_events').insert({
+    engagement_id: engagement.id,
+    kind: 'note_added',
+    detail: GRADUATION_NOTE,
+    created_by: ownerId,
+  });
+  if (eventError) handleSupabaseError(eventError, OperationType.CREATE, 'engagement_events');
+}
 
 const emptyAnswers = {
   q1_org_context: '', q2_org_size: '', q3_poc: '',
@@ -53,17 +113,41 @@ export default function ArchitectAssessment({ isDemo }: Props) {
       }
 
       try {
-        const snap = await getDoc(doc(db, 'scoutIntakes', intakeId));
-        if (!snap.exists() || snap.data().reviewStatus !== 'reviewed' || !snap.data().finalBucket) {
+        const { data: intakeRow, error: intakeErr } = await supabase
+          .from('scout_intakes')
+          .select('*')
+          .eq('id', intakeId)
+          .maybeSingle();
+
+        if (intakeErr) throw intakeErr;
+
+        const loaded = intakeRow
+          ? rowToDomain<ScoutIntake>(intakeRow, ['submittedAt', 'reviewedAt'])
+          : null;
+
+        // An assessment may only be built on an intake a reviewer has already approved and
+        // bucketed — the same precondition the Firestore version enforced, and what
+        // architect_assessments' insert policy checks server-side.
+        if (!loaded || loaded.reviewStatus !== 'reviewed' || !loaded.finalBucket) {
           setNotFound(true); setLoading(false); return;
         }
-        setIntake({ id: snap.id, ...snap.data() } as ScoutIntake);
-        const existingSnap = await getDoc(doc(db, 'architectAssessments', intakeId));
-        if (existingSnap.exists()) {
-          setAnswers({ ...emptyAnswers, ...pickAnswers(existingSnap.data() as ArchitectAssessmentDoc) });
+        setIntake(loaded);
+
+        // architect_assessments.id IS the intake id (1:1), so this is a PK lookup.
+        const { data: existing } = await supabase
+          .from('architect_assessments')
+          .select('*')
+          .eq('id', intakeId)
+          .maybeSingle();
+
+        if (existing) {
+          setAnswers({
+            ...emptyAnswers,
+            ...pickAnswers(rowToDomain<ArchitectAssessmentDoc>(existing, [])),
+          });
         }
       } catch (err) {
-        try { handleFirestoreError(err, OperationType.GET, `architectAssessments/${intakeId}`); } catch { /* logged */ }
+        try { handleSupabaseError(err, OperationType.GET, `architect_assessments/${intakeId}`); } catch { /* logged */ }
         setNotFound(true);
       } finally {
         setLoading(false);
@@ -89,6 +173,8 @@ export default function ArchitectAssessment({ isDemo }: Props) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!intake || !intakeId) return;
+
+    const currentUser = isDemo ? null : (await supabase.auth.getUser()).data.user;
 
     const bucket = intake.finalBucket as ScoutBucket;
     const scored = {
@@ -128,8 +214,8 @@ export default function ArchitectAssessment({ isDemo }: Props) {
       ...maturity,
       charter,
       ninetyDayPlan,
-      createdBy: isDemo ? DEMO_USER.uid : auth.currentUser?.uid,
-      createdByEmail: isDemo ? DEMO_USER.email : auth.currentUser?.email,
+      createdBy: isDemo ? DEMO_USER.uid : currentUser?.id,
+      createdByEmail: isDemo ? DEMO_USER.email : currentUser?.email ?? undefined,
     };
 
     if (isDemo) {
@@ -152,29 +238,28 @@ export default function ArchitectAssessment({ isDemo }: Props) {
 
     setSaving(true);
     try {
-      await setDoc(doc(db, 'architectAssessments', intakeId), {
-        ...docBody,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+      // upsert, not insert: setDoc with a fixed id overwrote an existing document, and the
+      // form is reachable again for an already-assessed intake (it pre-loads the previous
+      // answers above). `id` is the conflict target because it IS the intake id.
+      const { error } = await supabase
+        .from('architect_assessments')
+        .upsert(toColumns({ ...docBody, id: intakeId }), { onConflict: 'id' });
+
+      if (error) handleSupabaseError(error, OperationType.WRITE, `architect_assessments/${intakeId}`);
 
       // Graduate to a client account. There's no invite/claim flow yet for a
       // prospective org's own login, so ownership is provisionally assigned
       // to the staff member who conducted the assessment — same pattern as
       // the "Account Manager" already shown on the Business Portal.
-      const businessId = businessIdForAssessment(intakeId);
-      const ownerId = auth.currentUser!.uid;
-      const businessSnap = await getDoc(doc(db, 'businesses', businessId));
-      if (!businessSnap.exists()) {
-        const business = buildGraduatedBusiness({ id: intakeId, org_name: intake.org_name }, ownerId);
-        await setDoc(doc(db, 'businesses', businessId), business);
-        const engagement = buildGraduationEngagement(businessId, ownerId);
-        await setDoc(doc(db, 'engagements', engagement.id), engagement);
+      if (currentUser) {
+        await graduateToClientAccount(intakeId, intake.org_name, currentUser.id);
       }
 
       navigate(`/architect/plan/${intakeId}`);
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `architectAssessments/${intakeId}`);
+      try {
+        handleSupabaseError(err, OperationType.WRITE, `architect_assessments/${intakeId}`);
+      } catch { /* logged */ }
     } finally {
       setSaving(false);
     }

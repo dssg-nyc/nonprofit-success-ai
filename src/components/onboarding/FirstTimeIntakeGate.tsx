@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { collection, query, where, limit, getDocs } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { supabase, handleSupabaseError, OperationType } from '../../lib/supabase';
 import ScoutIntakeForm from '../scout/ScoutIntakeForm';
 
 const INTRO_NOTE =
@@ -17,18 +16,13 @@ const gateKey = (uid: string) => `dssg_intake_gate_cleared_${uid}`;
  * submit the survey, so returning partners are never walled off again.
  */
 export default function FirstTimeIntakeGate({ isDemo, children }: { isDemo?: boolean; children: ReactNode }) {
-  const uid = auth.currentUser?.uid;
+  const [uid, setUid] = useState<string | null>(null);
   const [status, setStatus] = useState<'checking' | 'needs-intake' | 'cleared'>(
-    isDemo || !uid ? 'cleared' : 'checking'
+    isDemo ? 'cleared' : 'checking'
   );
 
   useEffect(() => {
-    if (isDemo || !uid) {
-      setStatus('cleared');
-      return;
-    }
-
-    if (localStorage.getItem(gateKey(uid)) === 'true') {
+    if (isDemo) {
       setStatus('cleared');
       return;
     }
@@ -36,22 +30,36 @@ export default function FirstTimeIntakeGate({ isDemo, children }: { isDemo?: boo
     let cancelled = false;
     (async () => {
       try {
-        const q = query(collection(db, 'businesses'), where('ownerId', '==', uid), limit(1));
-        const snapshot = await getDocs(q);
+        const { data: { user } } = await supabase.auth.getUser();
         if (cancelled) return;
+        if (!user) {
+          setStatus('cleared');
+          return;
+        }
 
-        if (snapshot.empty) {
+        setUid(user.id);
+        if (localStorage.getItem(gateKey(user.id)) === 'true') {
+          setStatus('cleared');
+          return;
+        }
+
+        // businesses_select_own already restricts this to the caller's rows.
+        const { data, error } = await supabase.from('businesses').select('id').limit(1);
+        if (cancelled) return;
+        if (error) handleSupabaseError(error, OperationType.LIST, 'businesses');
+
+        if (!data || data.length === 0) {
           setStatus('needs-intake');
         } else {
-          localStorage.setItem(gateKey(uid), 'true');
+          localStorage.setItem(gateKey(user.id), 'true');
           setStatus('cleared');
         }
       } catch (err) {
         if (cancelled) return;
         try {
-          handleFirestoreError(err, OperationType.LIST, 'businesses');
+          handleSupabaseError(err, OperationType.LIST, 'businesses');
         } catch {
-          // handleFirestoreError logs then rethrows by design — swallowed so a
+          // handleSupabaseError logs then rethrows by design — swallowed so a
           // failed check doesn't strand a real partner behind a broken gate.
         }
         setStatus('cleared');
@@ -61,7 +69,7 @@ export default function FirstTimeIntakeGate({ isDemo, children }: { isDemo?: boo
     return () => {
       cancelled = true;
     };
-  }, [isDemo, uid]);
+  }, [isDemo]);
 
   if (status === 'checking') {
     return (

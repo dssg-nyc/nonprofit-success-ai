@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, onSnapshot, updateDoc, setDoc, serverTimestamp, addDoc } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { Business, Engagement, EngagementStage, EngagementStatus } from '../../types';
+import {
+  supabase, liveQuery, toColumns, rowToDomain, handleSupabaseError, OperationType,
+} from '../../lib/supabase';
+import { Business, Engagement, EngagementStage, EngagementStatus, StageLog } from '../../types';
 import { demoBusinesses, demoEngagements } from '../../lib/demoStore';
+import '../../lib/demoData';
 import { motion, AnimatePresence } from 'motion/react';
+import type { LucideIcon } from 'lucide-react';
 import {
   History,
   DollarSign,
@@ -14,14 +17,51 @@ import {
   CheckCircle,
   ChevronLeft,
   RefreshCcw,
-  Calendar,
   Save,
-  Clock,
-  ExternalLink,
   Building2
 } from 'lucide-react';
 
-const STAGES: { id: EngagementStage; label: string; short: string; icon: any; color: string }[] = [
+interface FeedItem {
+  id: string;
+  type: 'status' | 'log';
+  stage: EngagementStage;
+  stageName: string;
+  status?: EngagementStatus;
+  text?: string;
+  timestamp: number;
+  engagement: Engagement;
+}
+
+/** Fold `engagement_events` note rows back onto the engagements the portal renders as stage logs. */
+async function attachStageLogs(engagements: Engagement[]): Promise<Engagement[]> {
+  if (engagements.length === 0) return engagements;
+  const ids = engagements.map(e => e.id).filter(Boolean);
+  if (ids.length === 0) return engagements;
+
+  const { data, error } = await supabase
+    .from('engagement_events')
+    .select('engagement_id, detail, created_at, kind')
+    .in('engagement_id', ids)
+    .order('created_at', { ascending: true });
+
+  if (error || !data) return engagements;
+
+  const byEng = new Map<string, StageLog[]>();
+  for (const row of data as Array<{ engagement_id: string; detail: string | null; created_at: string; kind: string }>) {
+    if (row.kind !== 'note_added' || !row.detail) continue;
+    const ms = Date.parse(row.created_at);
+    const logs = byEng.get(row.engagement_id) ?? [];
+    logs.push({ text: row.detail, timestamp: { seconds: Number.isNaN(ms) ? 0 : ms / 1000 } });
+    byEng.set(row.engagement_id, logs);
+  }
+
+  return engagements.map(e => ({
+    ...e,
+    stageLogs: byEng.get(e.id) ?? e.stageLogs ?? [],
+  }));
+}
+
+const STAGES: { id: EngagementStage; label: string; short: string; icon: LucideIcon; color: string }[] = [
   { id: 'initial_meeting', label: 'Initial Meeting', short: 'Meeting', icon: History, color: 'text-blue-600 bg-blue-100' },
   { id: 'budget_check', label: 'Budget Check', short: 'Budget', icon: DollarSign, color: 'text-emerald-600 bg-emerald-100' },
   { id: 'data_ethics_committee', label: 'Data Ethics Committee', short: 'Ethics', icon: ShieldCheck, color: 'text-amber-600 bg-amber-100' },
@@ -40,7 +80,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
   const [saving, setSaving] = useState(false);
   const [stageLogTab, setStageLogTab] = useState<'current' | 'history'>('current');
   const [newLogEntry, setNewLogEntry] = useState('');
-  const [feedDetail, setFeedDetail] = useState<any>(null);
+  const [feedDetail, setFeedDetail] = useState<FeedItem | null>(null);
 
   useEffect(() => {
     if (isDemo && id) {
@@ -60,54 +100,64 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       return;
     }
 
-    if (!id || !auth.currentUser) return;
+    if (!id) return;
 
-    // Fetch Business
+    // Fetch Business. RLS restricts this to rows the caller owns, so a business belonging
+    // to someone else comes back empty and redirects — the same outcome as "not found",
+    // which is deliberate: it does not disclose that the row exists.
     const fetchBusiness = async () => {
-      try {
-        const d = await getDoc(doc(db, 'businesses', id));
-        if (d.exists()) {
-          setBusiness({ id: d.id, ...d.data() } as Business);
-        } else {
-          navigate('/dashboard');
-        }
-      } catch (err) {
-        handleFirestoreError(err, OperationType.GET, `businesses/${id}`);
+      const { data, error } = await supabase
+        .from('businesses')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error) {
+        try {
+          handleSupabaseError(error, OperationType.GET, `businesses/${id}`);
+        } catch { /* logged */ }
+        return;
       }
+
+      if (data) setBusiness(rowToDomain<Business>(data, ['createdAt', 'updatedAt']));
+      else navigate('/dashboard');
     };
 
-    fetchBusiness();
+    void fetchBusiness();
 
-    // Listen to Engagements
-    const q = query(
-      collection(db, 'engagements'),
-      where('businessId', '==', id)
+    const unsubscribe = liveQuery<Engagement>(
+      'engagements',
+      () => supabase.from('engagements').select('*').eq('business_id', id),
+      (data) => {
+        void attachStageLogs(data).then((withLogs) => {
+          setEngagements(withLogs);
+
+          // If we have engagements, set the latest one as active by default or the first one
+          if (withLogs.length > 0) {
+            const inProgress = withLogs.find(e => e.status === 'in_progress');
+            if (inProgress) setActiveStage(inProgress.stage);
+            else setActiveStage(withLogs[withLogs.length - 1].stage);
+          }
+
+          setLoading(false);
+        });
+      },
+      (err) => {
+        setLoading(false);
+        try {
+          handleSupabaseError(err, OperationType.LIST, 'engagements');
+        } catch { /* logged */ }
+      },
+      ['createdAt', 'updatedAt'],
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Engagement));
-      setEngagements(data);
-      
-      // If we have engagements, set the latest one as active by default or the first one
-      if (data.length > 0) {
-        // Find most recent or in_progress stage
-        const inProgress = data.find(e => e.status === 'in_progress');
-        if (inProgress) setActiveStage(inProgress.stage);
-        else setActiveStage(data[data.length - 1].stage);
-      }
-      
-      setLoading(false);
-    }, (err) => {
-      handleFirestoreError(err, OperationType.LIST, 'engagements');
-    });
-
     return unsubscribe;
-  }, [id]);
+  }, [id, isDemo, navigate]);
 
   const getCurrentEngagement = () => engagements.find(e => e.stage === activeStage);
 
   const generateFeedItems = () => {
-    const items: any[] = [];
+    const items: FeedItem[] = [];
     engagements.forEach(engagement => {
       items.push({
         id: `${engagement.id}-status`,
@@ -161,31 +211,62 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       return;
     }
 
-    if (!id || !auth.currentUser) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!id || !user) return;
     setSaving(true);
 
     const existing = getCurrentEngagement();
+    const entry: StageLog = { text: logText.trim(), timestamp: { seconds: Date.now() / 1000 } };
 
     try {
-      if (existing) {
-        const logs = existing.stageLogs || [];
-        await updateDoc(doc(db, 'engagements', existing.id), {
-          stageLogs: [...logs, { text: logText, timestamp: serverTimestamp() }],
-          updatedAt: serverTimestamp(),
-        });
-      } else {
-        const engagementId = `${id}_${activeStage}`;
-        await setDoc(doc(db, 'engagements', engagementId), {
-          businessId: id,
-          ownerId: auth.currentUser.uid,
-          stage: activeStage,
-          status: 'pending',
-          stageLogs: [{ text: logText, timestamp: serverTimestamp() }],
-          updatedAt: serverTimestamp(),
-        });
+      let engagementId = existing?.id;
+      if (!engagementId) {
+        const { data, error } = await supabase.from('engagements').upsert(
+          toColumns({
+            businessId: id,
+            ownerId: user.id,
+            stage: activeStage,
+            status: 'pending',
+            updatedAt: new Date().toISOString(),
+          }),
+          { onConflict: 'business_id,stage' },
+        ).select('id').single();
+
+        if (error || !data) handleSupabaseError(error, OperationType.CREATE, 'engagements');
+        engagementId = data.id;
       }
+
+      // Stage history lives in engagement_events (append-only). The portal still
+      // renders it as stageLogs on the engagement the log belongs to.
+      const { error: eventError } = await supabase.from('engagement_events').insert({
+        engagement_id: engagementId,
+        kind: 'note_added',
+        detail: entry.text,
+        created_by: user.id,
+      });
+      if (eventError) handleSupabaseError(eventError, OperationType.CREATE, 'engagement_events');
+
+      setEngagements(prev => {
+        const found = prev.find(e => e.id === engagementId);
+        if (found) {
+          return prev.map(e => e.id === engagementId
+            ? { ...e, stageLogs: [...(e.stageLogs || []), entry] }
+            : e);
+        }
+        return [...prev, {
+          id: engagementId,
+          businessId: id,
+          ownerId: user.id,
+          stage: activeStage,
+          status: 'pending' as const,
+          stageLogs: [entry],
+          updatedAt: { seconds: Date.now() / 1000 },
+        }];
+      });
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'engagements');
+      try {
+        handleSupabaseError(err, OperationType.WRITE, 'engagements');
+      } catch { /* logged */ }
     } finally {
       setSaving(false);
       setNewLogEntry('');
@@ -213,31 +294,46 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       return;
     }
 
-    if (!id || !auth.currentUser) return;
+    if (!id) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     setSaving(true);
 
     const existing = getCurrentEngagement();
 
     try {
       if (existing) {
-        await updateDoc(doc(db, 'engagements', existing.id), {
-          ...extraData,
-          status,
-          updatedAt: serverTimestamp(),
-        });
+        const { error } = await supabase
+          .from('engagements')
+          .update(toColumns({ ...extraData, status, updatedAt: new Date().toISOString() }))
+          .eq('id', existing.id);
+
+        if (error) handleSupabaseError(error, OperationType.UPDATE, `engagements/${existing.id}`);
       } else {
-        const engagementId = `${id}_${activeStage}`;
-        await setDoc(doc(db, 'engagements', engagementId), {
-          businessId: id,
-          ownerId: auth.currentUser.uid,
-          stage: activeStage,
-          status,
-          updatedAt: serverTimestamp(),
-          ...extraData
-        });
+        // Firestore used a deterministic id (`${businessId}_${stage}`) so a double-submit
+        // overwrote rather than duplicating. Surrogate uuid keys lose that, so 0001_init
+        // adds `unique (business_id, stage)` and this upserts onto it — same guarantee,
+        // enforced by the database instead of by id construction.
+        const { error } = await supabase.from('engagements').upsert(
+          toColumns({
+            businessId: id,
+            ownerId: user.id,
+            stage: activeStage,
+            status,
+            updatedAt: new Date().toISOString(),
+            ...extraData,
+          }),
+          { onConflict: 'business_id,stage' },
+        );
+
+        if (error) handleSupabaseError(error, OperationType.CREATE, 'engagements');
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, 'engagements');
+      try {
+        handleSupabaseError(err, OperationType.WRITE, 'engagements');
+      } catch { /* logged */ }
     } finally {
       setSaving(false);
     }
@@ -253,7 +349,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       {/* Header Strategy */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
-          <button 
+          <button
             onClick={() => navigate('/dashboard')}
             className="flex items-center gap-2 text-slate-400 hover:text-dssg-blue transition-all font-bold text-[10px] uppercase tracking-[0.2em]"
           >
@@ -273,7 +369,6 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       <div className="max-w-7xl mx-auto px-4 py-12 animate-fade-in-up">
         {/* Bento Grid Strategy */}
         <div className="grid grid-cols-12 grid-rows-6 gap-8 h-auto lg:min-h-[900px]">
-          
           {/* Profile Card — Brand Authority Variant */}
           <div className="col-span-12 lg:col-span-4 row-span-2 bento-card bg-dssg-blue text-white p-10 relative overflow-hidden flex flex-col justify-between">
             <div className="relative z-10 min-w-0">
@@ -326,7 +421,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                 const stageData = engagements.find(e => e.stage === s.id);
                 const isCompleted = stageData?.status === 'completed';
                 const isActive = activeStage === s.id;
-                
+
                 return (
                   <div key={s.id} className="flex flex-col items-center gap-4 relative z-10 group cursor-pointer" onClick={() => setActiveStage(s.id)}>
                     <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 border ${
@@ -493,7 +588,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                         {(currentEngagement?.stageLogs || []).length === 0 ? (
                           <p className="text-[10px] text-slate-400 italic">No logs yet</p>
                         ) : (
-                          (currentEngagement?.stageLogs || []).map((log: any, idx: number) => (
+                          (currentEngagement?.stageLogs || []).map((log, idx) => (
                             <div key={idx} className="text-[10px] bg-white p-2 rounded border border-slate-100">
                               <p className="text-slate-600 font-medium">{log.text}</p>
                               <p className="text-[9px] text-slate-400 mt-1">
@@ -536,7 +631,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                             {(engagement.stageLogs || []).length === 0 ? (
                               <p className="text-[9px] text-slate-400 italic">No logs</p>
                             ) : (
-                              (engagement.stageLogs || []).map((log: any, idx: number) => (
+                              (engagement.stageLogs || []).map((log, idx) => (
                                 <div key={idx} className="text-[9px] bg-white p-2 rounded border border-slate-100">
                                   <p className="text-slate-600">{log.text}</p>
                                   <p className="text-[8px] text-slate-400 mt-1">

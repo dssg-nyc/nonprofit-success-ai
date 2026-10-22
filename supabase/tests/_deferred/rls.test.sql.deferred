@@ -1,0 +1,925 @@
+-- RLS parity suite: one assertion per allow/deny branch in firestore.rules.
+--
+-- Run with `supabase test db` (requires the local stack: `supabase start`).
+--
+-- Role switching mirrors what PostgREST does per request:
+--   anon           -> set role anon;          request.jwt.claims unset
+--   authenticated  -> set role authenticated; request.jwt.claims carries sub = user id
+-- `auth.uid()` reads that claim, so the helpers below are what make is_admin() and every
+-- owner-scoping policy behave as they will in production.
+
+begin;
+
+select plan(81);
+
+-- ---------------------------------------------------------------------------
+-- Fixtures
+--
+-- Rows are seeded as the superuser (before any `set role`), because RLS is forced on
+-- these tables and the policies under test would otherwise block the setup itself.
+-- ---------------------------------------------------------------------------
+
+\set alice_id   '''11111111-1111-1111-1111-111111111111'''
+\set bob_id     '''22222222-2222-2222-2222-222222222222'''
+\set admin_id   '''33333333-3333-3333-3333-333333333333'''
+\set outsider_id '''44444444-4444-4444-4444-444444444444'''
+\set org_id     '''eeeeeeee-0000-0000-0000-000000000001'''
+
+insert into auth.users (id, email) values
+  (:alice_id,    'alice@example.org'),
+  (:bob_id,      'bob@example.org'),
+  (:admin_id,    'admin@dssg.nyc'),
+  (:outsider_id, 'outsider@other.org');
+
+insert into users (id, email, role) values
+  (:alice_id,    'alice@example.org', 'client'),
+  (:bob_id,      'bob@example.org',   'client'),
+  (:admin_id,    'admin@dssg.nyc',    'admin'),
+  (:outsider_id, 'outsider@other.org', 'client');
+
+-- Organization and memberships. The outsider is authenticated but NOT in any org.
+insert into organizations (id, name) values
+  (:org_id, 'DSSG Test Org');
+
+insert into organization_members (organization_id, user_id, role) values
+  (:org_id, :alice_id, 'member'),
+  (:org_id, :bob_id,   'member'),
+  (:org_id, :admin_id, 'owner');
+
+insert into businesses (id, name, type, owner_id, organization_id) values
+  ('aaaaaaaa-0000-0000-0000-000000000001', 'Alice Nonprofit', 'nonprofit', :alice_id, :org_id),
+  ('bbbbbbbb-0000-0000-0000-000000000001', 'Bob Nonprofit',   'nonprofit', :bob_id,   :org_id);
+
+insert into engagements (id, business_id, owner_id, stage, status, organization_id) values
+  ('aaaaaaaa-0000-0000-0000-000000000010',
+   'aaaaaaaa-0000-0000-0000-000000000001', :alice_id, 'initial_meeting', 'pending', :org_id),
+  ('bbbbbbbb-0000-0000-0000-000000000010',
+   'bbbbbbbb-0000-0000-0000-000000000001', :bob_id,   'initial_meeting', 'completed', :org_id);
+
+insert into scout_intakes (
+  id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+  problem_description, current_systems, timeline, referral_source,
+  bucket, confidence, rationale, poc_score, clarity_score, foothold_score,
+  composite_signal, flags, hitl_tier
+) values (
+  'cccccccc-0000-0000-0000-000000000001',
+  'Seeded Org', 'Dana Reyes, Director', 'dana@example.org', 'We do good things.',
+  '400 clients/year', 'analyze_data', 'Cannot report outcomes.', 'Spreadsheets',
+  'Next quarter', 'Word of mouth',
+  'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2'
+);
+
+-- Helpers ------------------------------------------------------------------
+
+create or replace function tests.login_as(uid uuid) returns void
+language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims',
+                     json_build_object('sub', uid::text, 'role', 'authenticated')::text,
+                     true);
+  execute 'set local role authenticated';
+end;
+$$;
+
+create or replace function tests.logout() returns void
+language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims', '', true);
+  execute 'set local role anon';
+end;
+$$;
+
+-- Runs a statement and reports how many rows it actually affected.
+--
+-- This is the matcher for RLS denial of UPDATE/DELETE. A policy whose USING clause
+-- excludes a row makes that row invisible, so the statement matches nothing and succeeds
+-- silently — there is no exception for throws_ok to catch. Asserting 0 here proves both
+-- that the write was refused and that no data changed. A data-modifying CTE cannot be used
+-- in a subquery expression, hence the function.
+create or replace function tests.affected(stmt text) returns int
+language plpgsql as $$
+declare n int;
+begin
+  execute stmt;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+-- A valid public intake payload, used by several tests.
+create or replace function tests.intake_values(intake_id uuid) returns void
+language plpgsql as $$
+begin
+  insert into scout_intakes (
+    id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+    problem_description, current_systems, timeline, referral_source,
+    rationale, poc_score, clarity_score, foothold_score, composite_signal, hitl_tier
+  ) values (
+    intake_id, 'New Org', 'Sam Lee, ED', 'sam@example.org', 'Mission text.',
+    '100 clients/year', 'build_tool', 'We need a dashboard.', 'Sheets', 'Q3', 'Referral',
+    'Reasoning.', 2, 2, 2, 'Conditional', 'L3'
+  );
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Default deny — rules:5-7
+-- ---------------------------------------------------------------------------
+
+select tests.logout();
+
+-- `anon` holds no SELECT privilege on users at all (see the grants block in
+-- 0001_init.sql), so this is denied by privilege before RLS is ever consulted and raises
+-- 42501 rather than returning zero rows. That is strictly stronger than the empty result
+-- rules:5-7 asks for; PostgREST surfaces it as HTTP 401.
+select throws_ok(
+  $$ select id from users $$,
+  '42501',
+  null,
+  'anon cannot read users (default deny, rules:5-7)'
+);
+
+select throws_ok(
+  $$ insert into users (id, email, role)
+     values ('55555555-5555-5555-5555-555555555555', 'x@example.org', 'admin') $$,
+  '42501',
+  null,
+  'anon cannot create a user row'
+);
+
+-- ---------------------------------------------------------------------------
+-- scout_intakes — the public intake. rules:182-193
+-- ---------------------------------------------------------------------------
+
+select lives_ok(
+  $$ select tests.intake_values('dddddddd-0000-0000-0000-000000000001') $$,
+  'anon CAN insert a pending intake (rules:184 — the public form)'
+);
+
+-- anon can INSERT here but holds no SELECT privilege, so a read-back is refused at the
+-- privilege gate (42501) rather than filtered to empty by RLS. Write-only is exactly what
+-- rules:183 wants for a public form: submit, never read another applicant's PII.
+select throws_ok(
+  $$ select id from scout_intakes $$,
+  '42501',
+  null,
+  'anon cannot read intakes back, not even its own (rules:183 — applicant PII)'
+);
+
+select throws_ok(
+  $$ insert into scout_intakes (
+       id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+       problem_description, current_systems, timeline, referral_source,
+       rationale, poc_score, clarity_score, foothold_score, composite_signal, hitl_tier,
+       review_status, review_action, final_bucket
+     ) values (
+       'dddddddd-0000-0000-0000-000000000002', 'Sneaky Org', 'X', 'x@example.org', 'M',
+       'S', 'build_tool', 'P', 'C', 'T', 'R', 'Rat', 2, 2, 2, 'Conditional', 'L3',
+       'reviewed', 'approved', 'ML / Predictive'
+     ) $$,
+  '42501',
+  null,
+  'anon cannot self-approve by inserting an already-reviewed intake (rules:92,188)'
+);
+
+select throws_ok(
+  $$ update scout_intakes set review_status = 'reviewed'
+     where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  null,
+  null,
+  'anon cannot update an intake (rules:185 — admin only)'
+);
+
+-- A signed-in non-admin is no better off than anon here.
+select tests.login_as(:alice_id);
+
+select is_empty(
+  $$ select id from scout_intakes $$,
+  'a signed-in non-admin cannot read intakes (rules:183)'
+);
+
+-- RLS denies an UPDATE by making the row invisible, not by raising: the statement matches
+-- zero rows and "succeeds". Asserting the affected-row count is what proves the denial —
+-- and unlike throws_ok, it also proves nothing was modified.
+select is(
+  tests.affected(
+    $$ update scout_intakes set review_status = 'reviewed', review_action = 'approved',
+              final_bucket = 'ML / Predictive'
+        where id = 'cccccccc-0000-0000-0000-000000000001' $$),
+  0,
+  'a non-admin cannot review an intake (rules:185)'
+);
+
+-- Admin path.
+select tests.login_as(:admin_id);
+
+select isnt_empty(
+  $$ select id from scout_intakes where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  'an admin CAN read intakes (rules:183)'
+);
+
+-- Admin review: sets review fields AND assigns organization_id (transitions from null
+-- to the reviewer's org, per 0003 policy).
+select lives_ok(
+  $$ update scout_intakes
+        set review_status = 'reviewed',
+            review_action = 'approved',
+            final_bucket  = 'Analytics & Insight',
+            reviewed_by   = '33333333-3333-3333-3333-333333333333',
+            reviewed_by_email = 'admin@dssg.nyc',
+            reviewed_at   = now(),
+            organization_id = 'eeeeeeee-0000-0000-0000-000000000001'
+      where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  'an admin CAN review an intake and assign it to their org (rules:185-191, 0003)'
+);
+
+select throws_ok(
+  $$ update scout_intakes set org_name = 'Rewritten Org'
+     where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  null,
+  null,
+  'even an admin cannot rewrite the applicant''s own answers (rules:187 hasOnly)'
+);
+
+select throws_ok(
+  $$ update scout_intakes set reviewed_by = '11111111-1111-1111-1111-111111111111'
+     where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  null,
+  null,
+  'reviewed_by must be the acting admin (rules:191)'
+);
+
+select throws_ok(
+  $$ delete from scout_intakes where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  null,
+  null,
+  'nobody can delete an intake — audit trail (rules:192)'
+);
+
+-- ---------------------------------------------------------------------------
+-- users — rules:96-102
+-- ---------------------------------------------------------------------------
+
+select tests.login_as(:alice_id);
+
+select results_eq(
+  $$ select email from users $$,
+  $$ values ('alice@example.org'::text) $$,
+  'a user sees only their own profile row (rules:97)'
+);
+
+select throws_ok(
+  $$ update users set role = 'admin' where id = '11111111-1111-1111-1111-111111111111' $$,
+  null,
+  null,
+  'role is immutable — no self-elevation to admin (rules:100)'
+);
+
+select lives_ok(
+  $$ update users set display_name = 'Alice A.'
+     where id = '11111111-1111-1111-1111-111111111111' $$,
+  'a user CAN update their own display_name (rules:101)'
+);
+
+select throws_ok(
+  $$ insert into users (id, email, role)
+     values ('55555555-5555-5555-5555-555555555555', 'mallory@example.org', 'client') $$,
+  '42501',
+  null,
+  'a user cannot create a profile row for somebody else (rules:98)'
+);
+
+-- ---------------------------------------------------------------------------
+-- organizations + organization_members — 0003
+-- ---------------------------------------------------------------------------
+
+select results_eq(
+  $$ select name from organizations $$,
+  $$ values ('DSSG Test Org'::text) $$,
+  'a member CAN read their own organization (0003: organizations_select_member)'
+);
+
+select results_eq(
+  $$ select count(*)::int from organization_members $$,
+  $$ values (3) $$,
+  'a member CAN see co-members in their org (0003: org_members_select)'
+);
+
+select tests.login_as(:outsider_id);
+
+select is_empty(
+  $$ select id from organizations $$,
+  'an outsider cannot see any organization (0003: cross-org isolation)'
+);
+
+select is_empty(
+  $$ select id from organization_members $$,
+  'an outsider cannot see any org members (0003: cross-org isolation)'
+);
+
+-- ---------------------------------------------------------------------------
+-- businesses — rules:105-113
+-- ---------------------------------------------------------------------------
+
+select tests.login_as(:alice_id);
+
+select results_eq(
+  $$ select name from businesses $$,
+  $$ values ('Alice Nonprofit'::text) $$,
+  'org-scoping: alice sees her business and not bob''s (rules:106-107)'
+);
+
+select lives_ok(
+  $$ insert into businesses (id, name, type, owner_id, organization_id)
+     values ('aaaaaaaa-0000-0000-0000-000000000002', 'Alice Second', 'small_business',
+             '11111111-1111-1111-1111-111111111111',
+             'eeeeeeee-0000-0000-0000-000000000001') $$,
+  'a user CAN create a business they own in their org (rules:108)'
+);
+
+select throws_ok(
+  $$ insert into businesses (id, name, type, owner_id, organization_id)
+     values ('aaaaaaaa-0000-0000-0000-000000000003', 'Planted', 'nonprofit',
+             '22222222-2222-2222-2222-222222222222',
+             'eeeeeeee-0000-0000-0000-000000000001') $$,
+  '42501',
+  null,
+  'a user cannot create a business owned by somebody else (rules:52,108)'
+);
+
+-- Bob's row is outside alice's USING clause, so it is invisible and the update matches
+-- nothing. The immutability trigger never even runs — RLS refuses first.
+select is(
+  tests.affected(
+    $$ update businesses set owner_id = '11111111-1111-1111-1111-111111111111'
+        where id = 'bbbbbbbb-0000-0000-0000-000000000001' $$),
+  0,
+  'a user cannot steal another owner''s business (rules:109)'
+);
+
+select throws_ok(
+  $$ update businesses set owner_id = '22222222-2222-2222-2222-222222222222'
+     where id = 'aaaaaaaa-0000-0000-0000-000000000001' $$,
+  null,
+  null,
+  'owner_id is immutable even for the owner (rules:110)'
+);
+
+select throws_ok(
+  $$ update businesses set organization_id = '99999999-9999-9999-9999-999999999999'
+     where id = 'aaaaaaaa-0000-0000-0000-000000000001' $$,
+  null,
+  null,
+  'organization_id is immutable on businesses (0003: immutability trigger)'
+);
+
+select lives_ok(
+  $$ update businesses set name = 'Alice Nonprofit Inc.'
+     where id = 'aaaaaaaa-0000-0000-0000-000000000001' $$,
+  'an owner CAN rename their business (rules:111)'
+);
+
+select lives_ok(
+  $$ delete from businesses where id = 'aaaaaaaa-0000-0000-0000-000000000002' $$,
+  'an owner CAN delete their own business (rules:112)'
+);
+
+-- Cross-org isolation: outsider is authenticated but not in alice/bob's org.
+select tests.login_as(:outsider_id);
+
+select is_empty(
+  $$ select id from businesses $$,
+  'an outsider cannot see businesses in another org (0003: cross-org isolation)'
+);
+
+-- ---------------------------------------------------------------------------
+-- engagements — rules:116-128
+-- ---------------------------------------------------------------------------
+
+select tests.login_as(:alice_id);
+
+select results_eq(
+  $$ select count(*)::int from engagements $$,
+  $$ values (1) $$,
+  'org-scoping: alice sees only her own engagement (rules:117-118)'
+);
+
+select lives_ok(
+  $$ insert into engagements (id, business_id, owner_id, stage, status, organization_id)
+     values ('aaaaaaaa-0000-0000-0000-000000000011',
+             'aaaaaaaa-0000-0000-0000-000000000001',
+             '11111111-1111-1111-1111-111111111111', 'scoping', 'pending',
+             'eeeeeeee-0000-0000-0000-000000000001') $$,
+  'a user CAN create an engagement on their own business (rules:119-120)'
+);
+
+select throws_ok(
+  $$ insert into engagements (id, business_id, owner_id, stage, status, organization_id)
+     values ('aaaaaaaa-0000-0000-0000-000000000012',
+             'bbbbbbbb-0000-0000-0000-000000000001',
+             '11111111-1111-1111-1111-111111111111', 'scoping', 'pending',
+             'eeeeeeee-0000-0000-0000-000000000001') $$,
+  '42501',
+  null,
+  'a user cannot attach an engagement to a business they do not own (rules:120)'
+);
+
+select throws_ok(
+  $$ insert into engagements (id, business_id, owner_id, stage, status, organization_id)
+     values ('aaaaaaaa-0000-0000-0000-000000000013',
+             '99999999-9999-9999-9999-999999999999',
+             '11111111-1111-1111-1111-111111111111', 'scoping', 'pending',
+             'eeeeeeee-0000-0000-0000-000000000001') $$,
+  null,
+  null,
+  'an engagement cannot reference a nonexistent business (rules:120 atomic guarantee)'
+);
+
+select lives_ok(
+  $$ update engagements set stage = 'budget_check'
+     where id = 'aaaaaaaa-0000-0000-0000-000000000010' $$,
+  'an owner CAN advance the stage (rules:126)'
+);
+
+-- The target must be a *different* business that alice also owns, otherwise the update is
+-- a no-op: engagement ...011 was created on ...001, so re-assigning it to ...001 leaves
+-- `is distinct from` false and the trigger correctly allows it — the assertion would pass
+-- against a schema with no immutability guard at all. ...002 was deleted by the businesses
+-- section above, so create a fresh one to move to.
+select lives_ok(
+  $$ insert into businesses (id, name, type, owner_id, organization_id)
+     values ('aaaaaaaa-0000-0000-0000-000000000004', 'Alice Third', 'nonprofit',
+             '11111111-1111-1111-1111-111111111111',
+             'eeeeeeee-0000-0000-0000-000000000001') $$,
+  'fixture: a second business alice owns, to attempt a real business_id change'
+);
+
+select throws_ok(
+  $$ update engagements set business_id = 'aaaaaaaa-0000-0000-0000-000000000004'
+     where id = 'aaaaaaaa-0000-0000-0000-000000000011' $$,
+  '23514',
+  null,
+  'business_id is immutable after create (rules:123)'
+);
+
+select throws_ok(
+  $$ update engagements set organization_id = '99999999-9999-9999-9999-999999999999'
+     where id = 'aaaaaaaa-0000-0000-0000-000000000010' $$,
+  null,
+  null,
+  'organization_id is immutable on engagements (0003: immutability trigger)'
+);
+
+-- Terminal-state locking, checked against bob's completed engagement as bob.
+select tests.login_as(:bob_id);
+
+select throws_ok(
+  $$ update engagements set status = 'in_progress'
+     where id = 'bbbbbbbb-0000-0000-0000-000000000010' $$,
+  null,
+  null,
+  'a completed engagement cannot return to in_progress (rules:125)'
+);
+
+select lives_ok(
+  $$ update engagements set notes = 'wrapped up'
+     where id = 'bbbbbbbb-0000-0000-0000-000000000010' $$,
+  'a completed engagement can still be annotated (rules:125 allows status = completed)'
+);
+
+-- Cross-org isolation on engagements.
+select tests.login_as(:outsider_id);
+
+select is_empty(
+  $$ select id from engagements $$,
+  'an outsider cannot see engagements in another org (0003: cross-org isolation)'
+);
+
+-- ---------------------------------------------------------------------------
+-- engagements: staff read access — 0002 step 1, 0003 org-scoped
+--
+-- The whole point of the policy: Pulse runs as staff and must see every engagement
+-- in their organization. Without it a staff session reads zero rows and silently
+-- reports that nothing is at risk, because it can see nothing at all.
+-- ---------------------------------------------------------------------------
+
+select tests.login_as(:admin_id);
+
+-- Three, not two: alice created ...011 earlier in this suite, on top of the two seeded
+-- rows. Asserting the exact count (rather than >= 2) is what makes this fail if the
+-- policy ever narrows to a subset.
+select results_eq(
+  $$ select count(*)::int from engagements $$,
+  $$ values (3) $$,
+  'an admin CAN read every engagement in their org (0002+0003: engagements_select_admin)'
+);
+
+select results_eq(
+  $$ select count(*)::int from engagements
+     where owner_id = '22222222-2222-2222-2222-222222222222' $$,
+  $$ values (1) $$,
+  'an admin sees engagements they do not own (within their org)'
+);
+
+-- Read authority only. If this ever starts passing, U5 has been resolved by accident.
+select results_eq(
+  $$ update engagements set stage = 'budget_check'
+     where id = 'bbbbbbbb-0000-0000-0000-000000000010'
+     returning 1 $$,
+  $$ select 1 where false $$,
+  'an admin CANNOT write engagements — no rows match the update (U5 stays open)'
+);
+
+-- Regression guard: widening reads for admins must not widen them for owners.
+select tests.login_as(:alice_id);
+
+select results_eq(
+  $$ select count(*)::int from engagements $$,
+  $$ values (2) $$,
+  'owner-scoping still holds for a non-admin after 0002 (rules:117-118)'
+);
+
+-- ---------------------------------------------------------------------------
+-- engagement_events — 0002 step 3, 0003 org-scoped
+-- ---------------------------------------------------------------------------
+
+select lives_ok(
+  $$ insert into engagement_events (engagement_id, kind, detail, created_by, organization_id)
+     values ('aaaaaaaa-0000-0000-0000-000000000010', 'session_held', 'kickoff call',
+             '11111111-1111-1111-1111-111111111111',
+             'eeeeeeee-0000-0000-0000-000000000001') $$,
+  'an owner CAN append an event to their own engagement (0002: insert_own)'
+);
+
+select throws_ok(
+  $$ insert into engagement_events (engagement_id, kind, created_by, organization_id)
+     values ('bbbbbbbb-0000-0000-0000-000000000010', 'session_held',
+             '11111111-1111-1111-1111-111111111111',
+             'eeeeeeee-0000-0000-0000-000000000001') $$,
+  '42501',
+  null,
+  'a user cannot append an event to someone else''s engagement'
+);
+
+-- created_by is the attribution field Pulse trusts; forging it must be impossible.
+select throws_ok(
+  $$ insert into engagement_events (engagement_id, kind, created_by, organization_id)
+     values ('aaaaaaaa-0000-0000-0000-000000000010', 'note_added',
+             '22222222-2222-2222-2222-222222222222',
+             'eeeeeeee-0000-0000-0000-000000000001') $$,
+  '42501',
+  null,
+  'a user cannot attribute an event to another user'
+);
+
+-- Append-only, enforced at the privilege layer rather than by policy: 0002 grants only
+-- SELECT and INSERT, so these raise 42501 (permission denied) rather than matching zero
+-- rows. That is the stronger of the two failures — it cannot be reopened by adding a
+-- policy alone.
+select throws_ok(
+  $$ update engagement_events set detail = 'rewritten' $$,
+  '42501',
+  null,
+  'events cannot be edited — append-only history'
+);
+
+select throws_ok(
+  $$ delete from engagement_events $$,
+  '42501',
+  null,
+  'events cannot be deleted — append-only history'
+);
+
+select tests.login_as(:admin_id);
+
+select results_eq(
+  $$ select count(*)::int from engagement_events $$,
+  $$ values (1) $$,
+  'an admin CAN read events in their org — this is Pulse''s input signal'
+);
+
+-- Cross-org isolation on engagement_events.
+select tests.login_as(:outsider_id);
+
+select is_empty(
+  $$ select id from engagement_events $$,
+  'an outsider cannot see engagement events in another org (0003: cross-org isolation)'
+);
+
+-- ---------------------------------------------------------------------------
+-- architect_assessments — rules:195-205
+-- ---------------------------------------------------------------------------
+
+select tests.login_as(:alice_id);
+
+select is_empty(
+  $$ select id from architect_assessments $$,
+  'a non-admin cannot read assessments (rules:198)'
+);
+
+select throws_ok(
+  $$ insert into architect_assessments (
+       id, scout_intake_id, org_name, scout_bucket, scout_readiness,
+       q1_org_context, q2_org_size, q3_poc,
+       q4_collection_scope, q5_data_locations, q6_system_integration,
+       q7_integration_familiarity, q8_quality_confidence,
+       q9_current_decisions, q10_wished_decisions, q11_decision_empowerment,
+       q12_reporting_to, q13_reporting_automation,
+       q14_tools, q15_staff_confidence, q16_budget_speed,
+       q17a_wish_list, q17b_biggest_worry, q18_past_blockers,
+       di_score, gov_score, tooling_score, dc_score, tc_score,
+       points, composite_level, charter, ninety_day_plan,
+       created_by, created_by_email
+     ) values (
+       'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001',
+       'Seeded Org', 'Analytics & Insight', 'Ready',
+       'ctx', 'size', 'poc', 'partial', 'locations', 'some_share',
+       'somewhat_familiar', 'mixed', 'now', 'wished', 'leadership_managers',
+       'board', 'semi_automated', '{spreadsheets}', 'some_adhoc', 'requires_approval',
+       'wish', 'worry', 'blockers', 2, 2, 2, 2, 2, 10, 'Developing',
+       '{}'::jsonb, '{}'::jsonb,
+       '11111111-1111-1111-1111-111111111111', 'alice@example.org'
+     ) $$,
+  '42501',
+  null,
+  'a non-admin cannot create an assessment (rules:199)'
+);
+
+select tests.login_as(:admin_id);
+
+select lives_ok(
+  $$ insert into architect_assessments (
+       id, scout_intake_id, org_name, scout_bucket, scout_readiness,
+       q1_org_context, q2_org_size, q3_poc,
+       q4_collection_scope, q5_data_locations, q6_system_integration,
+       q7_integration_familiarity, q8_quality_confidence,
+       q9_current_decisions, q10_wished_decisions, q11_decision_empowerment,
+       q12_reporting_to, q13_reporting_automation,
+       q14_tools, q15_staff_confidence, q16_budget_speed,
+       q17a_wish_list, q17b_biggest_worry, q18_past_blockers,
+       di_score, gov_score, tooling_score, dc_score, tc_score,
+       points, composite_level, charter, ninety_day_plan,
+       created_by, created_by_email
+     ) values (
+       'cccccccc-0000-0000-0000-000000000001', 'cccccccc-0000-0000-0000-000000000001',
+       'Seeded Org', 'Analytics & Insight', 'Ready',
+       'ctx', 'size', 'poc', 'partial', 'locations', 'some_share',
+       'somewhat_familiar', 'mixed', 'now', 'wished', 'leadership_managers',
+       'board', 'semi_automated', '{spreadsheets}', 'some_adhoc', 'requires_approval',
+       'wish', 'worry', 'blockers', 2, 2, 2, 2, 2, 10, 'Developing',
+       '{}'::jsonb, '{}'::jsonb,
+       '33333333-3333-3333-3333-333333333333', 'admin@dssg.nyc'
+     ) $$,
+  'an admin CAN create an assessment keyed to an existing intake (rules:199-202)'
+);
+
+select throws_ok(
+  $$ update architect_assessments set created_by = '11111111-1111-1111-1111-111111111111'
+     where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  null,
+  null,
+  'created_by must be the acting admin (rules:202)'
+);
+
+select lives_ok(
+  $$ update architect_assessments set composite_level = 'Established', points = 14
+     where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  'an admin CAN re-conduct an assessment (rules:203)'
+);
+
+select throws_ok(
+  $$ delete from architect_assessments where id = 'cccccccc-0000-0000-0000-000000000001' $$,
+  null,
+  null,
+  'nobody can delete an assessment — audit trail (rules:204)'
+);
+
+-- ---------------------------------------------------------------------------
+-- engagements.assessment_id — 0002 step 2
+--
+-- Placed after the architect block on purpose: assessment cccc...0001 does not exist
+-- until that block creates it, and the block's own first assertion requires the table
+-- to be empty, so this cannot be seeded as a fixture instead.
+-- ---------------------------------------------------------------------------
+
+select tests.login_as(:alice_id);
+
+select lives_ok(
+  $$ update engagements
+     set assessment_id = 'cccccccc-0000-0000-0000-000000000001'
+     where id = 'aaaaaaaa-0000-0000-0000-000000000010' $$,
+  'an owner CAN link their engagement to an assessment (0002: assessment_id)'
+);
+
+select throws_ok(
+  $$ update engagements
+     set assessment_id = '99999999-9999-9999-9999-999999999999'
+     where id = 'aaaaaaaa-0000-0000-0000-000000000010' $$,
+  '23503',
+  null,
+  'assessment_id cannot reference a nonexistent assessment (FK)'
+);
+
+-- ---------------------------------------------------------------------------
+-- agent_runs + tool_calls — 0004 telemetry
+--
+-- Telemetry is written by the service role (bypasses RLS). Authenticated users
+-- can only read if admin + org-scoped.
+-- ---------------------------------------------------------------------------
+
+-- Seed telemetry as superuser (service role equivalent in tests). Must reset role
+-- first since prior sections leave us as authenticated.
+reset role;
+insert into agent_runs (id, agent, organization_id, model, input, output, duration_ms)
+values ('ffffffff-0000-0000-0000-000000000001', 'scout', :org_id,
+        'gemini-2.5-flash', '{"test": true}'::jsonb, '{"bucket": "Analytics"}'::jsonb, 150);
+
+insert into tool_calls (id, agent_run_id, tool, input, output, duration_ms)
+values ('ffffffff-0000-0000-0000-000000000002', 'ffffffff-0000-0000-0000-000000000001',
+        'generateObject', '{"prompt": "test"}'::jsonb, '{"result": true}'::jsonb, 100);
+
+select tests.login_as(:alice_id);
+
+-- Non-admin cannot read telemetry.
+select is_empty(
+  $$ select id from agent_runs $$,
+  'a non-admin cannot read agent_runs (0004: admin-only)'
+);
+
+select is_empty(
+  $$ select id from tool_calls $$,
+  'a non-admin cannot read tool_calls (0004: admin-only)'
+);
+
+-- Non-admin cannot write telemetry (no INSERT grant).
+select throws_ok(
+  $$ insert into agent_runs (agent, model, duration_ms)
+     values ('scout', 'test', 100) $$,
+  '42501',
+  null,
+  'a non-admin cannot insert agent_runs (0004: service-role only)'
+);
+
+select throws_ok(
+  $$ insert into tool_calls (agent_run_id, tool, duration_ms)
+     values ('ffffffff-0000-0000-0000-000000000001', 'test', 50) $$,
+  '42501',
+  null,
+  'a non-admin cannot insert tool_calls (0004: service-role only)'
+);
+
+select tests.login_as(:admin_id);
+
+select results_eq(
+  $$ select count(*)::int from agent_runs $$,
+  $$ values (1) $$,
+  'an admin CAN read agent_runs in their org (0004: admin read)'
+);
+
+select results_eq(
+  $$ select count(*)::int from tool_calls $$,
+  $$ values (1) $$,
+  'an admin CAN read tool_calls in their org (0004: admin read)'
+);
+
+-- ---------------------------------------------------------------------------
+-- approvals — 0005 approval spine
+-- ---------------------------------------------------------------------------
+
+-- Seed an approval as superuser.
+reset role;
+insert into approvals (id, organization_id, agent, entity_type, entity_id, hitl_tier, status)
+values ('ffffffff-0000-0000-0000-000000000010', :org_id, 'envoy', 'communication',
+        'aaaaaaaa-0000-0000-0000-000000000010', 'L3', 'pending');
+
+select tests.login_as(:alice_id);
+
+-- Non-admin cannot read approvals.
+select is_empty(
+  $$ select id from approvals $$,
+  'a non-admin cannot read approvals (0005: admin-only)'
+);
+
+-- Non-admin cannot update approvals (invisible via USING).
+select is(
+  tests.affected(
+    $$ update approvals set status = 'approved'
+        where id = 'ffffffff-0000-0000-0000-000000000010' $$),
+  0,
+  'a non-admin cannot update approval status (0005: admin-only)'
+);
+
+select tests.login_as(:admin_id);
+
+select results_eq(
+  $$ select count(*)::int from approvals $$,
+  $$ values (1) $$,
+  'an admin CAN read approvals in their org (0005: admin read)'
+);
+
+select lives_ok(
+  $$ update approvals set status = 'approved',
+         reviewer_id = '33333333-3333-3333-3333-333333333333',
+         reviewed_at = now()
+     where id = 'ffffffff-0000-0000-0000-000000000010' $$,
+  'an admin CAN approve a pending approval (0005: status transition)'
+);
+
+-- ---------------------------------------------------------------------------
+-- audit_events — 0005 approval spine (append-only)
+-- ---------------------------------------------------------------------------
+
+-- Seed as superuser.
+reset role;
+insert into audit_events (id, organization_id, actor_id, action, entity_type, entity_id)
+values ('ffffffff-0000-0000-0000-000000000020', :org_id, :admin_id, 'approval.approved',
+        'communication', 'aaaaaaaa-0000-0000-0000-000000000010');
+
+select tests.login_as(:alice_id);
+
+select is_empty(
+  $$ select id from audit_events $$,
+  'a non-admin cannot read audit_events (0005: admin-only)'
+);
+
+select tests.login_as(:admin_id);
+
+select results_eq(
+  $$ select count(*)::int from audit_events $$,
+  $$ values (1) $$,
+  'an admin CAN read audit_events in their org (0005: admin read)'
+);
+
+-- Append-only enforcement: no INSERT/UPDATE/DELETE grant for authenticated.
+select throws_ok(
+  $$ insert into audit_events (action) values ('test') $$,
+  '42501',
+  null,
+  'authenticated cannot insert audit_events (0005: service-role only)'
+);
+
+select throws_ok(
+  $$ update audit_events set action = 'rewritten' $$,
+  '42501',
+  null,
+  'audit_events cannot be updated — append-only (0005)'
+);
+
+select throws_ok(
+  $$ delete from audit_events $$,
+  '42501',
+  null,
+  'audit_events cannot be deleted — append-only (0005)'
+);
+
+-- ---------------------------------------------------------------------------
+-- milestones + tasks — 0006 delivery
+-- ---------------------------------------------------------------------------
+
+select tests.login_as(:alice_id);
+
+select lives_ok(
+  $$ insert into milestones (id, engagement_id, organization_id, title)
+     values ('ffffffff-0000-0000-0000-000000000030',
+             'aaaaaaaa-0000-0000-0000-000000000010',
+             'eeeeeeee-0000-0000-0000-000000000001', 'Kick-off') $$,
+  'an owner CAN create a milestone on their engagement (0006)'
+);
+
+select lives_ok(
+  $$ insert into tasks (id, milestone_id, engagement_id, organization_id, title)
+     values ('ffffffff-0000-0000-0000-000000000031',
+             'ffffffff-0000-0000-0000-000000000030',
+             'aaaaaaaa-0000-0000-0000-000000000010',
+             'eeeeeeee-0000-0000-0000-000000000001', 'Gather data sources') $$,
+  'an owner CAN create a task on their milestone (0006)'
+);
+
+select results_eq(
+  $$ select count(*)::int from milestones $$,
+  $$ values (1) $$,
+  'an owner sees milestones on their engagement (0006)'
+);
+
+select results_eq(
+  $$ select count(*)::int from tasks $$,
+  $$ values (1) $$,
+  'an owner sees tasks on their engagement (0006)'
+);
+
+-- Cross-org isolation.
+select tests.login_as(:outsider_id);
+
+select is_empty(
+  $$ select id from milestones $$,
+  'an outsider cannot see milestones in another org (0006: cross-org)'
+);
+
+select is_empty(
+  $$ select id from tasks $$,
+  'an outsider cannot see tasks in another org (0006: cross-org)'
+);
+
+select * from finish();
+
+rollback;
