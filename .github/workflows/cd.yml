@@ -51,7 +51,8 @@ jobs:
       # per-deployment URL, production included, sits behind Vercel Deployment
       # Protection; a plain curl gets a 302 to the login page and never reaches the
       # function (#56: prod served 500 on every route while this check saw only 302s).
-      # `vercel curl` mints a bypass token with VERCEL_TOKEN, so previews and `--prod`
+      # `vercel curl` mints a bypass token with VERCEL_TOKEN, read from the step env: a
+      # `--token` flag is forwarded to curl, which rejects it. Previews and `--prod`
       # are both checked for real; VERCEL_AUTOMATION_BYPASS_SECRET is used if set.
       # Pass on a 200 whose body is `{ "ok": true, ... }` only. A cancelled or
       # superseded deployment answers 200 with an HTML page.
@@ -63,7 +64,7 @@ jobs:
         run: |
           body=$(mktemp)
           for attempt in 1 2 3 4 5 6; do
-            status=$(vercel curl /api/health --deployment "$URL" --token "$VERCEL_TOKEN" --yes \
+            status=$(vercel curl /api/health --deployment "$URL" --yes \
               ${BYPASS:+--protection-bypass "$BYPASS"} \
               -- -sS -o "$body" -w '%{http_code}' || echo 000)
             echo "attempt $attempt: HTTP $status $(head -c 300 "$body")"
