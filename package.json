@@ -25,7 +25,7 @@
     "ai": "^7.0.133",
     "dotenv": "^17.2.3",
     "lucide-react": "^1.53.0",
-    "motion": "^13.5.1",
+    "motion": "^14.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4",
