@@ -11,8 +11,9 @@ import type { TablesUpdate } from '../../lib/database.types';
 import { ScoutIntake, ScoutBucket, Engagement, EngagementStage, EngagementStatus } from '../../types';
 import { deriveCurrentStage } from '../../lib/lifecycle';
 import { scoutIntakeFromRow } from '../../lib/scoutIntake';
-import { routeScoutIntake, getOnboardingKitName } from '../../agents/scout/routing';
+import { getOnboardingKitName } from '../../agents/scout/routing';
 import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
+import { DEMO_INTAKES, DEMO_USER } from '../demo/demoData';
 import { AnimatePresence } from 'motion/react';
 import {
   ClipboardList, CheckCircle2, Pencil, HelpCircle, XCircle, ArrowRight, MessageSquareText,
@@ -25,66 +26,6 @@ import { ReviewModal } from './ReviewModal';
 interface ScoutReviewQueueProps {
   isDemo?: boolean;
 }
-
-const DEMO_USER = { uid: 'demo-user-123', email: 'demo@nyc-dssg.org' };
-
-function buildDemoIntake(id: string, base: {
-  org_name: string; contact_name_role: string; contact_email: string; mission: string;
-  scale: string; primary_need: ScoutIntake['primary_need']; problem_description: string;
-  current_systems: string; timeline: string; referral_source: string; ageSeconds: number;
-}): ScoutIntake {
-  const { ageSeconds, ...intakeFields } = base;
-  const result = routeScoutIntake(intakeFields);
-  return {
-    id,
-    ...intakeFields,
-    submittedAt: { seconds: Date.now() / 1000 - ageSeconds },
-    ...result,
-    reviewStatus: 'pending',
-  };
-}
-
-const DEMO_INTAKES: ScoutIntake[] = [
-  buildDemoIntake('demo-scout-1', {
-    org_name: 'Uptown Youth Corps',
-    contact_name_role: 'Maria Gonzalez, Program Director',
-    contact_email: 'maria@uptownyouthcorps.org',
-    mission: 'We provide after-school workforce training and mentorship to NYC teens.',
-    scale: '~400 participants/year, staff of 18',
-    primary_need: 'ml_predictive',
-    problem_description: 'We want to predict which participants are at risk of dropping out of our program so we can intervene early with extra support.',
-    current_systems: 'Salesforce CRM with 5 years of program completion data.',
-    timeline: 'This quarter, before our next cohort starts in September.',
-    referral_source: 'DSSG hackathon alum',
-    ageSeconds: 86400,
-  }),
-  buildDemoIntake('demo-scout-2', {
-    org_name: 'Riverside Family Services',
-    contact_name_role: 'Tom Reyes, Development Manager',
-    contact_email: 'tom@riversidefamily.org',
-    mission: 'We connect low-income families in Queens with housing and legal aid services.',
-    scale: '~1200 families/year, staff of 12',
-    primary_need: 'ml_predictive',
-    problem_description: 'We really just need a dashboard that shows our board members quarterly funding numbers.',
-    current_systems: 'A mix of spreadsheets and an old Access database.',
-    timeline: 'Before our next board meeting in October.',
-    referral_source: 'Google search',
-    ageSeconds: 43200,
-  }),
-  buildDemoIntake('demo-scout-3', {
-    org_name: 'Queens Neighborhood Kitchen',
-    contact_name_role: 'Sam',
-    contact_email: 'sam@qnkitchen.org',
-    mission: 'We run a small community food pantry.',
-    scale: 'All-volunteer, 2 people, ~50 families/year',
-    primary_need: 'analyze_data',
-    problem_description: 'We want to understand our community better and use data more.',
-    current_systems: 'Just a shared Google spreadsheet.',
-    timeline: 'Not sure yet.',
-    referral_source: 'Word of mouth',
-    ageSeconds: 3600,
-  }),
-];
 
 /**
  * The decisions a reviewer can make. Approve and "edit intake card" both run the

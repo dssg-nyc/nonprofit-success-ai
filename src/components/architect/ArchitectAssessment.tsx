@@ -16,7 +16,8 @@ import {
 import type { DraftAttempt, LocalDraft } from '../../agents/architect/draft';
 import { suggestCsaAnswers } from '../../agents/architect/suggest';
 import type { SuggestableField, SuggestionSource } from '../../agents/architect/suggest';
-import { demoAssessments, demoReviewedIntakes } from '../../lib/demoStore';
+import { demoAssessments, demoBusinesses, demoEngagements, demoReviewedIntakes } from '../../lib/demoStore';
+import { businessIdForAssessment, buildGraduatedBusiness, buildGraduationEngagement } from '../../lib/graduation';
 import { motion } from 'motion/react';
 import { DraftingCompass, ChevronLeft, ArrowRight, RotateCcw, Sparkles, Check } from 'lucide-react';
 
@@ -177,7 +178,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
 
     if (isDemo) {
       const { maturity, charter, plan } = localDraft(full, intake.org_name, bucket);
-      demoAssessments.set(intakeId, {
+      const newAssessment = {
         id: intakeId,
         scoutIntakeId: intakeId,
         org_name: intake.org_name,
@@ -192,7 +193,14 @@ export default function ArchitectAssessment({ isDemo }: Props) {
         createdByEmail: DEMO_USER.email,
         createdAt: { seconds: Date.now() / 1000 },
         updatedAt: { seconds: Date.now() / 1000 },
-      } as ArchitectAssessmentDoc);
+      } as ArchitectAssessmentDoc;
+      demoAssessments.set(intakeId, newAssessment);
+
+      const businessId = businessIdForAssessment(intakeId);
+      if (!demoBusinesses.has(businessId)) {
+        demoBusinesses.set(businessId, buildGraduatedBusiness(newAssessment, DEMO_USER.uid));
+        demoEngagements.set(businessId, [buildGraduationEngagement(businessId, DEMO_USER.uid)]);
+      }
       navigate(`/architect/plan/${intakeId}`);
       return;
     }

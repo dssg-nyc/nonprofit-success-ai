@@ -6,7 +6,10 @@ import {
   supabase, liveQuery, toColumns, rowToDomain, handleSupabaseError, OperationType,
 } from '../../lib/supabase';
 import type { TablesInsert } from '../../lib/database.types';
-import { Business, Engagement, EngagementStage } from '../../types';
+import { Business, Engagement, EngagementStage, EngagementStatus, StageLog } from '../../types';
+import { demoBusinesses, demoEngagements } from '../../lib/demoStore';
+import '../demo/demoData';
+import { motion, AnimatePresence } from 'motion/react';
 import type { LucideIcon } from 'lucide-react';
 import {
   History,
@@ -17,9 +20,50 @@ import {
   CheckCircle,
   ChevronLeft,
   RefreshCcw,
-  Save,
   Building2
 } from 'lucide-react';
+
+interface FeedItem {
+  id: string;
+  type: 'status' | 'log';
+  stage: EngagementStage;
+  stageName: string;
+  status?: EngagementStatus;
+  text?: string;
+  timestamp: number;
+  engagement: Engagement;
+}
+
+/** Fold `engagement_events` note rows back onto the engagements the portal renders as stage logs. */
+async function attachStageLogs(engagements: Engagement[]): Promise<Engagement[]> {
+  if (engagements.length === 0) return engagements;
+  const ids = engagements.map(e => e.id).filter(Boolean);
+  if (ids.length === 0) return engagements;
+
+  const { data, error } = await supabase
+    .from('engagement_events')
+    .select('engagement_id, detail, created_at, kind')
+    .in('engagement_id', ids)
+    .order('created_at', { ascending: true });
+
+  if (error || !data) return engagements;
+
+  const byEng = new Map<string, StageLog[]>();
+  for (const row of data) {
+    // `detail` is a jsonb object; a note carries its text under `text`.
+    const text = (row.detail as { text?: string } | null)?.text;
+    if (row.kind !== 'note_added' || !text) continue;
+    const ms = Date.parse(row.created_at);
+    const logs = byEng.get(row.engagement_id) ?? [];
+    logs.push({ text, timestamp: { seconds: Number.isNaN(ms) ? 0 : ms / 1000 } });
+    byEng.set(row.engagement_id, logs);
+  }
+
+  return engagements.map(e => ({
+    ...e,
+    stageLogs: byEng.get(e.id) ?? e.stageLogs ?? [],
+  }));
+}
 
 const STAGES: { id: EngagementStage; label: string; short: string; icon: LucideIcon; color: string }[] = [
   { id: 'initial_meeting', label: 'Initial Meeting', short: 'Meeting', icon: History, color: 'text-blue-600 bg-blue-100' },
@@ -30,8 +74,6 @@ const STAGES: { id: EngagementStage; label: string; short: string; icon: LucideI
   { id: 'membership', label: 'Membership', short: 'Membership', icon: CheckCircle, color: 'text-purple-600 bg-purple-100' },
 ];
 
-interface StageNote { id: string; detail: string; createdAt: string }
-
 export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -40,64 +82,25 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
   const [activeStage, setActiveStage] = useState<EngagementStage>('initial_meeting');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [noteDraft, setNoteDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [notes, setNotes] = useState<StageNote[]>([]);
+  const [stageLogTab, setStageLogTab] = useState<'current' | 'history'>('current');
+  const [newLogEntry, setNewLogEntry] = useState('');
+  const [feedDetail, setFeedDetail] = useState<FeedItem | null>(null);
 
   useEffect(() => {
     if (isDemo && id) {
-      const demoBusinesses: Record<string, Business> = {
-        'demo-biz-1': {
-          id: 'demo-biz-1',
-          name: 'Harlem Tech Solutions',
-          type: 'small_business',
-          industry: 'IT Consulting',
-          ownerId: 'demo-user-123',
-          certified: true,
-          createdAt: { seconds: Date.now() / 1000 - 1000000 }
-        },
-        'demo-biz-2': {
-          id: 'demo-biz-2',
-          name: 'The Bronx Literacy Fund',
-          type: 'nonprofit',
-          industry: 'Education',
-          ownerId: 'demo-user-123',
-          certified: false,
-          createdAt: { seconds: Date.now() / 1000 - 2000000 }
-        },
-        'demo-biz-3': {
-          id: 'demo-biz-3',
-          name: 'Brooklyn Green Eats',
-          type: 'small_business',
-          industry: 'Food & Beverage',
-          ownerId: 'demo-user-123',
-          certified: true,
-          createdAt: { seconds: Date.now() / 1000 - 3000000 }
-        }
-      };
+      // Same shared store Dashboard reads from — every business here traces
+      // back to a real Scout intake + Architect assessment.
+      const biz = demoBusinesses.get(id);
+      if (!biz) { navigate('/dashboard'); return; }
+      setBusiness(biz);
 
-      setBusiness(demoBusinesses[id] || demoBusinesses['demo-biz-1']);
-      setEngagements([
-        {
-          id: 'demo-eng-1',
-          businessId: id,
-          ownerId: 'demo-user-123',
-          stage: 'initial_meeting',
-          status: 'completed',
-          notes: 'Successful discovery call. Defined core data assets.',
-          updatedAt: { seconds: Date.now() / 1000 - 86400 }
-        },
-        {
-          id: 'demo-eng-2',
-          businessId: id,
-          ownerId: 'demo-user-123',
-          stage: 'budget_check',
-          status: 'in_progress',
-          budget_amount: 12500,
-          updatedAt: { seconds: Date.now() / 1000 }
-        }
-      ]);
-      setActiveStage('budget_check');
+      const engs = demoEngagements.get(id) || [];
+      setEngagements(engs);
+      if (engs.length > 0) {
+        const inProgress = engs.find(e => e.status === 'in_progress');
+        setActiveStage(inProgress ? inProgress.stage : engs[engs.length - 1].stage);
+      }
       setLoading(false);
       return;
     }
@@ -132,17 +135,18 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       'engagements',
       () => supabase.from('engagements').select('*').eq('business_id', id),
       (data) => {
-        setEngagements(data);
+        void attachStageLogs(data).then((withLogs) => {
+          setEngagements(withLogs);
 
-      // If we have engagements, set the latest one as active by default or the first one
-      if (data.length > 0) {
-        // Find most recent or in_progress stage
-        const inProgress = data.find(e => e.status === 'in_progress');
-        if (inProgress) setActiveStage(inProgress.stage);
-        else setActiveStage(data[data.length - 1].stage);
-      }
+          // If we have engagements, set the latest one as active by default or the first one
+          if (withLogs.length > 0) {
+            const inProgress = withLogs.find(e => e.status === 'in_progress');
+            if (inProgress) setActiveStage(inProgress.stage);
+            else setActiveStage(withLogs[withLogs.length - 1].stage);
+          }
 
-        setLoading(false);
+          setLoading(false);
+        });
       },
       (err) => {
         setLoading(false);
@@ -157,61 +161,63 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
   }, [id, isDemo, navigate]);
 
   const getCurrentEngagement = () => engagements.find(e => e.stage === activeStage);
-  const currentEngagementId = engagements.find(e => e.stage === activeStage)?.id;
 
-  // The current stage row's saved notes, newest first, read through RLS. Demo notes live in
-  // local state only.
-  const loadNotes = async (engagementId: string) => {
-    const { data, error: notesError } = await supabase
-      .from('engagement_events')
-      .select('id, detail, created_at')
-      .eq('engagement_id', engagementId)
-      .eq('kind', 'note_added')
-      .order('created_at', { ascending: false });
-    if (notesError) {
-      setError(
-        reportSupabaseError(notesError, OperationType.LIST, 'engagement_events', 'Could not load saved notes.'),
-      );
-      return;
-    }
-    // `detail` is a jsonb object; a note carries its text under `text`.
-    setNotes(
-      (data ?? []).map(r => ({
-        id: r.id,
-        detail: (r.detail as { text?: string } | null)?.text ?? '',
-        createdAt: r.created_at,
-      })),
-    );
+  const generateFeedItems = () => {
+    const items: FeedItem[] = [];
+    engagements.forEach(engagement => {
+      items.push({
+        id: `${engagement.id}-status`,
+        type: 'status',
+        stage: engagement.stage,
+        stageName: STAGES.find(s => s.id === engagement.stage)?.label || engagement.stage,
+        status: engagement.status,
+        timestamp: engagement.updatedAt?.seconds || 0,
+        engagement
+      });
+      (engagement.stageLogs || []).forEach((log, idx) => {
+        items.push({
+          id: `${engagement.id}-log-${idx}`,
+          type: 'log',
+          stage: engagement.stage,
+          stageName: STAGES.find(s => s.id === engagement.stage)?.label || engagement.stage,
+          text: log.text,
+          timestamp: log.timestamp?.seconds || 0,
+          engagement
+        });
+      });
+    });
+    return items.sort((a, b) => b.timestamp - a.timestamp);
   };
 
-  useEffect(() => {
-    if (isDemo) return;
-    if (!currentEngagementId) {
-      setNotes([]);
-      return;
-    }
-    void loadNotes(currentEngagementId);
-  }, [currentEngagementId, isDemo]);
-
-  // Stage changes are no longer written from the browser: engagements is read-only to
-  // partners (0001_core) and stages move only through transition_engagement() (/api/engagement-
+  // Stage changes are not written from the browser: engagements is read-only to partners
+  // (0001_core) and stages move only through transition_engagement() (/api/engagement-
   // transition). A partner's note is an append-only `note_added` event on the stage's row.
-  const addNote = async () => {
-    const text = noteDraft.trim();
+  const addStageLog = async (logText: string) => {
+    const text = logText.trim();
     if (!text) return;
 
     if (isDemo) {
-      const existing = getCurrentEngagement();
-      if (existing) {
-        setEngagements(prev => prev.map(e => e.id === existing.id
-          ? { ...e, notes: text, updatedAt: { seconds: Date.now() / 1000 } }
-          : e));
-        setNotes(prev => [
-          { id: `demo-note-${Date.now()}`, detail: text, createdAt: new Date().toISOString() },
-          ...prev,
-        ]);
-      }
-      setNoteDraft('');
+      setEngagements(prev => {
+        const existing = prev.find(e => e.stage === activeStage);
+        const next = existing
+          ? prev.map(e => e.id === existing.id ? {
+              ...e,
+              stageLogs: [...(existing.stageLogs || []), { text, timestamp: { seconds: Date.now() / 1000 } }],
+              updatedAt: { seconds: Date.now() / 1000 }
+            } : e)
+          : [...prev, {
+              id: `demo-${activeStage}`,
+              businessId: id!,
+              ownerId: 'demo-user-123',
+              stage: activeStage,
+              status: 'pending' as EngagementStatus,
+              stageLogs: [{ text, timestamp: { seconds: Date.now() / 1000 } }],
+              updatedAt: { seconds: Date.now() / 1000 }
+            }];
+        if (id) demoEngagements.set(id, next);
+        return next;
+      });
+      setNewLogEntry('');
       return;
     }
 
@@ -242,14 +248,38 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       );
 
       if (error) handleSupabaseError(error, OperationType.CREATE, 'engagement_events');
-      setNoteDraft('');
-      await loadNotes(existing.id);
+      // The engagements subscription does not fire on an event insert, so append locally.
+      const entry: StageLog = { text, timestamp: { seconds: Date.now() / 1000 } };
+      setEngagements(prev => prev.map(e => e.id === existing.id
+        ? { ...e, stageLogs: [...(e.stageLogs || []), entry] }
+        : e));
+      setNewLogEntry('');
     } catch (err) {
       console.error('BusinessPortal: note save failed — note not recorded', err);
       setError('Could not save this note. It was not recorded.');
     } finally {
       setSaving(false);
     }
+  };
+
+  // Demo only. Live status changes go through /api/engagement-transition, not the browser.
+  const updateDemoStage = (status: EngagementStatus) => {
+    if (!isDemo) return;
+    setEngagements(prev => {
+      const existing = prev.find(e => e.stage === activeStage);
+      const next = existing
+        ? prev.map(e => e.id === existing.id ? { ...e, status, updatedAt: { seconds: Date.now() / 1000 } } : e)
+        : [...prev, {
+            id: `demo-${activeStage}`,
+            businessId: id!,
+            ownerId: 'demo-user-123',
+            stage: activeStage,
+            status,
+            updatedAt: { seconds: Date.now() / 1000 },
+          }];
+      if (id) demoEngagements.set(id, next);
+      return next;
+    });
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center">Loading portal...</div>;
@@ -289,16 +319,15 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
 
       <div className="max-w-7xl mx-auto px-4 py-12 animate-fade-in-up">
         {/* Bento Grid Strategy */}
-        <div className="grid grid-cols-12 grid-rows-6 gap-8 h-auto lg:h-[900px]">
-
+        <div className="grid grid-cols-12 grid-rows-6 gap-8 h-auto lg:min-h-[900px]">
           {/* Profile Card — Brand Authority Variant */}
           <div className="col-span-12 lg:col-span-4 row-span-2 bento-card bg-dssg-blue text-white p-10 relative overflow-hidden flex flex-col justify-between">
-            <div className="relative z-10">
+            <div className="relative z-10 min-w-0">
               <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-white/10 rounded-lg text-[10px] font-bold uppercase tracking-widest text-blue-100 mb-8">
                 <Building2 size={12} />
                 Client Profile
               </div>
-              <h1 className="text-4xl font-display font-bold text-white leading-tight mb-2 italic">
+              <h1 className="text-3xl sm:text-4xl font-display font-bold text-white leading-tight mb-2 italic break-words">
                 {business.name}
               </h1>
               <p className="text-sm font-medium text-blue-200 opacity-80 uppercase tracking-widest">
@@ -367,20 +396,30 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
           {/* Action Log (Bento: Tall) */}
           <div className="col-span-12 lg:col-span-3 row-span-4 bento-card p-6 flex flex-col">
             <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-6">Engagement Feed</h2>
-            <div className="space-y-6 flex-grow">
-              {engagements.sort((a,b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0)).map(e => (
-                <div key={e.id} className="flex gap-4 items-start">
-                  <div className={`w-1 h-8 rounded-full shrink-0 ${e.status === 'completed' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
-                  <div>
-                    <p className="text-xs font-bold text-slate-800 uppercase tracking-tight">{STAGES.find(s => s.id === e.stage)?.label}</p>
-                    <p className="text-[10px] text-slate-400 font-medium">{e.status} • {new Date((e.updatedAt?.seconds ?? NaN) * 1000).toLocaleDateString()}</p>
+            <div className="space-y-3 flex-grow overflow-y-auto">
+              {generateFeedItems().map(item => (
+                <motion.button
+                  key={item.id}
+                  onClick={() => setFeedDetail(item)}
+                  className="w-full text-left p-3 bg-slate-50 hover:bg-blue-50 border border-slate-100 hover:border-dssg-blue rounded-lg transition-all group"
+                >
+                  <div className="flex gap-3 items-start">
+                    <div className={`w-1 h-8 rounded-full shrink-0 ${
+                      item.type === 'status' ? (item.status === 'completed' ? 'bg-emerald-500' : 'bg-amber-400') : 'bg-blue-500'
+                    }`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-800 uppercase tracking-tight truncate">{item.stageName}</p>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        {item.type === 'status' ? `Status: ${item.status}` : 'Log entry'}
+                      </p>
+                      <p className="text-[9px] text-slate-400 mt-1">
+                        {new Date(item.timestamp * 1000).toLocaleDateString()}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                </motion.button>
               ))}
             </div>
-            <button className="w-full py-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em] hover:bg-slate-100 transition-colors mt-6">
-              View History
-            </button>
           </div>
 
           {/* Budget/Project Detail — Stat Block Pattern */}
@@ -439,38 +478,128 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
           {/* Action Center (Bento: Large Square) */}
           <div className="col-span-12 lg:col-span-4 row-span-4 bento-card p-8 flex flex-col justify-between hover:border-blue-200 group">
              <div>
-                <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-8">Stage Management</h2>
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Add a note</p>
-                    <textarea
-                      className="w-full h-32 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-blue-100 outline-none resize-none"
-                      placeholder="Add a note to this stage..."
-                      value={noteDraft}
-                      onChange={(e) => setNoteDraft(e.target.value)}
-                    />
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Stage Management</h2>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setStageLogTab('current')}
+                      className={`px-3 py-1 text-[9px] font-bold uppercase rounded-lg transition-all ${
+                        stageLogTab === 'current'
+                          ? 'bg-dssg-blue text-white'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      Current
+                    </button>
+                    <button
+                      onClick={() => setStageLogTab('history')}
+                      className={`px-3 py-1 text-[9px] font-bold uppercase rounded-lg transition-all ${
+                        stageLogTab === 'history'
+                          ? 'bg-dssg-blue text-white'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      History
+                    </button>
                   </div>
-                  {notes.length > 0 && (
-                    <ul className="space-y-2 max-h-40 overflow-y-auto">
-                      {notes.map(n => (
-                        <li key={n.id} className="text-xs text-slate-600 bg-slate-50 rounded-xl p-3">
-                          <p className="whitespace-pre-wrap">{n.detail}</p>
-                          <p className="text-[9px] text-slate-400 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
+
+                {stageLogTab === 'current' ? (
+                  <div className="space-y-6">
+                    {isDemo && (
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:bg-blue-50 transition-colors">
+                        <RefreshCcw size={20} />
+                      </div>
+                      <div className="flex-grow">
+                        <p className="text-xs font-bold text-slate-700">Project Status</p>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => updateDemoStage('in_progress')}
+                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
+                              currentEngagement?.status === 'in_progress' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }`}
+                          >
+                            In Progress
+                          </button>
+                          <button
+                            onClick={() => updateDemoStage('completed')}
+                            className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
+                              currentEngagement?.status === 'completed' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            }`}
+                          >
+                            Complete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Stage Logs</p>
+                      <div className="max-h-40 overflow-y-auto space-y-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        {(currentEngagement?.stageLogs || []).length === 0 ? (
+                          <p className="text-[10px] text-slate-400 italic">No logs yet</p>
+                        ) : (
+                          (currentEngagement?.stageLogs || []).map((log, idx) => (
+                            <div key={idx} className="text-[10px] bg-white p-2 rounded border border-slate-100">
+                              <p className="text-slate-600 font-medium">{log.text}</p>
+                              <p className="text-[9px] text-slate-400 mt-1">
+                                {new Date((log.timestamp?.seconds ?? NaN) * 1000).toLocaleString()}
+                              </p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Add Log Entry</p>
+                      <textarea
+                        className="w-full h-20 p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-100 outline-none resize-none"
+                        placeholder="Document milestone or update..."
+                        value={newLogEntry}
+                        onChange={(e) => setNewLogEntry(e.target.value)}
+                      />
+                      <button
+                        onClick={() => void addStageLog(newLogEntry)}
+                        disabled={saving || !newLogEntry.trim()}
+                        className="w-full py-2 bg-dssg-orange text-white rounded-lg text-[10px] font-bold uppercase disabled:opacity-50 hover:bg-orange-600 transition-all"
+                      >
+                        {saving ? 'Saving...' : 'Add Log'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {engagements
+                      .filter(e => e.status === 'completed')
+                      .sort((a, b) => STAGES.findIndex(s => s.id === a.stage) - STAGES.findIndex(s => s.id === b.stage))
+                      .map(engagement => (
+                        <div key={engagement.id} className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                          <p className="text-[10px] font-bold text-dssg-blue uppercase tracking-wider mb-2">
+                            {STAGES.find(s => s.id === engagement.stage)?.label}
+                          </p>
+                          <div className="space-y-2">
+                            {(engagement.stageLogs || []).length === 0 ? (
+                              <p className="text-[9px] text-slate-400 italic">No logs</p>
+                            ) : (
+                              (engagement.stageLogs || []).map((log, idx) => (
+                                <div key={idx} className="text-[9px] bg-white p-2 rounded border border-slate-100">
+                                  <p className="text-slate-600">{log.text}</p>
+                                  <p className="text-[8px] text-slate-400 mt-1">
+                                    {new Date((log.timestamp?.seconds ?? NaN) * 1000).toLocaleString()}
+                                  </p>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
              </div>
 
-             <button
-              disabled={saving || !noteDraft.trim()}
-              onClick={() => void addNote()}
-              className="w-full py-4 bg-dssg-blue text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all font-display uppercase tracking-widest text-[11px]"
-             >
-               {saving ? <RefreshCcw className="animate-spin" size={18} /> : <Save size={18} />}
-               Add Note
-             </button>
           </div>
 
           {/* Account Management (Bento: Small Horizontal) */}
@@ -492,6 +621,78 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
 
         </div>
       </div>
+
+      {/* Feed Detail Modal */}
+      <AnimatePresence>
+        {feedDetail && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setFeedDetail(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8"
+            >
+              <div className="mb-6">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                  {feedDetail.stageName}
+                </p>
+                <h3 className="text-2xl font-display font-bold text-dssg-blue">
+                  {feedDetail.type === 'status' ? 'Status Update' : 'Log Entry'}
+                </h3>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                {feedDetail.type === 'status' ? (
+                  <>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Current Status</p>
+                      <div className={`inline-block px-4 py-2 rounded-lg font-bold text-[11px] uppercase ${
+                        feedDetail.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                        feedDetail.status === 'in_progress' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                        'bg-slate-50 text-slate-600 border border-slate-100'
+                      }`}>
+                        {feedDetail.status}
+                      </div>
+                    </div>
+                    {feedDetail.engagement.notes && (
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Notes</p>
+                        <p className="text-sm text-slate-700 bg-slate-50 p-3 rounded-lg">{feedDetail.engagement.notes}</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Log Entry</p>
+                    <p className="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg leading-relaxed">{feedDetail.text}</p>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Timestamp</p>
+                  <p className="text-sm text-slate-600">
+                    {new Date(feedDetail.timestamp * 1000).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setFeedDetail(null)}
+                className="w-full py-3 bg-dssg-blue text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-all"
+              >
+                Close
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

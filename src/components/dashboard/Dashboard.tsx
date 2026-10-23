@@ -9,6 +9,8 @@ import { Business, BusinessType } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Building2, ChevronRight, Info, CheckCircle2, X, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { demoBusinesses } from '../../lib/demoStore';
+import '../demo/demoData'; // seeds demoBusinesses with graduated partner orgs on first import
 
 export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -20,35 +22,9 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
 
   useEffect(() => {
     if (isDemo) {
-      setBusinesses([
-        {
-          id: 'demo-biz-1',
-          name: 'Harlem Tech Solutions',
-          type: 'small_business',
-          industry: 'IT Consulting',
-          ownerId: 'demo-user-123',
-          certified: true,
-          createdAt: { seconds: Date.now() / 1000 }
-        },
-        {
-          id: 'demo-biz-2',
-          name: 'The Bronx Literacy Fund',
-          type: 'nonprofit',
-          industry: 'Education',
-          ownerId: 'demo-user-123',
-          certified: false,
-          createdAt: { seconds: Date.now() / 1000 }
-        },
-        {
-          id: 'demo-biz-3',
-          name: 'Brooklyn Green Eats',
-          type: 'small_business',
-          industry: 'Food & Beverage',
-          ownerId: 'demo-user-123',
-          certified: true,
-          createdAt: { seconds: Date.now() / 1000 }
-        }
-      ]);
+      // Same source as Review Queue / Ongoing Projects — every business here
+      // has a traceable Scout intake + Architect assessment behind it.
+      setBusinesses(Array.from(demoBusinesses.values()));
       setLoading(false);
       return;
     }
