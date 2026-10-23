@@ -1,6 +1,6 @@
 # Environments — local, staging, production
 
-**Status:** production is live; the hosted Supabase projects (staging and prod) are
+**Status:** deploys are paused (see What is missing); the hosted Supabase projects (staging and prod) are
 tracked in #27 (Jian). This describes the intended shape and what is missing.
 
 ## The three environments
@@ -51,6 +51,14 @@ npx supabase db push
 ```
 
 ## What is missing
+
+> **Deploys are paused (2026-10-23).** `cd.yml`'s `deploy` job runs only when the repo
+> variable `DEPLOY_ENABLED` is `true`, and it is unset. The Actions secrets point at
+> Ramsey's personal Vercel project, which has no Supabase env. Jian deploys the MVP from
+> a personal hobby Vercel account, and the Supabase project named in #27
+> (`cbxipnbmxyjnrhvzxmsh`) does not resolve, so every deploy failed `/api/health`. CI
+> still runs on every PR. Once item 1 lands, set the Vercel secrets and run
+> `gh variable set DEPLOY_ENABLED --body true`.
 
 1. **The hosted projects** — staging and prod Supabase, their Vercel env values and the
    CD secrets — are tracked in #27 (Jian). Until they land, only the local stack has a
