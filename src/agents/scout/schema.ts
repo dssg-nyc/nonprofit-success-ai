@@ -6,7 +6,7 @@ import {
   partnerDataBlock,
 } from "../../guardrails/partnerData";
 import { SCOUT_BUCKETS } from "../../types";
-import type { ScoutRoutingInput } from "../../types";
+import type { ScoutRegistry, ScoutRoutingInput } from "../../types";
 import { Q6_DEFAULT_BUCKET, type ScoutReadiness } from "./routing";
 
 /**
@@ -67,6 +67,40 @@ function readinessFacts(readiness: ScoutReadiness): string[] {
 export const FOOTHOLD_FLOOR_RULE =
   "- Paper, spreadsheets or no systems never change the bucket — they only cap readiness (the foothold floor, already applied below). A stated need on paper systems keeps its starting bucket; only the tiebreak below, and only on an ambiguous description, moves a bucket.";
 
+/**
+ * The IRS registry record's one job in step 1: stand in for org size when the applicant
+ * named none. Stated before the tiebreak list, like the foothold floor, so the record is
+ * read as evidence for one branch of the tie and nothing more.
+ */
+export const REGISTRY_RULE =
+  "- The IRS registry line (when present) never changes the bucket on its own. It stands in for org size only in the tiebreak below, and only when the applicant's own words name no size: IRS-reported revenue of $1,000,000 or more reads as a larger org, under $250,000 as a small one, anything between says nothing. 'No record matched' is a flag for the reviewer, never a reason to move the bucket or lower confidence.";
+
+const usd = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+/**
+ * The registry record as one labelled line inside the partner-data block: it was found
+ * from what the applicant wrote, so it is material, not instruction. `undefined` (no
+ * lookup) adds no line at all; `null` says the lookup found nothing.
+ */
+export function registryLine(registry: ScoutRegistry | null | undefined): string[] {
+  if (registry === undefined) return [];
+  if (registry === null) return [field("- IRS registry (ProPublica)", "no record matched the org name")];
+  const parts = [
+    `${registry.name}, EIN ${registry.ein.slice(0, 2)}-${registry.ein.slice(2)}`,
+    registry.subsectionCode !== null ? `501(c)(${registry.subsectionCode})` : "subsection unknown",
+    registry.nteeCode !== null ? `NTEE ${registry.nteeCode}` : null,
+    registry.revenue !== null ? `revenue ${usd.format(registry.revenue)}` : "revenue not reported",
+    registry.latestFilingYear !== null
+      ? `newest filing ${registry.latestFilingYear}`
+      : "no filing on record",
+  ].filter((part): part is string => part !== null);
+  return [field("- IRS registry (ProPublica)", parts.join("; "))];
+}
+
 /** One example per shape run 2 missed; each is the heuristic's answer on the matching fixture. */
 export const WORKED_EXAMPLES: readonly string[] = [
   "- A three-way match on a mid-size org: stated need build_tool, 'a growing regional nonprofit', a description that wants a dashboard, trend analysis and predictive models at once, systems 'a mix of internal tools we built ourselves'. Ambiguous (three kinds of work); the org is neither under 20 staff nor 20+ with a system of record, so the tie falls to 'anything else' → Advisory / Strategy, confidence Low.",
@@ -93,6 +127,11 @@ export const WORKED_EXAMPLES: readonly string[] = [
  * intake detail rather than quote a score (run 2, 2026-10-08: 4 of 29 model routings
  * missed on those two shapes, and 2 rationales quoted "3/3 foothold" at a judge who never
  * saw the scores). The heuristic is unchanged.
+ * 0.07 adds the IRS registry record (ProPublica, looked up server-side from the org name
+ * or EIN, R19) as one line inside the partner-data block and one rule above the tiebreak:
+ * the record stands in for org size only when the applicant named none, and a missing
+ * record is a flag, never a bucket change. The heuristic applies the same rule
+ * (`routing.ts` `REGISTRY_LARGE_REVENUE` / `REGISTRY_SMALL_REVENUE`).
  */
 export function buildRoutingPrompt(
   input: ScoutRoutingInput,
@@ -111,9 +150,10 @@ export function buildRoutingPrompt(
     "- It clearly describes exactly one other bucket's kind of work: the description wins — use that bucket, confidence Low.",
     "- It is under 8 words but points at the starting bucket: keep it, confidence Medium.",
     FOOTHOLD_FLOOR_RULE,
+    REGISTRY_RULE,
     "- It points at no bucket's kind of work, or at two or more: it is ambiguous. Break the tie on scale and systems, in this order:",
-    "  - a small org (under 20 staff, volunteer-run, one or two people) with only spreadsheets, paper or nothing → Advisory / Strategy, confidence Low, whatever the stated need;",
-    "  - a larger org (20+ staff) with a real system of record (CRM, Salesforce, database, warehouse, ERP) → keep the starting bucket, confidence Medium;",
+    "  - a small org (under 20 staff, volunteer-run, one or two people; or, when no size is stated, registry revenue under $250,000) with only spreadsheets, paper or nothing → Advisory / Strategy, confidence Low, whatever the stated need;",
+    "  - a larger org (20+ staff; or, when no size is stated, registry revenue of $1,000,000 or more) with a real system of record (CRM, Salesforce, database, warehouse, ERP) → keep the starting bucket, confidence Medium;",
     "  - anything else → Advisory / Strategy, confidence Low.",
     "- Confidence: High only when the stated need and the description agree and the description is specific; Medium when they agree but the description is short or the tie was broken for the starting bucket; Low whenever the bucket is not the stated need's default or the tie fell to Advisory / Strategy. A bucket other than the starting one is never High.",
     "",
@@ -127,7 +167,7 @@ export function buildRoutingPrompt(
     "- rationale: two sentences a staff reviewer can act on. First, name the bucket and the specific intake detail that decided it (a phrase from the problem, the stated need, the org's scale or systems).",
     "  Second, state the readiness exactly as given above and what holds it back, as the intake fact behind it (the contact and timeline, the description's length, the systems named).",
     "  Never quote a numeric score; name the intake detail instead. Never describe the org as more or less ready than the readiness above. No step numbers or form-question labels like Q6/Q7.",
-    "- flags: short phrases for anything a reviewer should check — a need/description mismatch, a vague description, an ambiguous tiebreak, the something_else bypass. Empty when the intake is clean.",
+    "- flags: short phrases for anything a reviewer should check — a need/description mismatch, a vague description, an ambiguous tiebreak, the something_else bypass, a registry line that says no record matched or names a subsection other than 501(c)(3). Empty when the intake is clean.",
     "",
     PARTNER_DATA_NOTICE,
     "",
@@ -141,6 +181,7 @@ export function buildRoutingPrompt(
       field("- Current systems", input.current_systems || "(none described)"),
       field("- Contact", input.contact_name_role || "(not given)"),
       field("- Timeline", input.timeline || "(not given)"),
+      ...registryLine(input.registry),
     ]),
   ].join("\n");
 }

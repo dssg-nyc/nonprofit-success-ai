@@ -1120,6 +1120,8 @@ export type Database = {
           problem_description: string;
           rationale: string;
           referral_source: string;
+          registry: Json | null;
+          registry_lookup: string;
           review_action: Database["public"]["Enums"]["scout_review_action"] | null;
           review_notes: string | null;
           review_status: Database["public"]["Enums"]["scout_review_status"];
@@ -1158,6 +1160,8 @@ export type Database = {
           problem_description: string;
           rationale: string;
           referral_source: string;
+          registry?: Json | null;
+          registry_lookup?: string;
           review_action?: Database["public"]["Enums"]["scout_review_action"] | null;
           review_notes?: string | null;
           review_status?: Database["public"]["Enums"]["scout_review_status"];
@@ -1195,6 +1199,8 @@ export type Database = {
           problem_description?: string;
           rationale?: string;
           referral_source?: string;
+          registry?: Json | null;
+          registry_lookup?: string;
           review_action?: Database["public"]["Enums"]["scout_review_action"] | null;
           review_notes?: string | null;
           review_status?: Database["public"]["Enums"]["scout_review_status"];

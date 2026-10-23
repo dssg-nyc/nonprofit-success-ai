@@ -4,7 +4,7 @@ import type { ScoutResult, ScoutRoutingInput } from "../../types";
 import { Q6_DEFAULT_BUCKET, scoreReadiness } from "./routing";
 import { buildRoutingPrompt, scoutModelSchema } from "./schema";
 
-export const SCOUT_ROUTING_PROMPT_VERSION = "scout-routing-0.06";
+export const SCOUT_ROUTING_PROMPT_VERSION = "scout-routing-0.07";
 
 export const SOMETHING_ELSE_FLAG =
   "Q6 = 'something else' — no auto-bucket, needs manual review";

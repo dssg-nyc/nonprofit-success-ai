@@ -1,7 +1,15 @@
 import type { z } from 'zod';
+import { nonprofitDetailResponseSchema, nonprofitSearchResponseSchema } from '../schemas/nonprofit';
 import { pulseSignalSchema } from '../schemas/pulse';
 import { scoutApproveResponseSchema } from '../schemas/scout';
-import type { PulseSignal, ScoutApproveRequest, ScoutApproveResponse } from '../types';
+import type {
+  NonprofitDetailResponse,
+  NonprofitSearchQuery,
+  NonprofitSearchResponse,
+  PulseSignal,
+  ScoutApproveRequest,
+  ScoutApproveResponse,
+} from '../types';
 
 /**
  * The SPA's client for `/api/*`. No React and no agent code (shared layer): the caller
@@ -104,6 +112,37 @@ export function fetchPulse(engagementId: string, options?: RequestOptions): Prom
   return getJson(
     `/api/pulse-health?engagementId=${encodeURIComponent(engagementId)}`,
     pulseSignalSchema,
+    options,
+  );
+}
+
+/**
+ * ProPublica registry search (`GET /api/nonprofits/search`, bearer token). Deliberately
+ * no `withFallback`: this is not an agent path, and an external registry has no local
+ * heuristic to substitute. On `ApiError` the UI shows "lookup unavailable, enter manually".
+ */
+export function searchNonprofits(
+  query: NonprofitSearchQuery,
+  options?: RequestOptions,
+): Promise<NonprofitSearchResponse> {
+  const params = new URLSearchParams();
+  if (query.q) params.set('q', query.q);
+  if (query.state) params.set('state', query.state);
+  if (query.ntee !== undefined) params.set('ntee', String(query.ntee));
+  if (query.cCode !== undefined) params.set('cCode', String(query.cCode));
+  if (query.page !== undefined) params.set('page', String(query.page));
+  return getJson(`/api/nonprofits/search?${params.toString()}`, nonprofitSearchResponseSchema, options);
+}
+
+/**
+ * One organization by EIN (`GET /api/nonprofits/:ein`, bearer token). An EIN with no
+ * filings resolves with `latestFiling: null`; an unknown EIN rejects with `ApiError`
+ * code `not_found` (404).
+ */
+export function getNonprofit(ein: string, options?: RequestOptions): Promise<NonprofitDetailResponse> {
+  return getJson(
+    `/api/nonprofits/${encodeURIComponent(ein)}`,
+    nonprofitDetailResponseSchema,
     options,
   );
 }
