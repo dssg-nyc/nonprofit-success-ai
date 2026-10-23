@@ -22,9 +22,9 @@ import type {
   reportingAutomationSchema,
   staffConfidenceSchema,
   systemIntegrationSchema,
-} from '../schemas/architect';
-import type { WriteTimestamp } from './domain';
-import type { ScoutBucket, ScoutConfidence, ScoutCompositeSignal } from './scout';
+} from '../schemas/architect.js';
+import type { WriteTimestamp } from './domain.js';
+import type { ScoutBucket, ScoutConfidence, ScoutCompositeSignal } from './scout.js';
 
 // Wire shapes for /api/architect-plan: inferred from src/schemas/architect.ts, never
 // hand-written beside it (CLAUDE.md "One definition per shape"). Type-only import, so

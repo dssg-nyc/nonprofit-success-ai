@@ -1,23 +1,23 @@
-import { ARCHITECT_PLAN_PROMPT_VERSION, buildTemplate, enrichWithModel } from "../src/agents/architect/model";
-import type { PlanGenerationInput } from "../src/agents/architect/plan";
-import { scoreAssessment } from "../src/agents/architect/scoring";
-import type { ArchitectTemplate } from "../src/agents/architect/schema";
-import type { Json } from "../src/lib/database.types";
-import { GatewayError } from "../src/model/errors";
-import { errorName, log } from "../src/observability/log";
+import { ARCHITECT_PLAN_PROMPT_VERSION, buildTemplate, enrichWithModel } from "../src/agents/architect/model.js";
+import type { PlanGenerationInput } from "../src/agents/architect/plan.js";
+import { scoreAssessment } from "../src/agents/architect/scoring.js";
+import type { ArchitectTemplate } from "../src/agents/architect/schema.js";
+import type { Json } from "../src/lib/database.types.js";
+import { GatewayError } from "../src/model/errors.js";
+import { errorName, log } from "../src/observability/log.js";
 import {
   architectCharterSchema,
   architectPlanRequestSchema,
   maturityResultSchema,
   ninetyDayPlanSchema,
-} from "../src/schemas";
-import type { ArchitectPlanRequest, ArchitectPlanResponse, MaturityResult, ScoutBucket } from "../src/types";
-import { authenticate } from "./_auth";
-import type { UserClient } from "./_auth";
-import { checkModelBudget } from "./_budget";
-import { modelKeyConfigured } from "./_env";
-import { parseJsonBody } from "./_http";
-import { handler } from "./_request";
+} from "../src/schemas/index.js";
+import type { ArchitectPlanRequest, ArchitectPlanResponse, MaturityResult, ScoutBucket } from "../src/types/index.js";
+import { authenticate } from "./_auth.js";
+import type { UserClient } from "./_auth.js";
+import { checkModelBudget } from "./_budget.js";
+import { modelKeyConfigured } from "./_env.js";
+import { parseJsonBody } from "./_http.js";
+import { handler } from "./_request.js";
 
 /**
  * POST /api/architect-plan — score the CSA, draft the charter + 90-day plan, and submit

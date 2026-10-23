@@ -1,14 +1,14 @@
-import { deriveHitlTier } from "../../guardrails/hitl";
-import { callModel } from "../../model/gateway";
-import type { ArchitectCharter, NinetyDayPlan } from "../../types";
-import type { PlanGenerationInput } from "./plan";
+import { deriveHitlTier } from "../../guardrails/hitl.js";
+import { callModel } from "../../model/gateway.js";
+import type { ArchitectCharter, NinetyDayPlan } from "../../types/index.js";
+import type { PlanGenerationInput } from "./plan.js";
 import {
   generateCharter,
   generateNinetyDayPlan,
   structuralRiskCount,
-} from "./plan";
-import type { ArchitectEnrichment, ArchitectTemplate } from "./schema";
-import { architectEnrichmentSchema, buildArchitectPrompt } from "./schema";
+} from "./plan.js";
+import type { ArchitectEnrichment, ArchitectTemplate } from "./schema.js";
+import { architectEnrichmentSchema, buildArchitectPrompt } from "./schema.js";
 
 /**
  * 0.05 changes no instruction: the embedded template's success criteria are now chosen by

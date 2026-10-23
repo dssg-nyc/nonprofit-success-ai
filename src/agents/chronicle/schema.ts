@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { PARTNER_DATA_NOTICE, field, partnerDataBlock } from '../../guardrails/partnerData';
-import { chronicleDraftSchema } from '../../schemas/chronicle';
+import { PARTNER_DATA_NOTICE, field, partnerDataBlock } from '../../guardrails/partnerData.js';
+import { chronicleDraftSchema } from '../../schemas/chronicle.js';
 
 // Re-exported so the agent's tests and prompt builders keep one import site.
 export { chronicleDraftSchema };

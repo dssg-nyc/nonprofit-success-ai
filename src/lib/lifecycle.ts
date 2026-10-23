@@ -1,4 +1,4 @@
-import type { EngagementStage, EngagementStatus } from '../types';
+import type { EngagementStage, EngagementStatus } from '../types/index.js';
 
 /**
  * The engagement lifecycle, derived — lifecycle.md §3. `engagements` is one row per stage

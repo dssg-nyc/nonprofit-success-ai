@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { log } from "../src/observability/log";
-import { architectCharterSchema } from "../src/schemas";
-import type { UserClient } from "./_auth";
+import { log } from "../src/observability/log.js";
+import { architectCharterSchema } from "../src/schemas/index.js";
+import type { UserClient } from "./_auth.js";
 
 /**
  * The engagement facts the draft routes (Envoy, Chronicle) write from, read through the

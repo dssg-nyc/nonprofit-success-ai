@@ -1,8 +1,8 @@
-import { deriveHitlTier } from "../../guardrails/hitl";
-import { callModel } from "../../model/gateway";
-import type { ChronicleDraft, ChronicleInput } from "../../types";
-import { assessChronicleReadiness, generateChronicleDraft } from "./draft";
-import { buildChroniclePrompt, chronicleModelSchema } from "./schema";
+import { deriveHitlTier } from "../../guardrails/hitl.js";
+import { callModel } from "../../model/gateway.js";
+import type { ChronicleDraft, ChronicleInput } from "../../types/index.js";
+import { assessChronicleReadiness, generateChronicleDraft } from "./draft.js";
+import { buildChroniclePrompt, chronicleModelSchema } from "./schema.js";
 
 export const CHRONICLE_DRAFT_PROMPT_VERSION = "chronicle-draft-0.07";
 

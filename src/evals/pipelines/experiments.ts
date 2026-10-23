@@ -60,15 +60,23 @@ export function versionLabel(versions: Record<string, string> = promptVersions()
 
 const shortHash = (text: string): string => createHash('sha256').update(text).digest('hex').slice(0, 12);
 
+/**
+ * Relative import specifiers hash without their ESM extension (`./x.js` → `./x`,
+ * `../types/index.js` → `../types`), so adding the extensions Node needs (#56) is not
+ * read as a prompt edit and every hash logged before it still compares.
+ */
+export const normaliseImports = (text: string): string =>
+  text.replace(/(['"])(\.{1,2}\/[^'"]*?)(?:\/index)?\.js\1/g, '$1$2$1');
+
 /** A directory hashes as its `.ts` files in name order. */
 function sourceText(path: string): string {
   try {
-    return readFileSync(path, 'utf-8');
+    return normaliseImports(readFileSync(path, 'utf-8'));
   } catch {
     return readdirSync(path)
       .filter((name) => name.endsWith('.ts'))
       .sort()
-      .map((name) => readFileSync(resolve(path, name), 'utf-8'))
+      .map((name) => normaliseImports(readFileSync(resolve(path, name), 'utf-8')))
       .join('\n');
   }
 }

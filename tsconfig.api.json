@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "allowImportingTsExtensions": false,
+    "allowJs": false,
+    "paths": {}
+  },
+  "include": ["api"],
+  "exclude": ["api/__tests__"]
+}

@@ -2,7 +2,7 @@ import type {
   EnvoyDraft,
   EnvoyInput,
   EnvoyOccasion,
-} from "../../types/envoy";
+} from "../../types/envoy.js";
 
 function cadenceLine(cadence?: string): string {
   return cadence

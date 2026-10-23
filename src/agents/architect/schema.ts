@@ -4,10 +4,10 @@ import {
   field,
   neutralizePartnerText,
   partnerDataBlock,
-} from "../../guardrails/partnerData";
-import type { ArchitectCharter, NinetyDayPlan } from "../../types";
-import type { PlanGenerationInput } from "./plan";
-import { structuralRiskCount } from "./plan";
+} from "../../guardrails/partnerData.js";
+import type { ArchitectCharter, NinetyDayPlan } from "../../types/index.js";
+import type { PlanGenerationInput } from "./plan.js";
+import { structuralRiskCount } from "./plan.js";
 
 /**
  * One prose override, addressed by its index in the template array. `mergeEnrichment()`

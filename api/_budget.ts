@@ -1,5 +1,5 @@
-import { errorName, log } from '../src/observability/log';
-import type { UserClient } from './_auth';
+import { errorName, log } from '../src/observability/log.js';
+import type { UserClient } from './_auth.js';
 
 /**
  * The per-user model-call budget (0007 `check_model_budget`): one row per caller per

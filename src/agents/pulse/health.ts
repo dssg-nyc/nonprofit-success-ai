@@ -2,7 +2,7 @@ import type {
   PulseInput,
   PulseSignal,
   PulseStatus,
-} from "../../types/pulse";
+} from "../../types/pulse.js";
 
 export const STAGE_WINDOW_DAYS: Record<string, number> = {
   initial_meeting: 14,

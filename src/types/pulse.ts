@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { pulseSignalSchema } from '../schemas/pulse';
+import type { pulseSignalSchema } from '../schemas/pulse.js';
 
 export type PulseStatus = PulseSignal['status'];
 

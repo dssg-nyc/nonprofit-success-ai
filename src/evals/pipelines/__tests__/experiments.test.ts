@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunManifest } from '../../types';
-import { experimentEntry, promptVersions, runId, versionDrift, versionLabel } from '../experiments';
+import { experimentEntry, normaliseImports, promptVersions, runId, versionDrift, versionLabel } from '../experiments';
 
 const manifest = (over: Partial<RunManifest> = {}): RunManifest => ({
   id: 'run',
@@ -47,6 +47,19 @@ describe('versionDrift', () => {
   it('skips backfilled entries, which carry no hashes', () => {
     const run = manifest({ promptHashes: { scout: 'bbb', judge: 'jjj' } });
     expect(versionDrift(run, [manifest({ promptHashes: null })])).toEqual([]);
+  });
+});
+
+describe('normaliseImports', () => {
+  it('hashes an ESM-extended relative import as the extensionless one', () => {
+    const before = "import { a } from '../../schemas/envoy';\nimport type { B } from \"../../types\";";
+    const after = "import { a } from '../../schemas/envoy.js';\nimport type { B } from \"../../types/index.js\";";
+    expect(normaliseImports(after)).toBe(before);
+  });
+
+  it('leaves package imports and prompt text alone', () => {
+    const text = "import { z } from 'zod';\nconst line = 'see ./notes.js';";
+    expect(normaliseImports(text)).toBe(text);
   });
 });
 

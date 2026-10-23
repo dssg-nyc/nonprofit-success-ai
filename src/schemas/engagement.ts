@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Constants } from "../lib/database.types";
+import { Constants } from "../lib/database.types.js";
 
 /**
  * Wire contract for `POST /api/engagement-transition` — lifecycle.md §2. The command is

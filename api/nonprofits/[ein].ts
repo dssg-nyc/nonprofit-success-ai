@@ -8,9 +8,9 @@ import {
   json,
   toDetail,
   upstreamOrganization,
-} from '../_propublica';
-import { authenticate } from '../_auth';
-import { handler } from '../_request';
+} from '../_propublica.js';
+import { authenticate } from '../_auth.js';
+import { handler } from '../_request.js';
 
 export const maxDuration = 10;
 

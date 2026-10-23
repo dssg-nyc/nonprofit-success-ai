@@ -2,7 +2,7 @@ import type {
   ChronicleDraft,
   ChronicleInput,
   ChronicleReadiness,
-} from "../../types/chronicle";
+} from "../../types/chronicle.js";
 
 export const THIN_EVENT_THRESHOLD = 3;
 

@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import type {
   engagementTransitionRequestSchema,
   engagementTransitionResponseSchema,
-} from '../schemas/engagement';
+} from '../schemas/engagement.js';
 
 // Wire shapes for /api/engagement-transition: inferred from src/schemas/engagement.ts,
 // never hand-written beside it (CLAUDE.md "One definition per shape"). The UI-facing

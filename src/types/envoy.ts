@@ -4,7 +4,7 @@ import type {
   envoyDraftResponseSchema,
   envoyDraftSchema,
   envoyInputSchema,
-} from '../schemas/envoy';
+} from '../schemas/envoy.js';
 
 // Wire shapes for /api/envoy-draft: inferred from src/schemas/envoy.ts, never hand-written
 // beside it (CLAUDE.md "One definition per shape"). Type-only imports, so no runtime cycle.

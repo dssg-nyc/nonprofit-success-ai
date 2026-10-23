@@ -14,26 +14,26 @@ export {
   scoutRegistryLookupSchema,
   scoutRegistrySchema,
   scoutResultSchema,
-} from "./scout";
-export { pulseSignalSchema } from "./pulse";
+} from "./scout.js";
+export { pulseSignalSchema } from "./pulse.js";
 export {
   ENVOY_OCCASIONS,
   envoyDraftRequestSchema,
   envoyDraftResponseSchema,
   envoyDraftSchema,
   envoyInputSchema,
-} from "./envoy";
+} from "./envoy.js";
 export {
   chronicleDraftRequestSchema,
   chronicleDraftResponseSchema,
   chronicleDraftSchema,
   chronicleInputSchema,
-} from "./chronicle";
+} from "./chronicle.js";
 export {
   engagementStageSchema,
   engagementTransitionRequestSchema,
   engagementTransitionResponseSchema,
-} from "./engagement";
+} from "./engagement.js";
 export {
   nonprofitDetailResponseSchema,
   nonprofitDetailSchema,
@@ -42,7 +42,7 @@ export {
   nonprofitPdfFilingSchema,
   nonprofitSearchResponseSchema,
   nonprofitSummarySchema,
-} from "./nonprofit";
+} from "./nonprofit.js";
 export {
   architectCharterSchema,
   architectPlanRequestSchema,
@@ -50,7 +50,7 @@ export {
   csaAnswersSchema,
   maturityResultSchema,
   ninetyDayPlanSchema,
-} from "./architect";
+} from "./architect.js";
 
 // Wire schemas are defined here and imported BY the agents (CLAUDE.md: agents/ ->
 // schemas), never re-exported from them. An agent's model-facing schema derives from

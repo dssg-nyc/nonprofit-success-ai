@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import type { AgentName, ModelProvider } from '../model/types';
+import type { AgentName, ModelProvider } from '../model/types.js';
 
 /**
  * Structured server logs: one JSON object per line, so Vercel's log search can filter

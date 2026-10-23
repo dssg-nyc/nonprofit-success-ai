@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { log } from "../src/observability/log";
-import { scoutApproveRequestSchema, scoutApproveResponseSchema } from "../src/schemas";
-import { authenticate } from "./_auth";
-import { parseJsonBody } from "./_http";
-import { handler } from "./_request";
+import { log } from "../src/observability/log.js";
+import { scoutApproveRequestSchema, scoutApproveResponseSchema } from "../src/schemas/index.js";
+import { authenticate } from "./_auth.js";
+import { parseJsonBody } from "./_http.js";
+import { handler } from "./_request.js";
 
 /**
  * POST /api/scout-approve — the Scout-approve command (crm/lifecycle.md §4 row 1): the

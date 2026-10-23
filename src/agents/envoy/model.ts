@@ -1,7 +1,7 @@
-import { deriveHitlTier } from "../../guardrails/hitl";
-import { callModel } from "../../model/gateway";
-import type { EnvoyDraft, EnvoyInput } from "../../types";
-import { buildEnvoyPrompt, envoyModelSchema } from "./schema";
+import { deriveHitlTier } from "../../guardrails/hitl.js";
+import { callModel } from "../../model/gateway.js";
+import type { EnvoyDraft, EnvoyInput } from "../../types/index.js";
+import { buildEnvoyPrompt, envoyModelSchema } from "./schema.js";
 
 export const ENVOY_DRAFT_PROMPT_VERSION = "envoy-draft-0.04";
 

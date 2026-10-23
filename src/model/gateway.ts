@@ -2,14 +2,14 @@ import { google } from '@ai-sdk/google';
 import { openai } from '@ai-sdk/openai';
 import { generateText, NoObjectGeneratedError, Output } from 'ai';
 import type { JSONValue, LanguageModel, LanguageModelUsage } from 'ai';
-import { errorName, log } from '../observability/log';
-import type { LogLevel } from '../observability/log';
-import { recordRun } from '../observability/recorder';
-import type { AgentRunPayload, RecordResult } from '../observability/recorder';
-import { GatewayError, classifyModelError, isRateLimited, providerStatusCode } from './errors';
-import { costCents } from './pricing';
-import type { GatewayErrorCode } from './errors';
-import type { GatewayRequest, GatewayResponse, GatewayUsage, ModelProvider } from './types';
+import { errorName, log } from '../observability/log.js';
+import type { LogLevel } from '../observability/log.js';
+import { recordRun } from '../observability/recorder.js';
+import type { AgentRunPayload, RecordResult } from '../observability/recorder.js';
+import { GatewayError, classifyModelError, isRateLimited, providerStatusCode } from './errors.js';
+import { costCents } from './pricing.js';
+import type { GatewayErrorCode } from './errors.js';
+import type { GatewayRequest, GatewayResponse, GatewayUsage, ModelProvider } from './types.js';
 
 /**
  * Each provider reads its own server-only key (never `VITE_`-prefixed). The agents run

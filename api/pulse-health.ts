@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { computePulseSignal } from "../src/agents/pulse/health";
-import { toPulseInput } from "../src/agents/pulse/input";
-import { log } from "../src/observability/log";
-import { authenticate } from "./_auth";
-import { handler } from "./_request";
+import { computePulseSignal } from "../src/agents/pulse/health.js";
+import { toPulseInput } from "../src/agents/pulse/input.js";
+import { log } from "../src/observability/log.js";
+import { authenticate } from "./_auth.js";
+import { handler } from "./_request.js";
 
 export const maxDuration = 10;
 

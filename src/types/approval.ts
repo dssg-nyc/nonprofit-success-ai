@@ -1,4 +1,4 @@
-import type { AgentName } from '../model/types';
+import type { AgentName } from '../model/types.js';
 
 export type HitlTier = 'L1' | 'L2' | 'L3' | 'L4';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';

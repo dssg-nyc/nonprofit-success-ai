@@ -1,6 +1,6 @@
-import { log } from '../src/observability/log';
-import type { ScoutRegistry, ScoutRegistryLookup } from '../src/types';
-import { PROPUBLICA_BASE, fetchUpstream, toDetail, upstreamOrganization, upstreamSearch } from './_propublica';
+import { log } from '../src/observability/log.js';
+import type { ScoutRegistry, ScoutRegistryLookup } from '../src/types/index.js';
+import { PROPUBLICA_BASE, fetchUpstream, toDetail, upstreamOrganization, upstreamSearch } from './_propublica.js';
 
 /**
  * Scout's registry enrichment: the applicant's IRS record from ProPublica, looked up

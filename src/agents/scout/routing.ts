@@ -1,4 +1,4 @@
-import { deriveHitlTier } from "../../guardrails/hitl";
+import { deriveHitlTier } from "../../guardrails/hitl.js";
 import {
   PrimaryNeed,
   ScoutBucket,
@@ -7,7 +7,7 @@ import {
   type ScoutRegistry,
   type ScoutRoutingInput,
   type ScoutResult,
-} from "../../types";
+} from "../../types/index.js";
 
 /** The bucket each stated primary need (Q6) implies. Shared with the model prompt. */
 export const Q6_DEFAULT_BUCKET: Record<PrimaryNeed, ScoutBucket | null> = {

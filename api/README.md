@@ -314,14 +314,24 @@ cannot be pointed at a hosted project or a paid model by accident.
 ### Deploy check
 
 `cd.yml` captures the URL `vercel deploy` prints and polls `GET /api/health` (up to a
-minute) until it answers 200. Because `health` probes Supabase Auth with the
-deployment's own env, a project with a missing or wrong `SUPABASE_URL` / anon key
-fails the workflow here, not on the first visitor. A preview behind Vercel Deployment
-Protection answers 302 to anyone without the project's bypass secret
-(`VERCEL_AUTOMATION_BYPASS_SECRET`, repo secret); until that secret is set, protected
-previews are skipped with a workflow warning instead of failed, because a 302 says
-nothing about the deployment. Production deploys are never protected and are always
-checked.
+minute) until it answers 200 with `"ok": true`. Because `health` probes Supabase Auth
+with the deployment's own env, a project with a missing or wrong `SUPABASE_URL` / anon
+key fails the workflow here, not on the first visitor. Every per-deployment URL,
+production included, is behind Vercel Deployment Protection, so the check uses
+`vercel curl`, which mints a bypass token from `VERCEL_TOKEN` (or uses
+`VERCEL_AUTOMATION_BYPASS_SECRET` when set). A plain curl only ever sees the 302, and
+that is how #56 shipped. The body is asserted as well as the status, because a
+cancelled deployment answers 200 with an HTML page.
+
+### ESM imports
+
+`package.json` is `"type": "module"`, and Vercel compiles each route to `.js` without
+bundling, so Node's ESM loader resolves every import at runtime. Every relative import
+reachable from `api/`, including the `src/` modules it pulls in, needs an explicit
+`.js` (or `/index.js` for a directory such as `../types`). Vite and Vitest resolve
+extensionless imports, so tests and the SPA build stay green without it, and #56 took
+production down. `npm run type-check` also runs `tsconfig.api.json` (`NodeNext`, over
+`api/`), which fails on a missing extension.
 
 ## Known gaps
 

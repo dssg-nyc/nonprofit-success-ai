@@ -1,4 +1,4 @@
-import type { PulseInput } from "../../types/pulse";
+import type { PulseInput } from "../../types/pulse.js";
 
 export interface EngagementRowForPulse {
   id: string;

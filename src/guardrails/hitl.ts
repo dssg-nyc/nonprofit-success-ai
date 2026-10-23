@@ -1,5 +1,5 @@
-import type { AgentName } from '../model/types';
-import type { HitlTier } from '../types/approval';
+import type { AgentName } from '../model/types.js';
+import type { HitlTier } from '../types/approval.js';
 
 export interface HitlSignals {
   confidence?: 'High' | 'Medium' | 'Low' | null;

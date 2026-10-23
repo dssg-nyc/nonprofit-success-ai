@@ -4,7 +4,7 @@ import type {
   chronicleDraftResponseSchema,
   chronicleDraftSchema,
   chronicleInputSchema,
-} from '../schemas/chronicle';
+} from '../schemas/chronicle.js';
 
 // Wire shapes for /api/chronicle-draft: inferred from src/schemas/chronicle.ts, never
 // hand-written beside it (CLAUDE.md "One definition per shape"). Type-only imports.

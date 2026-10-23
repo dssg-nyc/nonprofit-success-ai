@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '../src/lib/database.types';
-import { errorName, log } from '../src/observability/log';
-import { supabasePublicConfig } from './_env';
+import type { Database } from '../src/lib/database.types.js';
+import { errorName, log } from '../src/observability/log.js';
+import { supabasePublicConfig } from './_env.js';
 
 /**
  * Caller authentication for handlers that write on a user's behalf.

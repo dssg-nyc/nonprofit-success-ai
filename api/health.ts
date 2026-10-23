@@ -1,5 +1,5 @@
-import { supabasePublicConfig } from './_env';
-import { handler } from './_request';
+import { supabasePublicConfig } from './_env.js';
+import { handler } from './_request.js';
 
 /**
  * Liveness plus the dependency every other route needs: a reachable Supabase Auth.

@@ -1,18 +1,18 @@
 import { z } from "zod";
-import { assessChronicleReadiness, generateChronicleDraft } from "../src/agents/chronicle/draft";
-import { CHRONICLE_DRAFT_PROMPT_VERSION, draftChronicleWithModel } from "../src/agents/chronicle/model";
-import type { Json } from "../src/lib/database.types";
-import { GatewayError } from "../src/model/errors";
-import { errorName, log } from "../src/observability/log";
-import { chronicleDraftRequestSchema, chronicleDraftResponseSchema } from "../src/schemas";
-import type { ChronicleDraft, ChronicleDraftRequest, ChronicleDraftResponse, ChronicleInput } from "../src/types";
-import { authenticate } from "./_auth";
-import type { UserClient } from "./_auth";
-import { checkModelBudget } from "./_budget";
-import { modelKeyConfigured } from "./_env";
-import { parseJsonBody } from "./_http";
-import { loadEngagementFacts } from "./_engagement";
-import { handler } from "./_request";
+import { assessChronicleReadiness, generateChronicleDraft } from "../src/agents/chronicle/draft.js";
+import { CHRONICLE_DRAFT_PROMPT_VERSION, draftChronicleWithModel } from "../src/agents/chronicle/model.js";
+import type { Json } from "../src/lib/database.types.js";
+import { GatewayError } from "../src/model/errors.js";
+import { errorName, log } from "../src/observability/log.js";
+import { chronicleDraftRequestSchema, chronicleDraftResponseSchema } from "../src/schemas/index.js";
+import type { ChronicleDraft, ChronicleDraftRequest, ChronicleDraftResponse, ChronicleInput } from "../src/types/index.js";
+import { authenticate } from "./_auth.js";
+import type { UserClient } from "./_auth.js";
+import { checkModelBudget } from "./_budget.js";
+import { modelKeyConfigured } from "./_env.js";
+import { parseJsonBody } from "./_http.js";
+import { loadEngagementFacts } from "./_engagement.js";
+import { handler } from "./_request.js";
 
 /**
  * POST /api/chronicle-draft — draft an impact story and submit it for staff approval

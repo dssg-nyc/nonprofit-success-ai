@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { log } from '../src/observability/log';
-import type { NonprofitDetail, NonprofitSummary } from '../src/types';
+import { log } from '../src/observability/log.js';
+import type { NonprofitDetail, NonprofitSummary } from '../src/types/index.js';
 
 /**
  * ProPublica Nonprofit Explorer v2 — the shared upstream of `nonprofits/search` and

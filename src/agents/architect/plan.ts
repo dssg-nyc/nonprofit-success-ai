@@ -3,8 +3,8 @@ import {
   CharterWorkstream,
   NinetyDayPlan,
   ScoutBucket,
-} from "../../types";
-import { MaturityResult } from "./scoring";
+} from "../../types/index.js";
+import { MaturityResult } from "./scoring.js";
 
 export interface PlanGenerationInput {
   orgName: string;

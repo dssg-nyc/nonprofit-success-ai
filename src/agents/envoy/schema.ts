@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { PARTNER_DATA_NOTICE, field, partnerDataBlock } from '../../guardrails/partnerData';
-import { envoyDraftSchema, ENVOY_OCCASIONS } from '../../schemas/envoy';
+import { PARTNER_DATA_NOTICE, field, partnerDataBlock } from '../../guardrails/partnerData.js';
+import { envoyDraftSchema, ENVOY_OCCASIONS } from '../../schemas/envoy.js';
 
 // Re-exported so the agent's tests and prompt builders keep one import site.
 export { envoyDraftSchema, ENVOY_OCCASIONS };

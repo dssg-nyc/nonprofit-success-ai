@@ -1,8 +1,8 @@
-import { deriveHitlTier } from "../../guardrails/hitl";
-import { callModel } from "../../model/gateway";
-import type { ScoutResult, ScoutRoutingInput } from "../../types";
-import { Q6_DEFAULT_BUCKET, scoreReadiness } from "./routing";
-import { buildRoutingPrompt, scoutModelSchema } from "./schema";
+import { deriveHitlTier } from "../../guardrails/hitl.js";
+import { callModel } from "../../model/gateway.js";
+import type { ScoutResult, ScoutRoutingInput } from "../../types/index.js";
+import { Q6_DEFAULT_BUCKET, scoreReadiness } from "./routing.js";
+import { buildRoutingPrompt, scoutModelSchema } from "./schema.js";
 
 export const SCOUT_ROUTING_PROMPT_VERSION = "scout-routing-0.07";
 

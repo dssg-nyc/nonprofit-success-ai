@@ -7,8 +7,8 @@ import type {
   scoutRegistryLookupSchema,
   scoutRegistrySchema,
   scoutResultSchema,
-} from '../schemas/scout';
-import type { WriteTimestamp } from './domain';
+} from '../schemas/scout.js';
+import type { WriteTimestamp } from './domain.js';
 
 export const SCOUT_BUCKETS = [
   'Data Infrastructure',

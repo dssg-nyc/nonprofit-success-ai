@@ -5,7 +5,7 @@ import type {
   nonprofitFilingSchema,
   nonprofitSearchResponseSchema,
   nonprofitSummarySchema,
-} from '../schemas/nonprofit';
+} from '../schemas/nonprofit.js';
 
 export type NonprofitSummary = z.infer<typeof nonprofitSummarySchema>;
 export type NonprofitFiling = z.infer<typeof nonprofitFilingSchema>;

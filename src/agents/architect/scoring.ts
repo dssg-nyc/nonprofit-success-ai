@@ -5,7 +5,7 @@ import type {
   MaturityResult,
   MaturityScore,
   ScoutBucket,
-} from "../../types";
+} from "../../types/index.js";
 
 /**
  * The scoring input and output are wire shapes since `/api/architect-plan` returns the

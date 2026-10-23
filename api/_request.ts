@@ -1,4 +1,4 @@
-import { currentRequestId, errorName, log, withRequestContext } from '../src/observability/log';
+import { currentRequestId, errorName, log, withRequestContext } from '../src/observability/log.js';
 
 /**
  * The outermost layer of every `/api` handler: a request id for correlation and a

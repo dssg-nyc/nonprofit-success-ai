@@ -1,13 +1,13 @@
 import { z } from "zod";
-import { scoutResultSchema } from "../../schemas/scout";
+import { scoutResultSchema } from "../../schemas/scout.js";
 import {
   PARTNER_DATA_NOTICE,
   field,
   partnerDataBlock,
-} from "../../guardrails/partnerData";
-import { SCOUT_BUCKETS } from "../../types";
-import type { ScoutRegistry, ScoutRoutingInput } from "../../types";
-import { Q6_DEFAULT_BUCKET, type ScoutReadiness } from "./routing";
+} from "../../guardrails/partnerData.js";
+import { SCOUT_BUCKETS } from "../../types/index.js";
+import type { ScoutRegistry, ScoutRoutingInput } from "../../types/index.js";
+import { Q6_DEFAULT_BUCKET, type ScoutReadiness } from "./routing.js";
 
 /**
  * What the model is asked for: the wire schema minus the fields code derives.

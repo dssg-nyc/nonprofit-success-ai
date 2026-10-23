@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PRIMARY_NEED_OPTIONS, SCOUT_BUCKETS } from "../types";
+import { PRIMARY_NEED_OPTIONS, SCOUT_BUCKETS } from "../types/index.js";
 
 const SCORE = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 

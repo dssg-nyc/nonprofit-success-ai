@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import type { Database, TablesInsert } from '../lib/database.types';
-import type { AgentName } from '../model/types';
-import { errorName, log } from './log';
+import type { Database, TablesInsert } from '../lib/database.types.js';
+import type { AgentName } from '../model/types.js';
+import { errorName, log } from './log.js';
 
 /**
  * One `agent_runs` row. Telemetry only: no raw prompt text and no model output

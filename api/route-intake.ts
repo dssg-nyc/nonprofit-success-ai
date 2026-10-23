@@ -1,15 +1,15 @@
-import { routeScoutIntakeWithModel } from "../src/agents/scout/model";
-import { routeScoutIntake } from "../src/agents/scout/routing";
-import { GatewayError } from "../src/model/errors";
-import { errorName, log } from "../src/observability/log";
-import { scoutIntakeRequestSchema, scoutIntakeResponseSchema } from "../src/schemas";
-import type { ScoutIntakeResponse, ScoutResult, ScoutRoutingInput } from "../src/types";
-import { authenticate } from "./_auth";
-import { checkModelBudget } from "./_budget";
-import { modelKeyConfigured } from "./_env";
-import { parseJsonBody } from "./_http";
-import { handler } from "./_request";
-import { lookupScoutRegistry } from "./_scoutRegistry";
+import { routeScoutIntakeWithModel } from "../src/agents/scout/model.js";
+import { routeScoutIntake } from "../src/agents/scout/routing.js";
+import { GatewayError } from "../src/model/errors.js";
+import { errorName, log } from "../src/observability/log.js";
+import { scoutIntakeRequestSchema, scoutIntakeResponseSchema } from "../src/schemas/index.js";
+import type { ScoutIntakeResponse, ScoutResult, ScoutRoutingInput } from "../src/types/index.js";
+import { authenticate } from "./_auth.js";
+import { checkModelBudget } from "./_budget.js";
+import { modelKeyConfigured } from "./_env.js";
+import { parseJsonBody } from "./_http.js";
+import { handler } from "./_request.js";
+import { lookupScoutRegistry } from "./_scoutRegistry.js";
 
 export const maxDuration = 30;
 

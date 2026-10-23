@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "eslint .",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsc --noEmit && tsc --noEmit -p tsconfig.api.json",
     "test": "vitest run",
     "test:api": "vitest run --config vitest.integration.config.ts",
     "eval:grade": "tsx src/evals/pipelines/grade.ts",

@@ -1,15 +1,15 @@
 import { z } from "zod";
-import type { Json } from "../src/lib/database.types";
-import { classifyTransition, deriveCurrentStage } from "../src/lib/lifecycle";
-import { log } from "../src/observability/log";
+import type { Json } from "../src/lib/database.types.js";
+import { classifyTransition, deriveCurrentStage } from "../src/lib/lifecycle.js";
+import { log } from "../src/observability/log.js";
 import {
   engagementStageSchema,
   engagementTransitionRequestSchema,
   engagementTransitionResponseSchema,
-} from "../src/schemas";
-import { authenticate } from "./_auth";
-import { parseJsonBody } from "./_http";
-import { handler } from "./_request";
+} from "../src/schemas/index.js";
+import { authenticate } from "./_auth.js";
+import { parseJsonBody } from "./_http.js";
+import { handler } from "./_request.js";
 
 /**
  * POST /api/engagement-transition — the only writer of engagement lifecycle state
