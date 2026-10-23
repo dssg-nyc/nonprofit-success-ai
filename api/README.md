@@ -313,6 +313,8 @@ cannot be pointed at a hosted project or a paid model by accident.
 
 ### Deploy check
 
+**Paused:** the `deploy` job runs only when the repo variable `DEPLOY_ENABLED` is `true` (unset until #27 lands; see `stack/environments.md` › What is missing).
+
 `cd.yml` captures the URL `vercel deploy` prints and polls `GET /api/health` (up to a
 minute) until it answers 200 with `"ok": true`. Because `health` probes Supabase Auth
 with the deployment's own env, a project with a missing or wrong `SUPABASE_URL` / anon

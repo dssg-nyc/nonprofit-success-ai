@@ -24,7 +24,10 @@ jobs:
     needs: ci
     # Dependabot-triggered runs get no repo secrets, so VERCEL_TOKEN would be empty.
     # Dependency bumps don't need a preview; CI alone gates them.
-    if: github.actor != 'dependabot[bot]'
+    # Paused until the hosted Supabase project and the shared Vercel project exist (#27):
+    # the secrets point at a personal Vercel project with no Supabase env, so every
+    # deploy fails /api/health. Re-enable with `gh variable set DEPLOY_ENABLED --body true`.
+    if: vars.DEPLOY_ENABLED == 'true' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
