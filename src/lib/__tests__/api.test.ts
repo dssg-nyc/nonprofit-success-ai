@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { ApiError, approveScoutIntake, getNonprofit, postJson, searchNonprofits, withFallback } from '../api';
+import { ApiError, approveScoutIntake, postJson, withFallback } from '../api';
 
 // `fetch` is stubbed per test: these check the client's contract (what counts as a
 // result, what counts as "fall back"), not the server.
@@ -138,59 +138,5 @@ describe('approveScoutIntake', () => {
     stubFetch(async () => Response.json({ ...reply, finalBucket: 'Not a bucket' }, { status: 201 }));
     await expect(approveScoutIntake({ intakeId: reply.intakeId, idempotencyKey: 'click-0001-abcd' }))
       .rejects.toMatchObject({ code: 'invalid_response' });
-  });
-});
-
-describe('searchNonprofits / getNonprofit', () => {
-  const summary = {
-    ein: '131624100',
-    strein: '13-1624100',
-    name: 'EXAMPLE',
-    city: 'NEW YORK',
-    state: 'NY',
-    nteeCode: null,
-    subsectionCode: 3,
-    source: 'propublica',
-  };
-  const detail = {
-    ...summary,
-    irs: { revenueAmount: null, assetAmount: null, taxPeriod: null },
-    latestFiling: null,
-    latestPdfFiling: null,
-    filingCount: { withData: 0, pdfOnly: 0 },
-  };
-
-  it('GETs a search with every set filter, bearer attached, and validates the body', async () => {
-    const fetchFn = stubFetch(async () =>
-      Response.json({ results: [summary], total: 1, page: 2, numPages: 3 }),
-    );
-    const out = await searchNonprofits(
-      { q: 'a & b', state: 'NY', ntee: 2, cCode: 3, page: 2 },
-      { headers: { Authorization: 'Bearer t.o.k' } },
-    );
-    expect(out.total).toBe(1);
-    const [url, init] = fetchFn.mock.calls[0];
-    expect(url).toBe('/api/nonprofits/search?q=a+%26+b&state=NY&ntee=2&cCode=3&page=2');
-    expect(init.method).toBe('GET');
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer t.o.k');
-  });
-
-  it('omits unset filters, and sends page 0', async () => {
-    const fetchFn = stubFetch(async () => Response.json({ results: [], total: 0, page: 0, numPages: 0 }));
-    await searchNonprofits({ state: 'NY', page: 0 });
-    expect(fetchFn.mock.calls[0][0]).toBe('/api/nonprofits/search?state=NY&page=0');
-  });
-
-  it('GETs one organization by EIN', async () => {
-    const fetchFn = stubFetch(async () => Response.json({ result: detail }));
-    await expect(getNonprofit('13-1624100')).resolves.toEqual({ result: detail });
-    expect(fetchFn.mock.calls[0][0]).toBe('/api/nonprofits/13-1624100');
-  });
-
-  it('surfaces not_found and rejects a wrong-shaped 200, with no fallback', async () => {
-    stubFetch(async () => Response.json({ error: 'not_found' }, { status: 404 }));
-    await expect(getNonprofit('000000001')).rejects.toMatchObject({ code: 'not_found', status: 404 });
-    stubFetch(async () => Response.json({ results: [summary], total: 1 }));
-    await expect(searchNonprofits({ q: 'x' })).rejects.toBeInstanceOf(ApiError);
   });
 });

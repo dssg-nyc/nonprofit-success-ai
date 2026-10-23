@@ -12,10 +12,7 @@
 # --- Gated: measured over >= 20 fixtures --------------------------------------
 # scoutRouting: 21 hand-authored cases, 21 distinct inputs, expectations taken from
 # scout.md's composite and HITL rules (not read off the code). Measured 1.000 on
-# 2026-10-06 (heuristic, deterministic). R18 added 8 adversarial twins (29); R19 added
-# 6 registry cases — the revenue tiebreak both ways with registry-less twins, a not-found
-# flag case and one adversarial twin whose registry name carries injected text (35,
-# 2026-10-14, still 1.000). A heuristic over a golden set has no noise
+# 2026-10-06 (heuristic, deterministic). A heuristic over a golden set has no noise
 # to allow for, so the threshold is the measured rate: any miss is a regression.
 scout_routing_pass_rate: 1.0
 
@@ -61,9 +58,8 @@ chronicle_grounding_pass_rate: 1.0
 envoy_grounding_pass_rate: 1.0
 architect_grounding_pass_rate: 1.0
 # scoutGrounding (R18, 2026-10-13): run 2's Scout finding — rubric arithmetic ("3/3") and
-# wire field names in the rationale — on the scoutRouting cases, template path, after
-# the scout-routing-0.06 prompt change. Measured 1.000 on 2026-10-13 (heuristic only)
-# over 29 cases; 1.000 again on 2026-10-14 over 35 with the R19 registry sentence.
+# wire field names in the rationale — on the 29 scoutRouting cases, template path, after
+# the scout-routing-0.06 prompt change. Measured 1.000 on 2026-10-13 (heuristic only).
 # The same run added the completed-told-as-beginning, late-provisional-marker, pipeline-
 # criterion and required-prose checks to the three lints above; still 1.000 each.
 scout_grounding_pass_rate: 1.0

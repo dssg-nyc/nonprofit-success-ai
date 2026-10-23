@@ -39,21 +39,6 @@ const ROW = {
   routing_model: null,
   routing_prompt_version: null,
   routing_run_id: null,
-  registry: null,
-  registry_lookup: 'not_found',
-};
-
-const REGISTRY = {
-  ein: '131624100',
-  name: 'Museum Of Modern Art',
-  city: 'New York',
-  state: 'NY',
-  nteeCode: 'A510',
-  subsectionCode: 3,
-  revenue: 362023464,
-  assets: 2670935041,
-  latestFilingYear: 2023,
-  source: 'propublica',
 };
 
 describe('scoutIntakeFromRow', () => {
@@ -86,20 +71,6 @@ describe('scoutIntakeFromRow', () => {
     expect(intake).not.toHaveProperty('orgName');
     expect(intake).not.toHaveProperty('compositeSignal');
     expect(intake).not.toHaveProperty('pocScore');
-  });
-
-  it('carries the registry lookup status through as camelCase, with no record', () => {
-    expect(intake.registryLookup).toBe('not_found');
-    expect(intake.registry ?? null).toBeNull();
-    expect(intake).not.toHaveProperty('registry_lookup');
-  });
-
-  it('carries a matched registry record through with its keys intact', () => {
-    const matched = scoutIntakeFromRow(
-      rowToDomain({ ...ROW, registry: REGISTRY, registry_lookup: 'matched' }, ['submittedAt', 'reviewedAt']),
-    );
-    expect(matched.registryLookup).toBe('matched');
-    expect(matched.registry).toEqual(REGISTRY);
   });
 
   it('carries a filled optional answer through', () => {

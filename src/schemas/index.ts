@@ -11,8 +11,6 @@ export {
   scoutApproveResponseSchema,
   scoutIntakeRequestSchema,
   scoutIntakeResponseSchema,
-  scoutRegistryLookupSchema,
-  scoutRegistrySchema,
   scoutResultSchema,
 } from "./scout";
 export { pulseSignalSchema } from "./pulse";
@@ -34,15 +32,6 @@ export {
   engagementTransitionRequestSchema,
   engagementTransitionResponseSchema,
 } from "./engagement";
-export {
-  nonprofitDetailResponseSchema,
-  nonprofitDetailSchema,
-  nonprofitFilingSchema,
-  nonprofitFormTypeSchema,
-  nonprofitPdfFilingSchema,
-  nonprofitSearchResponseSchema,
-  nonprofitSummarySchema,
-} from "./nonprofit";
 export {
   architectCharterSchema,
   architectPlanRequestSchema,
@@ -66,8 +55,6 @@ export const SCHEMA_VERSIONS = {
   "pulse-health": "v1",
   "engagement-transition": "v1",
   "scout-approve": "v1",
-  "nonprofits-search": "v1",
-  "nonprofit-detail": "v1",
 } as const;
 
 export type SchemaName = keyof typeof SCHEMA_VERSIONS;

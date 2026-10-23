@@ -187,10 +187,7 @@ const EXCERPT_WORDS = 14;
  */
 function withoutIntakeQuotes(input: ScoutRoutingInput, rationale: string): string {
   let text = rationale;
-  // The registry name is upstream data the rationale names verbatim ("IRS records list
-  // …", R19), so it is material like the form fields, not the template's own words.
-  const quoted = [...Object.values(input), input.registry?.name];
-  for (const value of quoted) {
+  for (const value of Object.values(input)) {
     if (typeof value !== "string" || value.trim().length === 0) continue;
     const trimmed = value.trim();
     const opening = trimmed.split(/\s+/).slice(0, EXCERPT_WORDS).join(" ");

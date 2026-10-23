@@ -10,9 +10,7 @@ import type { Stack } from './_stack';
  * anonymous sessions, the real `submit_scout_intake()` and `check_model_budget()` RPCs,
  * rows read back with the service role. The model is the one thing mocked — a run is
  * seeded in `agent_runs` the way the recorder would write it, so the RPC's provenance
- * check (tier from the run, not the payload) is exercised for real. ProPublica is the
- * other thing not reached: its URLs answer 404 so the suite stays offline-safe and every
- * intake files as `registry_lookup = 'not_found'` (the matched path is unit-tested).
+ * check (tier from the run, not the payload) is exercised for real.
  */
 
 vi.mock('../../src/agents/scout/model', async (importOriginal) => {
@@ -55,8 +53,6 @@ const highReady = (): ScoutResult => ({
 
 let s: Stack;
 let cleanup: Cleanup;
-const PROPUBLICA = 'https://projects.propublica.org/nonprofits/api/v2';
-const realFetch = globalThis.fetch;
 const envBefore = { key: process.env.GOOGLE_GENERATIVE_AI_API_KEY, budget: process.env.MODEL_CALLS_PER_HOUR };
 
 beforeAll(() => {
@@ -73,16 +69,9 @@ beforeEach(() => {
   delete process.env.MODEL_CALLS_PER_HOUR;
   modelMock.mockReset();
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  // Supabase goes through fetch too, so only ProPublica is intercepted.
-  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
-    String(input).startsWith(PROPUBLICA)
-      ? Promise.resolve(Response.json({ error: 'not_found' }, { status: 404 }))
-      : realFetch(input, init),
-  );
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
   vi.restoreAllMocks();
   if (envBefore.key === undefined) delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   else process.env.GOOGLE_GENERATIVE_AI_API_KEY = envBefore.key;
@@ -120,7 +109,7 @@ async function filedRow(intakeId: string) {
   cleanup.intake(intakeId);
   const { data, error } = await s.service
     .from('scout_intakes')
-    .select('hitl_tier, routing_source, routing_run_id, routing_model, routing_prompt_version, bucket, confidence, flags, registry, registry_lookup')
+    .select('hitl_tier, routing_source, routing_run_id, routing_model, routing_prompt_version, bucket, confidence, flags')
     .eq('id', intakeId)
     .single();
   if (error || !data) throw new Error(`filedRow: ${error?.message}`);
@@ -155,8 +144,6 @@ describe('POST /api/route-intake (integration)', () => {
 
     const row = await filedRow(body.intakeId);
     expect(row).toMatchObject({ hitl_tier: 'L3', routing_source: 'derived', routing_run_id: null });
-    expect(body).toMatchObject({ registry: null, registryLookup: 'not_found' });
-    expect(row).toMatchObject({ registry: null, registry_lookup: 'not_found' });
   });
 
   it('files a model result as L2 / ai only through a successful L2 run the recorder wrote', async () => {
