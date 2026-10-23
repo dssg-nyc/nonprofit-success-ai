@@ -1,9 +1,9 @@
 # `api/` — Vercel Functions
 
-The server side of the portal: eight routes under `/api`, deployed as Vercel
+The server side of the portal: ten routes under `/api`, deployed as Vercel
 serverless functions by filesystem convention (this is a Vite SPA, not Next.js).
 Each `.ts` file without a leading underscore is a route; `_env.ts`, `_http.ts`,
-`_auth.ts`, `_request.ts` and `_budget.ts` are shared helpers. Tests live in
+`_auth.ts`, `_request.ts`, `_budget.ts` and `_propublica.ts` are shared helpers. Tests live in
 `__tests__/`: `*.test.ts` are unit tests (`npm test`), `*.int.test.ts` run against the
 local Supabase stack (`make api-test`) — see Testing.
 
@@ -22,6 +22,8 @@ This file explains what the routes *do* and how to operate them.
 | `GET /api/pulse-health` | Pulse | no | nothing | 10s |
 | `POST /api/engagement-transition` | — | no | `transition_engagement()` | 10s |
 | `POST /api/scout-approve` | — | no | `approve_scout_intake()` | 10s |
+| `GET /api/nonprofits/search` | — | no (ProPublica) | nothing | 10s |
+| `GET /api/nonprofits/:ein` | — | no (ProPublica) | nothing | 10s |
 
 Every route except `health` requires `Authorization: Bearer <supabase access token>`.
 Every response carries `x-request-id` (see Observability).
@@ -45,7 +47,13 @@ derives `hitl_tier` from the linked `agent_runs` row, which only the recorder's 
 role can create, so `L2` is earned by a successful model run that is still High + Ready
 and cannot be claimed by a client. A fallback-routed intake files as `L3`. The response
 is the `ScoutResult` plus `intakeId` and `routingSource` (`ai` / `derived`), with the
-tier the database filed. Public visitors reach it with an anonymous Supabase session
+tier the database filed, and the IRS registry lookup: before routing, the route looks the
+org up in ProPublica (`_scoutRegistry.ts` over `_propublica.ts` — by the form's optional
+`ein`, else by an exact-name search match) and files the reduced record and its status
+(`registry`, `registryLookup`: `matched` / `not_found` / `ambiguous` / `unavailable`) on
+the row (0011). The record feeds Scout as evidence only (tiebreak, flags, one rationale
+sentence; never readiness or tier); a failed lookup is `unavailable` and the intake is
+still filed. The org name and EIN never reach the logs. Public visitors reach it with an anonymous Supabase session
 (`src/lib/session.ts`, rate-limited per IP by Supabase Auth); without a token nothing
 is filed and the form says so.
 
@@ -94,6 +102,18 @@ queue's "Approve" and "Change bucket & approve" buttons call this route
 "Reopen & approve" on the Decisions page; "Needs more info" (`needs_info`, no
 action or bucket) and "Decline" (`redirected`) stay direct admin updates of
 `scout_intakes`, since neither enters the pipeline.
+
+**`nonprofits/search`** / **`nonprofits/:ein`** — the ProPublica Nonprofit Explorer
+proxy (D49, `_propublica.ts`). Not an agent: no model, no `agent_runs`, no fallback.
+Search takes `q`, `state`, `ntee`, `cCode` (at least one) and `page` (0–99, 25 per page)
+and returns `NonprofitSummary[]`; the EIN route (9 digits, dashes allowed) adds IRS
+master-file amounts, the latest filing with extracted numbers, the latest PDF-only
+filing and filing counts. A known EIN with no filings is a 200 with `latestFiling:
+null`; an unknown EIN is `404 not_found`. Upstream 5xx/429/timeout (5 s) is
+`502 upstream_unavailable`; a renamed upstream field is `502 upstream_shape`. Hits are
+browser-cached (`private, max-age=3600`), misses 300 s, errors `no-store`. Logs carry
+route, step and upstream status, never the search text. Shapes:
+`src/schemas/nonprofit.ts`; spec: `.claude/specs/platform/services/nonprofit-lookup.md`.
 
 ## Request lifecycle
 
@@ -261,7 +281,7 @@ file opens real sessions (anonymous for the intake form, an email+password staff
 owning a fresh organization for staff routes), calls the handler, then reads back with
 the service role what the handler filed. It fails on zero tests, like `db-test`.
 
-What it covers today (21 tests): `health` 200 + `supabase: ok`; `route-intake` 401 /
+What it covers today (21 tests; ProPublica is stubbed to 404 by URL prefix so the suite stays offline-safe, each intake filing as `registry_lookup = not_found`): `health` 200 + `supabase: ok`; `route-intake` 401 /
 400 / the fallback path filed as `L3` + `derived` / a seeded `success` + `L2`
 `agent_runs` row filed as `L2` + `ai` with model and prompt version carried over / a
 run recorded as `L3` filed as `L3` **whatever the result says** / a `fallback` run
