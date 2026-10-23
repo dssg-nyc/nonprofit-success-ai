@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
+import { ErrorBanner } from '../ErrorBanner';
+import { reportSupabaseError } from '../supabaseErrors';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   supabase, liveQuery, toColumns, rowToDomain, handleSupabaseError, OperationType,
 } from '../../lib/supabase';
+import type { TablesInsert } from '../../lib/database.types';
 import { Business, Engagement, EngagementStage, EngagementStatus, StageLog } from '../../types';
 import { demoBusinesses, demoEngagements } from '../../lib/demoStore';
-import '../../lib/demoData';
+import '../demo/demoData';
 import { motion, AnimatePresence } from 'motion/react';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -17,7 +20,6 @@ import {
   CheckCircle,
   ChevronLeft,
   RefreshCcw,
-  Save,
   Building2
 } from 'lucide-react';
 
@@ -47,11 +49,13 @@ async function attachStageLogs(engagements: Engagement[]): Promise<Engagement[]>
   if (error || !data) return engagements;
 
   const byEng = new Map<string, StageLog[]>();
-  for (const row of data as Array<{ engagement_id: string; detail: string | null; created_at: string; kind: string }>) {
-    if (row.kind !== 'note_added' || !row.detail) continue;
+  for (const row of data) {
+    // `detail` is a jsonb object; a note carries its text under `text`.
+    const text = (row.detail as { text?: string } | null)?.text;
+    if (row.kind !== 'note_added' || !text) continue;
     const ms = Date.parse(row.created_at);
     const logs = byEng.get(row.engagement_id) ?? [];
-    logs.push({ text: row.detail, timestamp: { seconds: Number.isNaN(ms) ? 0 : ms / 1000 } });
+    logs.push({ text, timestamp: { seconds: Number.isNaN(ms) ? 0 : ms / 1000 } });
     byEng.set(row.engagement_id, logs);
   }
 
@@ -78,6 +82,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
   const [activeStage, setActiveStage] = useState<EngagementStage>('initial_meeting');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [stageLogTab, setStageLogTab] = useState<'current' | 'history'>('current');
   const [newLogEntry, setNewLogEntry] = useState('');
   const [feedDetail, setFeedDetail] = useState<FeedItem | null>(null);
@@ -113,9 +118,10 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
         .maybeSingle();
 
       if (error) {
-        try {
-          handleSupabaseError(error, OperationType.GET, `businesses/${id}`);
-        } catch { /* logged */ }
+        setError(
+          reportSupabaseError(error, OperationType.GET, `businesses/${id}`, 'Could not load this business. Reload to try again.'),
+        );
+        setLoading(false);
         return;
       }
 
@@ -144,9 +150,9 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       },
       (err) => {
         setLoading(false);
-        try {
-          handleSupabaseError(err, OperationType.LIST, 'engagements');
-        } catch { /* logged */ }
+        setError(
+          reportSupabaseError(err, OperationType.LIST, 'engagements', 'Could not load engagements. The stages shown may be incomplete.'),
+        );
       },
       ['createdAt', 'updatedAt'],
     );
@@ -183,8 +189,12 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
     return items.sort((a, b) => b.timestamp - a.timestamp);
   };
 
+  // Stage changes are not written from the browser: engagements is read-only to partners
+  // (0001_core) and stages move only through transition_engagement() (/api/engagement-
+  // transition). A partner's note is an append-only `note_added` event on the stage's row.
   const addStageLog = async (logText: string) => {
-    if (!logText.trim()) return;
+    const text = logText.trim();
+    if (!text) return;
 
     if (isDemo) {
       setEngagements(prev => {
@@ -192,7 +202,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
         const next = existing
           ? prev.map(e => e.id === existing.id ? {
               ...e,
-              stageLogs: [...(existing.stageLogs || []), { text: logText, timestamp: { seconds: Date.now() / 1000 } }],
+              stageLogs: [...(existing.stageLogs || []), { text, timestamp: { seconds: Date.now() / 1000 } }],
               updatedAt: { seconds: Date.now() / 1000 }
             } : e)
           : [...prev, {
@@ -201,7 +211,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
               ownerId: 'demo-user-123',
               stage: activeStage,
               status: 'pending' as EngagementStatus,
-              stageLogs: [{ text: logText, timestamp: { seconds: Date.now() / 1000 } }],
+              stageLogs: [{ text, timestamp: { seconds: Date.now() / 1000 } }],
               updatedAt: { seconds: Date.now() / 1000 }
             }];
         if (id) demoEngagements.set(id, next);
@@ -211,141 +221,82 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
       return;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!id || !user) return;
-    setSaving(true);
-
     const existing = getCurrentEngagement();
-    const entry: StageLog = { text: logText.trim(), timestamp: { seconds: Date.now() / 1000 } };
-
-    try {
-      let engagementId = existing?.id;
-      if (!engagementId) {
-        const { data, error } = await supabase.from('engagements').upsert(
-          toColumns({
-            businessId: id,
-            ownerId: user.id,
-            stage: activeStage,
-            status: 'pending',
-            updatedAt: new Date().toISOString(),
-          }),
-          { onConflict: 'business_id,stage' },
-        ).select('id').single();
-
-        if (error || !data) handleSupabaseError(error, OperationType.CREATE, 'engagements');
-        engagementId = data.id;
-      }
-
-      // Stage history lives in engagement_events (append-only). The portal still
-      // renders it as stageLogs on the engagement the log belongs to.
-      const { error: eventError } = await supabase.from('engagement_events').insert({
-        engagement_id: engagementId,
-        kind: 'note_added',
-        detail: entry.text,
-        created_by: user.id,
-      });
-      if (eventError) handleSupabaseError(eventError, OperationType.CREATE, 'engagement_events');
-
-      setEngagements(prev => {
-        const found = prev.find(e => e.id === engagementId);
-        if (found) {
-          return prev.map(e => e.id === engagementId
-            ? { ...e, stageLogs: [...(e.stageLogs || []), entry] }
-            : e);
-        }
-        return [...prev, {
-          id: engagementId,
-          businessId: id,
-          ownerId: user.id,
-          stage: activeStage,
-          status: 'pending' as const,
-          stageLogs: [entry],
-          updatedAt: { seconds: Date.now() / 1000 },
-        }];
-      });
-    } catch (err) {
-      try {
-        handleSupabaseError(err, OperationType.WRITE, 'engagements');
-      } catch { /* logged */ }
-    } finally {
-      setSaving(false);
-      setNewLogEntry('');
-    }
-  };
-
-  const updateStage = async (status: EngagementStatus, extraData: Partial<Engagement> = {}) => {
-    if (isDemo) {
-      setEngagements(prev => {
-        const existing = prev.find(e => e.stage === activeStage);
-        const next = existing
-          ? prev.map(e => e.id === existing.id ? { ...e, ...extraData, status, updatedAt: { seconds: Date.now() / 1000 } } : e)
-          : [...prev, {
-              id: `demo-${activeStage}`,
-              businessId: id!,
-              ownerId: 'demo-user-123',
-              stage: activeStage,
-              status,
-              updatedAt: { seconds: Date.now() / 1000 },
-              ...extraData
-            }];
-        if (id) demoEngagements.set(id, next);
-        return next;
-      });
+    if (!id || !existing) {
+      setError('Notes attach to a started stage. This stage has not started yet.');
       return;
     }
 
-    if (!id) return;
+    if (!existing.organizationId) {
+      setError('This stage is not linked to an organization yet; ask DSSG staff.');
+      return;
+    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     setSaving(true);
-
-    const existing = getCurrentEngagement();
-
     try {
-      if (existing) {
-        const { error } = await supabase
-          .from('engagements')
-          .update(toColumns({ ...extraData, status, updatedAt: new Date().toISOString() }))
-          .eq('id', existing.id);
+      const { error } = await supabase.from('engagement_events').insert(
+        toColumns<TablesInsert<'engagement_events'>>({
+          engagementId: existing.id,
+          organizationId: existing.organizationId,
+          createdBy: user.id,
+          kind: 'note_added',
+          detail: { text },
+        }),
+      );
 
-        if (error) handleSupabaseError(error, OperationType.UPDATE, `engagements/${existing.id}`);
-      } else {
-        // Firestore used a deterministic id (`${businessId}_${stage}`) so a double-submit
-        // overwrote rather than duplicating. Surrogate uuid keys lose that, so 0001_init
-        // adds `unique (business_id, stage)` and this upserts onto it — same guarantee,
-        // enforced by the database instead of by id construction.
-        const { error } = await supabase.from('engagements').upsert(
-          toColumns({
-            businessId: id,
-            ownerId: user.id,
-            stage: activeStage,
-            status,
-            updatedAt: new Date().toISOString(),
-            ...extraData,
-          }),
-          { onConflict: 'business_id,stage' },
-        );
-
-        if (error) handleSupabaseError(error, OperationType.CREATE, 'engagements');
-      }
+      if (error) handleSupabaseError(error, OperationType.CREATE, 'engagement_events');
+      // The engagements subscription does not fire on an event insert, so append locally.
+      const entry: StageLog = { text, timestamp: { seconds: Date.now() / 1000 } };
+      setEngagements(prev => prev.map(e => e.id === existing.id
+        ? { ...e, stageLogs: [...(e.stageLogs || []), entry] }
+        : e));
+      setNewLogEntry('');
     } catch (err) {
-      try {
-        handleSupabaseError(err, OperationType.WRITE, 'engagements');
-      } catch { /* logged */ }
+      console.error('BusinessPortal: note save failed — note not recorded', err);
+      setError('Could not save this note. It was not recorded.');
     } finally {
       setSaving(false);
     }
   };
 
+  // Demo only. Live status changes go through /api/engagement-transition, not the browser.
+  const updateDemoStage = (status: EngagementStatus) => {
+    if (!isDemo) return;
+    setEngagements(prev => {
+      const existing = prev.find(e => e.stage === activeStage);
+      const next = existing
+        ? prev.map(e => e.id === existing.id ? { ...e, status, updatedAt: { seconds: Date.now() / 1000 } } : e)
+        : [...prev, {
+            id: `demo-${activeStage}`,
+            businessId: id!,
+            ownerId: 'demo-user-123',
+            stage: activeStage,
+            status,
+            updatedAt: { seconds: Date.now() / 1000 },
+          }];
+      if (id) demoEngagements.set(id, next);
+      return next;
+    });
+  };
+
   if (loading) return <div className="h-screen flex items-center justify-center">Loading portal...</div>;
-  if (!business) return null;
+  if (!business) {
+    // A failed load used to render nothing at all; show why.
+    return error ? (
+      <div className="max-w-2xl mx-auto px-4 py-24">
+        <ErrorBanner message={error} onDismiss={() => navigate('/dashboard')} />
+      </div>
+    ) : null;
+  }
 
   const currentEngagement = getCurrentEngagement();
 
   return (
     <div className="bg-bg-base min-h-screen">
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
       {/* Header Strategy */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
@@ -391,7 +342,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
               </div>
               <div>
                 <p className="text-[9px] font-bold text-blue-300 uppercase tracking-widest mb-1">NYC Partnership</p>
-                <p className="text-sm font-bold">Est. {new Date(business.createdAt?.seconds * 1000).getFullYear()}</p>
+                <p className="text-sm font-bold">Est. {new Date((business.createdAt?.seconds ?? NaN) * 1000).getFullYear()}</p>
               </div>
             </div>
 
@@ -555,6 +506,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
 
                 {stageLogTab === 'current' ? (
                   <div className="space-y-6">
+                    {isDemo && (
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-blue-600 group-hover:bg-blue-50 transition-colors">
                         <RefreshCcw size={20} />
@@ -563,7 +515,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                         <p className="text-xs font-bold text-slate-700">Project Status</p>
                         <div className="flex gap-2 mt-2">
                           <button
-                            onClick={() => updateStage('in_progress')}
+                            onClick={() => updateDemoStage('in_progress')}
                             className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
                               currentEngagement?.status === 'in_progress' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                             }`}
@@ -571,7 +523,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                             In Progress
                           </button>
                           <button
-                            onClick={() => updateStage('completed')}
+                            onClick={() => updateDemoStage('completed')}
                             className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all ${
                               currentEngagement?.status === 'completed' ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                             }`}
@@ -581,6 +533,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                         </div>
                       </div>
                     </div>
+                    )}
 
                     <div className="space-y-2">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Stage Logs</p>
@@ -592,7 +545,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                             <div key={idx} className="text-[10px] bg-white p-2 rounded border border-slate-100">
                               <p className="text-slate-600 font-medium">{log.text}</p>
                               <p className="text-[9px] text-slate-400 mt-1">
-                                {new Date(log.timestamp?.seconds * 1000).toLocaleString()}
+                                {new Date((log.timestamp?.seconds ?? NaN) * 1000).toLocaleString()}
                               </p>
                             </div>
                           ))
@@ -609,7 +562,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                         onChange={(e) => setNewLogEntry(e.target.value)}
                       />
                       <button
-                        onClick={() => addStageLog(newLogEntry)}
+                        onClick={() => void addStageLog(newLogEntry)}
                         disabled={saving || !newLogEntry.trim()}
                         className="w-full py-2 bg-dssg-orange text-white rounded-lg text-[10px] font-bold uppercase disabled:opacity-50 hover:bg-orange-600 transition-all"
                       >
@@ -635,7 +588,7 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                                 <div key={idx} className="text-[9px] bg-white p-2 rounded border border-slate-100">
                                   <p className="text-slate-600">{log.text}</p>
                                   <p className="text-[8px] text-slate-400 mt-1">
-                                    {new Date(log.timestamp?.seconds * 1000).toLocaleString()}
+                                    {new Date((log.timestamp?.seconds ?? NaN) * 1000).toLocaleString()}
                                   </p>
                                 </div>
                               ))
@@ -647,13 +600,6 @@ export default function BusinessPortal({ isDemo }: { isDemo?: boolean }) {
                 )}
              </div>
 
-             <button
-              disabled={saving}
-              className="w-full py-4 bg-dssg-blue text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all font-display uppercase tracking-widest text-[11px]"
-             >
-               {saving ? <RefreshCcw className="animate-spin" size={18} /> : <Save size={18} />}
-               Save Lifecycle State
-             </button>
           </div>
 
           {/* Account Management (Bento: Small Horizontal) */}

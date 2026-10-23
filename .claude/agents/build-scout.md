@@ -66,8 +66,9 @@ Before returning:
 - `npm run build` succeeds
 - No unstaged deletions of tracked files (`git status --porcelain | grep '^ D'`)
 
-The repo's own target runs all of it: `make gate` (type-check, lint, test, build,
-eval-heuristics).
+The repo's own target runs all of it: `make gate` (type-check, lint, test, build).
+Eval heuristics gate separately: `make eval-gate` runs `make gate` then `eval:grade --gate`;
+CI runs `eval:grade --no-judges --gate` as the `eval-heuristics` job.
 
 Return after the gate passes. **Do not dispatch review** — that is the orchestrator's
 next step, not yours.

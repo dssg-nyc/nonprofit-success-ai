@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import { onAuthChange, fetchRole, signOut } from "../lib/supabase";
-import { LogOut, LayoutDashboard, Compass, ClipboardList, Rocket } from "lucide-react";
+import { LogOut, LayoutDashboard, Compass, ShieldCheck, Rocket } from "lucide-react";
 import { motion } from "motion/react";
 
 // Components
@@ -9,7 +9,7 @@ import Login from "../components/auth/Login";
 import Dashboard from "../components/dashboard/Dashboard";
 import BusinessPortal from "../components/business/BusinessPortal";
 import ScoutIntakeForm from "../components/scout/ScoutIntakeForm";
-import ScoutReviewQueue from "../components/scout/ScoutReviewQueue";
+import AdminReview from "../components/admin/AdminReview";
 import ArchitectAssessment from "../components/architect/ArchitectAssessment";
 import ArchitectPlan from "../components/architect/ArchitectPlan";
 import OngoingProjects from "../components/architect/OngoingProjects";
@@ -81,11 +81,11 @@ function Navbar({
             </Link>
             {isAdmin && (
               <Link
-                to="/scout/review"
+                to="/admin"
                 className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2"
               >
-                <ClipboardList size={14} />
-                Review Queue
+                <ShieldCheck size={14} />
+                Admin Review
               </Link>
             )}
             {isAdmin && (
@@ -111,7 +111,7 @@ function Navbar({
                   {user.email?.split("@")[0]}
                 </span>
                 <span className="text-[9px] text-emerald-600 font-bold uppercase tracking-wider">
-                  Active Client
+                  {isAdmin ? "DSSG Admin" : "Active Client"}
                 </span>
               </div>
               <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-dssg-blue font-bold text-sm">
@@ -170,7 +170,7 @@ export default function App() {
       email: "demo@nyc-dssg.org",
       displayName: "Demo Account",
     });
-    // Demo Mode intentionally grants admin so the Scout Review Queue is
+    // Demo Mode intentionally grants admin so Admin Review is
     // demoable without a real Firebase project + manual role promotion.
     setRole("admin");
   };
@@ -249,15 +249,18 @@ export default function App() {
               element={<ScoutIntakeForm isDemo={isDemo} />}
             />
             <Route
-              path="/scout/review"
+              path="/admin/:section?"
               element={
                 user && isAdmin ? (
-                  <ScoutReviewQueue isDemo={isDemo} />
+                  <AdminReview isDemo={isDemo} />
                 ) : (
                   <Navigate to={user ? "/dashboard" : "/login"} />
                 )
               }
             />
+            {/* Pre-2026-10-13 bookmarks: the two Scout screens are now tabs of Admin Review. */}
+            <Route path="/scout/review" element={<Navigate to="/admin/applications" replace />} />
+            <Route path="/scout/decisions" element={<Navigate to="/admin/applications" replace />} />
             <Route
               path="/projects"
               element={user && isAdmin ? <OngoingProjects isDemo={isDemo} /> : <Navigate to={user ? "/dashboard" : "/login"} />}

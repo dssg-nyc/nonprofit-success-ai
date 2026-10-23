@@ -62,6 +62,37 @@ incomplete — push for the missing perspective before finalizing.
 
 ## Process
 
+### Phase 0 — Read the tree before the docs
+
+**Do this first, before Phase 1, and before trusting any table above.** Source documents
+describe intent; the working tree is the only evidence of state. A prior project's PRD
+inherited 🟢 markers from feasibility docs written before anyone read the code — **six of
+eight were wrong** (diskoe, 2026-08-24, `design-requirements.md` verification block).
+Ranking, intake, the review gate and the snapshot store were all marked shipped and did not
+exist; the public Next.js surface existed and no document knew.
+
+For every capability a source doc claims exists, find the file. Then record it as:
+
+| Capability | Doc says | Tree says | File path or ABSENT |
+|---|---|---|---|
+
+Rules:
+
+- **A capability with no file path is `ABSENT`, whatever the doc says.** Not 🟡, not
+  "partial" — absent. "Shipped" claims decay silently; a path is the only claim that can
+  be checked by the next reader.
+- **`BUILT` means "the module exists and is tested", never "the deliverable is accepted."**
+  Keep those two states in separate columns. (diskoe, 2026-08-24: intake was `BUILT` and
+  simultaneously violated its own ≤4-tap budget, DC-3.)
+- **The audit is the *first* deliverable, not a preamble.** Where it contradicts a source
+  doc, the contradiction is a finding with an ID — not a silent correction, and not a
+  reason to re-derive the doc.
+- Anything you could not verify is `🔍 UNVERIFIED — go and look`, never an optimistic 🟡.
+
+**A wrong build-state marker is more expensive than a missing one.** It removes work from
+the plan that then never gets planned, and every downstream sequencing decision inherits
+the error. See `~/.claude/refs/verification.md` §2 for the cross-cutting pattern.
+
 ### Phase 1 — Deconstruct
 
 IDEO / Stanford d.school HMW methodology.
@@ -88,6 +119,13 @@ For each initiative, before it is considered framed:
 - Use real numbers, benchmarks, and named tools where they exist
 - Cite analogous systems or prior art
 - If multilingual requirements exist, call them out as day-one decisions
+- **A thesis nobody has tested is a risk, not a foundation.** If an initiative's value
+  depends on an unrun experiment, the experiment is that initiative's first component and
+  the initiative carries its failure branch. (diskoe, 2026-08-24: a relational thesis gated
+  a whole workstream and had never been run — the honest planning outcome is "this may be a
+  finding, not a feature," and the plan must survive that answer.)
+- **Name what each initiative would look like if its premise fails.** An initiative with
+  no failure branch has not been scoped; it has been assumed.
 
 ## Output
 

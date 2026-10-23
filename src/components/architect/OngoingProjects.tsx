@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase, liveQuery, handleSupabaseError, OperationType } from '../../lib/supabase';
 import { ArchitectAssessment } from '../../types';
 import { demoAssessments } from '../../lib/demoStore';
-import '../../lib/demoData';
+import '../demo/demoData';
 import { businessIdForAssessment } from '../../lib/graduation';
 import {
   Rocket, Building2, CalendarRange, FileText, ArrowRight, UserSquare2,

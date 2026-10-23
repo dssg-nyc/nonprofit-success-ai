@@ -44,13 +44,14 @@ you cannot honestly assess is **skipped with a reason**, never silently passed.
 | `runtime` | A new agent path with no deterministic fallback (`src/agents/scout/routing.ts` is the pattern). A model call with no failure branch. An unbounded retry. A timeout that can hang a request. |
 | `testing` | New behavior with no test. A test whose assertion was loosened instead of the code being fixed. A new agent with no entry in `src/evals/registry.ts`. Tests that assert on mocks rather than behavior. |
 | `silent-failure` | `catch {}` or a catch that only logs. A fallback that returns a plausible default when the real call failed, so an outage looks like normal operation. `?? someDefault` masking a value that should never be missing. |
-| `docs-alignment` | A change that makes a doc in `docs/` wrong, or that adds something a `docs/` spec should describe and does not. See the lane routing below. |
+| `docs-alignment` | A change that makes a `.claude/specs/` spec or a tracked doc wrong, or that adds a mechanism no spec describes. See the lane routing below. |
 
 ### `docs-alignment` — the spec-drift check
 
-`docs/` is the team's shared memory of how the system works. `.claude/docs/` is
-git-ignored and invisible to collaborators; `docs/` is what a new volunteer reads. A diff
-that silently invalidates it costs more than a bug, because the next person builds on the
+`.claude/specs/` (tracked) is the build contract agents read; `docs/`, `README.md`,
+`supabase/README.md` and `CLAUDE.md` are what a new volunteer reads. `.claude/docs/` is
+git-ignored and invisible to collaborators, so nothing there counts. A diff that silently
+invalidates a tracked doc costs more than a bug, because the next person builds on the
 wrong description and no test catches it.
 
 Route the changed paths to the lane that owns them:
@@ -58,10 +59,10 @@ Route the changed paths to the lane that owns them:
 | Diff touches | Lane doc to check |
 |---|---|
 | `src/agents/**` | `.claude/specs/platform/agents/<agent>.md` — and `.claude/specs/design-system.md` §2 if the agent roster or its path contract changed |
-| `src/evals/**`, `evals/**` | `.claude/specs/platform/infra/eval-harness.md` — eval registry and metric coverage |
+| `src/evals/**` | `.claude/specs/platform/infra/eval-harness.md` — eval registry and metric coverage |
 | `supabase/migrations/**`, `src/types/` data shapes | `.claude/specs/crm/data-model.md`, `.claude/specs/crm/supabase.md`; `.claude/specs/crm/security.md` if RLS or an invariant moved |
 | `api/**` auth, RLS, key handling, HITL tiering | `.claude/specs/crm/security.md` |
-| `src/app/index.css`, shared UI components | `.claude/specs/design-interface.md` (the CSS is source of truth; the doc describes it) |
+| `src/app/index.css`, shared UI components | no spec — the CSS is the source of truth; check the change against `.claude/specs/design-system.md` §2 only if it touches an agent screen |
 | Anything spanning two lanes | `.claude/specs/design-system.md` — cross-lane interaction lives only there |
 
 Report a finding when **the diff and a doc now disagree**, or when the diff adds a
@@ -150,4 +151,5 @@ Output a fenced `json` block, then the verdict line. Nothing else after it.
 - No finding without a `failure_scenario`.
 - Do not report the same defect twice under two dimensions — pick the one that fits best.
 - Do not review `.claude/docs/**` content changes; they are notes, not code. This does
-  **not** exempt tracked `docs/` — that tree is the `docs-alignment` dimension's subject.
+  **not** exempt tracked `.claude/specs/`, `docs/` or the READMEs — those are the
+  `docs-alignment` dimension's subject.

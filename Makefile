@@ -32,6 +32,62 @@ build:  ## Production build
 
 gate: type-check lint test build
 
+# --- Evals --------------------------------------------------------------------
+# Heuristic graders always run. Judges run only when OPENAI_API_KEY is set, the agents'
+# model paths only when GOOGLE_GENERATIVE_AI_API_KEY is; without its key each prints
+# `skipped`, not 0. The eval targets source the git-ignored .env (same shell, same
+# process) and pass --require-keys, so `make eval` is keyed whenever .env is and stops
+# before grading (exit 1, no run written) when a key is missing. Output: src/evals/reports/output/
+# (git-ignored): runs/<id>/ per run (never overwritten), copied up as the latest summary.json,
+# graded.jsonl, calls.jsonl, calibration.jsonl; report.html is written beside its run too
+# (EVAL_RUN=<id> make eval-report renders an older one). Keyed runs also append to the tracked
+# src/evals/experiments/log.jsonl. A run is labelled with the prompt versions it measured
+# (scout 0.05, architect 0.04, …, read from the *_PROMPT_VERSION constants, so a bumped
+# prompt relabels the next run by itself); EVAL_LABEL="what changed" make eval overrides that.
+# EVAL_ONLY=chronicleDraft,chronicleReadiness make eval grades those metrics only (one agent's
+# judge + model path, a fifth of a full run's calls); a scoped run is not logged or trended.
+#
+# `eval` and `eval-gate` depend on `gate`: a keyed run spends real model calls, and a
+# run over code that does not type-check, lint, test or build measures nothing worth
+# keeping. `eval` renders the report in the same step so report.html is never stale.
+
+# Exports .env, then .env.local (`vercel env pull` writes that one), into the recipe's
+# shell when present; a missing file is not an error, later files win.
+WITH_ENV = set -a; [ -f .env ] && . ./.env; [ -f .env.local ] && . ./.env.local; set +a;
+
+# Model-path calls per case on a keyed run: 3 so the page can report model `agreement`
+# (rates use the first sample). Override: EVAL_MODEL_SAMPLES=1 make eval for a cheap run.
+EVAL_MODEL_SAMPLES ?= 3
+export EVAL_MODEL_SAMPLES
+
+eval: gate  ## Gate, then grade every metric (judges + model path when .env or the shell holds the keys), render the report and the review CSVs
+	$(WITH_ENV) npm run eval:grade -- --require-keys $(if $(EVAL_ONLY),--only $(EVAL_ONLY))
+	npm run eval:report
+	npm run eval:review
+
+eval-gate: gate  ## Gate, then grade and exit non-zero on any targets.yaml miss (what CI will run)
+	$(WITH_ENV) npm run eval:grade -- --require-keys --gate
+	npm run eval:report
+
+eval-report: ## Render report.html (scoreboard, trend across runs, judge calibration) from the last grade run, or EVAL_RUN=<id>
+	npm run eval:report
+
+# The review notebook is git-ignored and built from build_review.py; it needs pandas,
+# matplotlib and jinja2, which this repo does not install. `eval-notebook` lets uv supply
+# them per launch; `eval-kernel` makes a .venv for VS Code's notebook editor (pick ".venv"
+# as the kernel). Either way nothing Python lands in package.json.
+NOTEBOOK := src/evals/notebooks/review.ipynb
+
+$(NOTEBOOK): src/evals/notebooks/build_review.py
+	python3 $< $@
+
+eval-notebook: $(NOTEBOOK) ## Build (if stale) and open the review notebook in JupyterLab
+	uv run --with-requirements src/evals/notebooks/requirements.txt --with jupyterlab jupyter lab $(NOTEBOOK)
+
+eval-kernel: $(NOTEBOOK) ## Create .venv with the notebook's deps, for VS Code (select the .venv kernel)
+	uv venv --allow-existing .venv
+	uv pip install --python .venv -r src/evals/notebooks/requirements.txt
+
 lint-check:  ## eslint, no autofix (the gate `ship` uses)
 	npm run lint
 
@@ -52,22 +108,94 @@ ship: lint-check type-check test build  ## strict gates (no autofix); push manua
 # Storage, Studio) from supabase/config.toml. Docker only has to be running.
 # The CLI is a pinned devDependency so everyone runs the same version.
 
+# Every target honours SUPABASE_WORKDIR, for running against a copy of supabase/ (e.g.
+# with shifted ports when another project's stack already holds 54321/54322):
+#   make db-reset SUPABASE_WORKDIR=/path/containing/supabase
+SUPABASE := npx supabase$(if $(SUPABASE_WORKDIR), --workdir $(SUPABASE_WORKDIR))
+DB_TESTS := $(or $(SUPABASE_WORKDIR),.)/supabase/tests
+
+# Migrations are supabase/migrations/NNNN_<name>.sql, applied in numeric order.
+# supabase/migrations/reference/ is not in the apply path.
+
 db-start:  ## Start the local Supabase stack (requires Docker running)
 	@docker info >/dev/null 2>&1 || { \
 		echo "Docker daemon is not running. Start Docker Desktop first:"; \
 		echo "  open -a Docker"; \
 		exit 1; \
 	}
-	npx supabase start
+	$(SUPABASE) start
 
 db-stop:  ## Stop the local Supabase stack
-	npx supabase stop
+	$(SUPABASE) stop
 
-db-reset:  ## Drop and re-apply all migrations from scratch
-	npx supabase db reset
+# seed.sql is git-ignored: it holds teammates' emails and a local password, shared out of
+# band (supabase/README.md "Local data"). A clone without it still resets; it just has no
+# accounts until the file is in place.
+SEED := $(or $(SUPABASE_WORKDIR),.)/supabase/seed.sql
 
-db-test:  ## Run the pgTAP RLS suite (supabase/tests/)
-	npx supabase test db
+db-reset:  ## Drop and re-apply all migrations from scratch, then load seed.sql if present
+	@[ -f $(SEED) ] || { \
+		echo "db-reset: no $(SEED) -- resetting without accounts; get the file from a teammate (supabase/README.md 'Local data')"; \
+		printf -- '-- placeholder: no local accounts seeded. See supabase/README.md "Local data".\n' > $(SEED); \
+	}
+	$(SUPABASE) db reset
+
+db-seed:  ## Apply seed.sql to the running local stack without a reset
+	@[ -f $(SEED) ] || { echo "db-seed: no $(SEED) (supabase/README.md 'Local data')"; exit 1; }
+	psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -q -f $(SEED)
+
+# Guarded twice: a missing suite and a suite that ran zero assertions both fail. Without
+# the guard, `supabase test db` against an empty tests/ dir reports success -- the same
+# silent-green failure that dropping vitest's --passWithNoTests prevents.
+db-test:  ## Run the pgTAP RLS suite (supabase/tests/*.test.sql); fails on zero tests
+	@ls $(DB_TESTS)/*.test.sql >/dev/null 2>&1 || { \
+		echo "db-test: no $(DB_TESTS)/*.test.sql files -- refusing to report green"; \
+		exit 1; \
+	}
+	@out=$$(mktemp); \
+	$(SUPABASE) test db >$$out 2>&1; status=$$?; cat $$out; \
+	if [ $$status -ne 0 ]; then rm -f $$out; exit $$status; fi; \
+	if ! grep -Eq 'Tests=[1-9][0-9]*' $$out; then \
+		echo "db-test: zero assertions ran -- refusing to report green"; rm -f $$out; exit 1; \
+	fi; \
+	rm -f $$out
+
+# The api/ handlers against the running local stack (api/__tests__/*.int.test.ts): real
+# Auth sessions, RLS and RPCs; only the model is mocked. Keys come from the stack itself,
+# never from a file, and the model key is dropped from the environment so a developer's
+# exported key can never reach a real model from a test. Fails on zero tests, like db-test.
+# NO_COLOR: under CI vitest colours its summary, which hid "Tests N passed" from the grep below.
+api-test:  ## Run the api/ integration suite against the local Supabase stack (make db-start first)
+	@env=$$($(SUPABASE) status -o env 2>/dev/null); \
+	[ -n "$$env" ] || { echo "api-test: local stack not running (make db-start)"; exit 1; }; \
+	pick() { printf '%s\n' "$$env" | sed -n "s/^$$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}$$/\1/p"; }; \
+	url=$$(pick API_URL); anon=$$(pick ANON_KEY); service=$$(pick SERVICE_ROLE_KEY); \
+	[ -n "$$url" ] && [ -n "$$anon" ] && [ -n "$$service" ] || { echo "api-test: could not read API_URL/ANON_KEY/SERVICE_ROLE_KEY from supabase status"; exit 1; }; \
+	out=$$(mktemp); \
+	env -u GOOGLE_GENERATIVE_AI_API_KEY -u MODEL_CALLS_PER_HOUR NO_COLOR=1 \
+	  SUPABASE_URL="$$url" SUPABASE_ANON_KEY="$$anon" SUPABASE_SERVICE_ROLE_KEY="$$service" \
+	  npm run test:api >$$out 2>&1; status=$$?; cat $$out; \
+	if [ $$status -ne 0 ]; then rm -f $$out; exit $$status; fi; \
+	grep -Eq 'Tests +[1-9][0-9]* passed' $$out || { echo "api-test: zero tests ran -- refusing to report green"; rm -f $$out; exit 1; }; \
+	rm -f $$out
+
+db-types:  ## Regenerate src/lib/database.types.ts from the local stack's schema
+	@tmp=$$(mktemp); \
+	$(SUPABASE) gen types typescript --local --schema public > $$tmp && \
+	mv $$tmp src/lib/database.types.ts || { rm -f $$tmp; exit 1; }; \
+	npx --yes oxfmt src/lib/database.types.ts >/dev/null 2>&1 || true
 
 db-status:  ## Show local stack status and connection details
-	npx supabase status
+	$(SUPABASE) status
+
+# Q5 production metrics (observability.md): the agent_run_metrics view (0006_views) read straight
+# from the local stack with psql as the local superuser, so RLS is bypassed -- local only.
+metrics:  ## Q5 metrics from the local stack: agent_run_metrics, newest day first (local superuser, RLS bypassed)
+	@command -v psql >/dev/null 2>&1 || { \
+		echo "psql not found. Install the client first:"; \
+		echo "  brew install libpq && brew link --force libpq"; \
+		exit 1; \
+	}
+	@url=$$($(SUPABASE) status -o env 2>/dev/null | sed -n 's/^DB_URL="\{0,1\}\([^"]*\)"\{0,1\}$$/\1/p'); \
+	[ -n "$$url" ] || { echo "metrics: local stack not running (make db-start)"; exit 1; }; \
+	psql "$$url" -P pager=off -c "select agent, day, runs, errors, fallbacks, round(error_rate, 3) as error_rate, round(fallback_rate, 3) as fallback_rate, p50_ms, p95_ms, input_tokens, output_tokens, cost_cents, runs_costed, approved, rejected, round(override_rate, 3) as override_rate from agent_run_metrics order by day desc, agent limit 60"

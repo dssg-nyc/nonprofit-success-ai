@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  BUCKET_DELIVERABLES,
+  DATA_FOUNDATIONS,
+  WORKSTREAM_DEFS,
   generateCharter,
   generateNinetyDayPlan,
 } from "../plan";
@@ -156,6 +159,27 @@ describe("generateNinetyDayPlan — workstreams", () => {
     expect(ws[0].required).toBe(false);
   });
 
+  it("keeps a flagged Governance workstream on accelerate — an Established org can carry one", () => {
+    // di=3, gov=1, the rest 3: 6 + 2 + 9 = 17 points, Established, one flag.
+    const m = maturity({
+      compositeLevel: "Established",
+      di_score: 3,
+      gov_score: 1,
+      tooling_score: 3,
+      dc_score: 3,
+      tc_score: 3,
+      points: 17,
+      flaggedDimensions: ["governance"],
+    });
+    const plan = generateNinetyDayPlan(input(m));
+    expect(plan.shape).toBe("accelerate");
+    expect(plan.workstreams.map((w) => [w.name, w.required])).toEqual([
+      ["Reporting Automation", true],
+      ["Board-Facing Insight Report", false],
+    ]);
+    expect(generateCharter(input(m)).workstreams).toEqual(plan.workstreams);
+  });
+
   it("carries only flagged work on build_basics — no deliverable is promised", () => {
     const m = maturity({
       compositeLevel: "Foundational",
@@ -163,6 +187,13 @@ describe("generateNinetyDayPlan — workstreams", () => {
     });
     const ws = generateNinetyDayPlan(input(m)).workstreams;
     expect(ws.map((w) => w.name)).toEqual(["Data Integration & Hygiene"]);
+  });
+
+  it("names Data Foundations as the required workstream on build_basics when nothing is flagged", () => {
+    const m = maturity({ compositeLevel: "Foundational", flaggedDimensions: [] });
+    const ws = generateNinetyDayPlan(input(m)).workstreams;
+    expect(ws.map((w) => [w.name, w.required])).toEqual([["Data Foundations", true]]);
+    expect(generateCharter(input(m)).workstreams).toEqual(ws);
   });
 });
 
@@ -341,5 +372,132 @@ describe("generateCharter — scope and composition", () => {
       }),
     );
     expect(charter.background).toBe("Housing services.");
+  });
+});
+
+describe("generateCharter — success criteria follow the deliverable (R18)", () => {
+  const BASICS = [
+    "Systematic collection running in at least two programs",
+    "One internal from-live-data summary produced",
+    "Org staff can state where every data type lives",
+  ];
+  const RECURRING_REPORT =
+    "One recurring report produced from the new pipeline without manual steps";
+  const ROADMAP = "Roadmap adopted by the board with a named owner per initiative";
+  const MODEL =
+    "Model evaluated against a held-out period with its error stated to the org";
+
+  it("build_basics promises the basics only — no pipeline, roadmap or model", () => {
+    const criteria = generateCharter(
+      input(maturity({ compositeLevel: "Foundational" }), {
+        bucket: "Advisory / Strategy",
+      }),
+    ).successCriteria;
+    expect(criteria).toEqual(BASICS);
+  });
+
+  it("remediation_only promises the flags cleared, never the deferred deliverable", () => {
+    const m = maturity({
+      compositeLevel: "Developing",
+      flaggedDimensions: ["data_infrastructure", "governance"],
+    });
+    const criteria = generateCharter(input(m, { bucket: "ML / Predictive" }))
+      .successCriteria;
+    expect(criteria).toEqual([
+      "Each flagged dimension has a named owner and a written procedure in use",
+      "Documentation and reporting rhythm handed off to staff",
+      "Phase 2 charter ready if flags cleared",
+    ]);
+  });
+
+  it.each<[ScoutBucket, string]>([
+    ["Data Infrastructure", RECURRING_REPORT],
+    ["Analytics & Insight", RECURRING_REPORT],
+    ["Tooling & Automation", RECURRING_REPORT],
+    ["Advisory / Strategy", ROADMAP],
+    ["ML / Predictive", MODEL],
+  ])("ship_deliverable on %s ends with the criterion its deliverable supports", (bucket, last) => {
+    const criteria = generateCharter(
+      input(maturity({ compositeLevel: "Developing" }), { bucket }),
+    ).successCriteria;
+    expect(criteria).toEqual([
+      `${BUCKET_DELIVERABLES[bucket].name} delivered and in real use by day 90`,
+      "Org staff trained to own the deliverable independently",
+      last,
+    ]);
+  });
+
+  it.each<[ScoutBucket, string]>([
+    ["Data Infrastructure", RECURRING_REPORT],
+    ["Advisory / Strategy", ROADMAP],
+    ["ML / Predictive", MODEL],
+  ])("accelerate on %s ends with the same deliverable criterion", (bucket, last) => {
+    const criteria = generateCharter(
+      input(maturity({ compositeLevel: "Established" }), { bucket }),
+    ).successCriteria;
+    expect(criteria.at(-1)).toBe(last);
+  });
+
+  it("a roadmap or a model is never promised a pipeline or a recurring report", () => {
+    for (const bucket of ["Advisory / Strategy", "ML / Predictive"] as ScoutBucket[]) {
+      for (const level of ["Developing", "Established"] as CompositeLevel[]) {
+        const criteria = generateCharter(
+          input(maturity({ compositeLevel: level }), { bucket }),
+        ).successCriteria;
+        expect(criteria.some((c) => /pipeline|recurring report/i.test(c))).toBe(false);
+      }
+    }
+  });
+
+  it("keeps the governance owner line beside the deliverable criterion when governance is flagged", () => {
+    const m = maturity({
+      compositeLevel: "Developing",
+      flaggedDimensions: ["governance"],
+    });
+    const criteria = generateCharter(input(m, { bucket: "ML / Predictive" }))
+      .successCriteria;
+    expect(criteria).toContain(
+      "Every recurring funder and board report has a named owner and a documented data source",
+    );
+    expect(criteria.at(-1)).toBe(MODEL);
+  });
+
+  it("names the override criterion from the deliverable, then the kind's own", () => {
+    const m = maturity({
+      compositeLevel: "Developing",
+      overrideApplied: true,
+      points: 17,
+    });
+    const criteria = generateCharter(input(m, { bucket: "Advisory / Strategy" }))
+      .successCriteria;
+    expect(criteria[0]).toContain("Data-Strategy Roadmap delivered by day 90 on the data that is already integrated");
+    expect(criteria.at(-1)).toBe(ROADMAP);
+  });
+});
+
+describe("generateCharter — required means flagged (R18)", () => {
+  it("calls nothing required in the zero-flag Foundational scope, though Data Foundations still stands in", () => {
+    const m = maturity({ compositeLevel: "Foundational", flaggedDimensions: [] });
+    const charter = generateCharter(input(m));
+    expect(charter.scopeStatement).not.toContain("required");
+    expect(charter.scopeStatement).not.toContain("Data Foundations");
+    expect(charter.workstreams).toEqual([DATA_FOUNDATIONS]);
+  });
+
+  it("names the flagged workstream as required in the Foundational scope", () => {
+    const m = maturity({
+      compositeLevel: "Foundational",
+      flaggedDimensions: ["data_infrastructure"],
+    });
+    expect(generateCharter(input(m)).scopeStatement).toContain(
+      "with the required Data Integration & Hygiene workstream running inside them",
+    );
+  });
+
+  it("describes a required workstream as flagged on its dimension, never as flagged Foundational", () => {
+    for (const def of Object.values(WORKSTREAM_DEFS)) {
+      expect(def.description).not.toMatch(/flagged Foundational/);
+      expect(def.description).toMatch(/flagged on the (Data Infrastructure|Governance) dimension/);
+    }
   });
 });

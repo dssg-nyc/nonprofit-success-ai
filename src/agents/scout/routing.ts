@@ -1,14 +1,15 @@
+import { deriveHitlTier } from "../../guardrails/hitl";
 import {
   PrimaryNeed,
   ScoutBucket,
   ScoutConfidence,
   ScoutCompositeSignal,
-  ScoutHitlTier,
   type ScoutRoutingInput,
   type ScoutResult,
 } from "../../types";
 
-const Q6_DEFAULT_BUCKET: Record<PrimaryNeed, ScoutBucket | null> = {
+/** The bucket each stated primary need (Q6) implies. Shared with the model prompt. */
+export const Q6_DEFAULT_BUCKET: Record<PrimaryNeed, ScoutBucket | null> = {
   analyze_data: "Analytics & Insight",
   build_tool: "Tooling & Automation",
   ml_predictive: "ML / Predictive",
@@ -92,30 +93,109 @@ export function compositeSignal(
   return "Conditional";
 }
 
-export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
-  const flags: string[] = [];
+/** The three readiness scores and the signal they compose to. */
+export interface ScoutReadiness {
+  poc_score: 1 | 2 | 3;
+  clarity_score: 1 | 2 | 3;
+  foothold_score: 1 | 2 | 3;
+  composite_signal: ScoutCompositeSignal;
+}
 
+/**
+ * Readiness from the intake alone. The rubric is mechanical — a title and a timeline, a
+ * word count and a keyword, a system of record — so both Scout paths compute it here:
+ * `routeScoutIntake()` directly and `model.ts` before its model call. The baseline eval
+ * run had the model score these itself and it disagreed with the rubric in 7 of 21
+ * intakes, every time toward Ready; a readiness the model cannot assert is the point of
+ * deriving `composite_signal` in code at all.
+ */
+export function scoreReadiness(input: ScoutRoutingInput): ScoutReadiness {
   const poc_score = scorePoc(input.contact_name_role, input.timeline);
   const clarity_score = scoreClarity(input.problem_description);
   const foothold_score = scoreFoothold(input.current_systems);
-  const composite_signal = compositeSignal(
+  return {
     poc_score,
     clarity_score,
     foothold_score,
-  );
+    composite_signal: compositeSignal(poc_score, clarity_score, foothold_score),
+  };
+}
+
+/** How the rationale names the applicant's stated need — words, not the form's Q6 label. */
+const NEED_PHRASE: Record<PrimaryNeed, string> = {
+  analyze_data: "help analyzing their data",
+  build_tool: "a custom tool",
+  ml_predictive: "a predictive model",
+  organize_data: "help organizing their data",
+  strategy_guidance: "strategy guidance",
+  something_else: "something else",
+};
+
+const EXCERPT_WORDS = 14;
+
+/** The problem description's opening words, quoted, so the rationale cites the intake itself. */
+function excerpt(text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "no problem description";
+  const cut = words.slice(0, EXCERPT_WORDS).join(" ");
+  return `"${cut}${words.length > EXCERPT_WORDS ? "…" : ""}"`;
+}
+
+/**
+ * The readiness half of the rationale: the signal, the intake fact behind each
+ * sub-score, and — when it is not Ready — which score holds it back. The judge failed
+ * the old one-line rationale on `grounded` in 16 of 21 cases: it named the bucket but
+ * no intake detail, so a reviewer could not check it against the intake.
+ */
+function readinessSentence(
+  input: ScoutRoutingInput,
+  poc: number,
+  clarity: number,
+  foothold: number,
+  signal: ScoutCompositeSignal,
+): string {
+  const contact = input.contact_name_role.trim() || "no named contact";
+  const timeline = input.timeline.trim() || "no timeline";
+  const systems = input.current_systems.trim() ? `"${input.current_systems.trim()}"` : "no systems listed";
+  const words = input.problem_description.trim().split(/\s+/).filter(Boolean).length;
+  // The facts only — the three scores live in the structured fields the UI shows beside
+  // this sentence, so repeating the arithmetic here reads as the rubric talking.
+  const facts =
+    `contact ${contact} with timeline "${timeline}", ` +
+    `a description of ${words} words, and ${systems} today`;
+  if (signal === "Ready") return `Readiness is Ready: ${facts}.`;
+  const holding =
+    poc === 1
+      ? "the point of contact"
+      : clarity === 1
+        ? "the description's clarity"
+        : foothold === 1
+          ? "the systems foothold"
+          : "a total below the Ready threshold";
+  return `Readiness is ${signal}: ${facts}; ${holding} holds it back.`;
+}
+
+export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
+  const flags: string[] = [];
+
+  const { poc_score, clarity_score, foothold_score, composite_signal } =
+    scoreReadiness(input);
 
   if (input.primary_need === "something_else") {
     flags.push("Q6 = 'something else' — no auto-bucket, needs manual review");
     return {
       bucket: null,
       confidence: null,
-      rationale: `Applicant selected "something else" for their primary need${input.primary_need_other ? `: "${input.primary_need_other}"` : ""}. Scout does not auto-bucket this case — routed straight to human review.`,
+      rationale: `The applicant asked for something outside the listed needs${input.primary_need_other ? `: "${input.primary_need_other}"` : ""}, described as ${excerpt(input.problem_description)}. Scout does not auto-bucket this case, so it goes straight to human review. ${readinessSentence(input, poc_score, clarity_score, foothold_score, composite_signal)}`,
       poc_score,
       clarity_score,
       foothold_score,
       composite_signal,
       flags,
-      hitlTier: "L3",
+      hitlTier: deriveHitlTier("scout", {
+        confidence: null,
+        compositeSignal: composite_signal,
+      }),
     };
   }
 
@@ -128,18 +208,24 @@ export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
     .filter(Boolean).length;
 
   let bucket: ScoutBucket = q6Bucket;
-  let confidence: ScoutConfidence = "High";
+  let confidence: ScoutConfidence;
   let rationale: string;
   let needsTiebreaker = false;
+  const need = NEED_PHRASE[input.primary_need];
+  const quoted = excerpt(input.problem_description);
+  const unclear =
+    q7Matches.length > 1
+      ? `touches several areas (${q7Matches.join(", ")})`
+      : "does not point to one area";
 
   if (q7Matches.length === 0 || wordCount < 8) {
     flags.push("vague problem description");
     confidence = "Medium";
-    rationale = `Q6 suggested ${q6Bucket}, but the problem description was too short or unspecific to verify against it.`;
+    rationale = `The applicant asked for ${need} (${q6Bucket}), but the description ${quoted} is too short or unspecific to confirm it, so the bucket stands at Medium confidence.`;
     needsTiebreaker = q7Matches.length === 0;
   } else if (q7Matches.length === 1 && q7Matches[0] === q6Bucket) {
     confidence = "High";
-    rationale = `Q6 and Q7 both point to ${q6Bucket} — the problem description clearly supports the stated need. No contradictions found.`;
+    rationale = `The applicant asked for ${need}, and the description ${quoted} describes the same ${q6Bucket} work.`;
   } else if (q7Matches.length === 1 && q7Matches[0] !== q6Bucket) {
     const q7Bucket = q7Matches[0];
     flags.push(
@@ -147,11 +233,11 @@ export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
     );
     bucket = q7Bucket;
     confidence = "Low";
-    rationale = `Q6 suggested ${q6Bucket}, but the problem description actually describes a ${q7Bucket} need, so Scout re-bucketed to ${q7Bucket} per the Q7-wins rule.`;
+    rationale = `The applicant asked for ${need} (${q6Bucket}), but the description ${quoted} describes ${q7Bucket} work, so Scout routed it to ${q7Bucket}: what they describe outweighs the need they selected.`;
   } else {
     needsTiebreaker = true;
     confidence = "Medium";
-    rationale = `Q6 suggested ${q6Bucket}, but the problem description touched multiple possible areas (${q7Matches.join(", ")}), so Scout used org scale and systems as a tiebreaker.`;
+    rationale = `The description ${quoted} touches several areas (${q7Matches.join(", ")}), so Scout used org scale and systems to decide.`;
   }
 
   if (needsTiebreaker) {
@@ -168,31 +254,33 @@ export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
         "small org + minimal systems — routed to Advisory regardless of stated ask",
       );
       confidence = "Low";
-      rationale = `Ambiguous problem description, but a small org with minimal existing systems is usually better served starting in Advisory / Strategy, regardless of the original ask.`;
+      rationale = `The description ${quoted} ${unclear}, and an org of "${input.scale.trim()}" running on "${input.current_systems.trim()}" is usually better served starting in Advisory / Strategy than with ${need}.`;
     } else if (isLargeOrg && hasRealSystems) {
       bucket = q6Bucket;
       flags.push(
         "ambiguous problem description; org scale/systems support the original ask",
       );
       confidence = "Medium";
-      rationale = `Ambiguous problem description, but the org's scale and existing systems support the originally stated ${q6Bucket} need, so Scout kept Q6's bucket.`;
+      rationale = `The description ${quoted} ${unclear}, but an org of "${input.scale.trim()}" with "${input.current_systems.trim()}" in place can take on the ${q6Bucket} work it asked for, so Scout kept that bucket.`;
     } else {
       bucket = "Advisory / Strategy";
       flags.push(
         "ambiguous signals — defaulted to Advisory per default-routing rule",
       );
       confidence = "Low";
-      rationale = `Signals were ambiguous across the intake, so Scout defaulted to Advisory / Strategy — the safest first-tier bucket when in doubt.`;
+      rationale = `The description ${quoted} ${unclear}, and neither the org's scale ("${input.scale.trim()}") nor its systems settle it, so Scout defaulted to Advisory / Strategy, the safest first step when in doubt.`;
     }
   }
 
-  const hitlTier: ScoutHitlTier =
-    confidence === "High" && composite_signal === "Ready" ? "L2" : "L3";
+  const hitlTier = deriveHitlTier("scout", {
+    confidence,
+    compositeSignal: composite_signal,
+  });
 
   return {
     bucket,
     confidence,
-    rationale,
+    rationale: `${rationale} ${readinessSentence(input, poc_score, clarity_score, foothold_score, composite_signal)}`,
     poc_score,
     clarity_score,
     foothold_score,

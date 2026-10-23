@@ -14,10 +14,23 @@ function projectLine(planTitle?: string): string {
   return planTitle ? ` on ${planTitle}` : "";
 }
 
-const SIGN_OFF = "Best regards,\nThe DSSG team";
+/** The only sign-off a DSSG message carries; `evals/graders/heuristic/grounding.ts` checks for it. */
+export const SIGN_OFF = "Best regards,\nThe DSSG team";
 
 function greeting(orgName: string): string {
   return `Hi ${orgName} team,`;
+}
+
+/**
+ * Pulse's concerns are inferred from recorded activity and the strings are partner-adjacent
+ * data, so each is rendered as a quoted question — never as an observation DSSG asserts.
+ * Quoting also keeps injected text from reading as the template's own sentence; line
+ * breaks are collapsed so a concern cannot start a new paragraph of its own.
+ */
+function concernQuestions(concerns: string[]): string {
+  return concerns
+    .map((c) => `Has anything changed on your side regarding "${c.replace(/\s+/g, " ").trim()}"?`)
+    .join(" ");
 }
 
 export function generateEnvoyDraft(input: EnvoyInput): EnvoyDraft {
@@ -67,8 +80,9 @@ export function generateEnvoyDraft(input: EnvoyInput): EnvoyDraft {
       paragraphs = [
         `We wanted to follow up${projectLine(planTitle)} and check how things are going.`,
         concerns?.length
-          ? `From our side we noticed ${concerns.join(", ")}. That may be nothing at all — we would rather ask than assume.`
-          : "We may have missed an update on our side — we would rather ask than assume.",
+          ? `${concernQuestions(concerns)} That may be nothing at all — we would rather ask than assume.`
+          // No concern was supplied, so none is proposed — not even one of our own.
+          : "Is there anything you need from us right now? We would rather ask than assume.",
         "If something is blocking progress, let us know and we will work out the next step together.",
       ];
       break;

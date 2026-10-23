@@ -1,6 +1,6 @@
 # Pulse
 **Plate:** C4.1 in docs/nonprofit-success-system-design.html
-**Status:** GAP
+**Status:** see `roadmap.md` D13 (built) — build state lives only in the registry and in CLAUDE.md
 **PRD sections:** §8
 
 > Design note: the prior consolidated model classified this as a service (Health Service);
@@ -28,7 +28,7 @@ here forecloses it.
 `engagementId` (string, FK to `engagements`), from which the service reads:
 
 - `stage`, `daysInStage` — lifecycle position and how long it has held.
-- `daysSinceLastEvent` — recency, from `engagement_events` (migration 0002). **Nullable:**
+- `daysSinceLastEvent` — recency, from `engagement_events` (0003_delivery). **Nullable:**
   an engagement with no recorded events is the normal launch-day state, not an error.
 - `lastEventWasBlocker` — whether the most recent event was `blocker_raised`.
 - `hasPlan` — whether `engagements.assessment_id` links an Architect assessment.
@@ -63,15 +63,18 @@ without updating the `STAGE_WINDOW_DAYS` table cannot mark every engagement in i
 Note that rules 2 and 3 both produce `stalled` by different routes — silence and stage
 overrun are independent stalling signals, not two thresholds on one axis.
 
-### Output: `HealthResult`
+### Output: `PulseSignal`
 
 The `reasons[]` array is the point — a bare status label is not actionable, and the
 implementation guarantees the array is never empty:
 
+- `engagementId` (string)
 - `status` ('on_track' | 'at_risk' | 'stalled')
-- `daysSilent` (number — always populated)
-- `stageOverrunDays` (number | null — null when stage has no defined expected duration)
-- `openBlockers` (string[])
+- `reasons` (string[] — never empty)
+- `daysSinceLastEvent` (number | null — null when the engagement has no recorded events)
+- `daysInStage` (number)
+- `hasPlan` (boolean — `engagements.assessment_id` is not null)
+- `hitlTier` ('L2' — constant)
 - `computedAt` (ISO timestamp)
 
 ## §4 Thresholds
@@ -133,17 +136,17 @@ signal to staff, who then decide to initiate via Envoy.
 ## Contract
 
 - **Input:** `engagementId` (string, FK to `engagements`)
-- **Output:** `HealthResult` — `status` ('on_track' | 'at_risk' | 'stalled'), `daysSilent` (number), `stageOverrunDays` (number | null), `openBlockers` (string[]), `computedAt` (ISO timestamp)
+- **Output:** `PulseSignal` (`src/schemas/pulse.ts`) — `engagementId`, `status` ('on_track' | 'at_risk' | 'stalled'), `reasons` (string[]), `daysSinceLastEvent` (number | null), `daysInStage` (number), `hasPlan` (boolean), `hitlTier: 'L2'`, `computedAt` (ISO timestamp)
 - **Side effects:** None — read-only. Does not write `agent_runs`.
 
 ## Rules
 
 - No model call on any path. Any future AI-enhancement routes through a separate agent spec and a new plate entry.
 - Stalled check fires before at-risk check — a stalled engagement with open blockers reports `stalled`, not `at_risk`.
-- `daysSilent` is always populated; `stageOverrunDays` is null when the stage has no defined expected duration.
+- `daysSinceLastEvent` is null only when there are no events; an unknown stage has no window, so it never contributes a stage-overrun reason.
 - No-history path (`daysSinceLastEvent === null`) → `at_risk`, never `stalled`.
 - Thresholds (`STALLED_SILENCE_DAYS`, `AT_RISK_SILENCE_DAYS`, `STAGE_WINDOW_DAYS`) are constants in the service module, not database config — changes require a code deploy.
-- Service is server-side only, imported by `api/` handlers or SSR data fetchers. Dashboard components receive `HealthResult` as a prop and do not call Supabase directly for health state.
+- Reached via `GET /api/pulse-health?engagementId=` (caller JWT, `api/_auth.ts`), called from the SPA by `src/lib/api.ts` `fetchPulse()`. Dashboard components receive a `PulseSignal` and do not call Supabase directly for health state.
 - Read-only Supabase client (anon key with RLS) is sufficient — no service-role access needed.
 - An unknown stage has no window rather than a default one — no stage added by migration without updating `STAGE_WINDOW_DAYS` can mark every engagement in it stalled.
 - Pulse does not write `engagements.stage`. The writer is the transition command ([crm/lifecycle.md](../../crm/lifecycle.md) §2); Pulse reads only.
@@ -151,9 +154,9 @@ signal to staff, who then decide to initiate via Envoy.
 
 ## Dependencies
 
-- **Imports:** Supabase client (`src/lib/supabase.ts`); `src/types/` (`HealthResult`)
+- **Imports:** Supabase client (`src/lib/supabase.ts`); `src/types/` (`PulseSignal`, `PulseInput`); `src/schemas/pulse.ts`
 - **Imported by:** Dashboard component (engagement list health badges); engagement detail screen (health panel); any `api/` handler that needs to gate on engagement health
-- **Data:** `engagement_events` table (deferred `supabase/migrations/0002_engagement_events.sql`); `engagements` table (`0001_init.sql`)
+- **Data:** `engagement_events` table (`0003_delivery.sql`; `kind` enum includes `blocker_raised`); `engagements` table (`0001_core.sql`)
 
 ## Delta rows
 
@@ -170,16 +173,16 @@ Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbe
 - **Boundary, exactly 14 days silent → `at_risk`** (inclusive); 13 days → `on_track`.
 - `at_risk` — silence path: 14–20 days silent → `status = 'at_risk'`.
 - `at_risk` — blocker path: recent event + most-recent event is a blocker →
-  `status = 'at_risk'`, `openBlockers` non-empty.
+  `status = 'at_risk'`, a `reasons` entry mentions the raised blocker.
 - `stalled` — **overrun path**: no blocker, recent activity, but `daysInStage` exceeds that
-  stage's `STAGE_WINDOW_DAYS` → `status = 'stalled'`, `stageOverrunDays > 0`. Overrun is a
+  stage's `STAGE_WINDOW_DAYS` → `status = 'stalled'`, a `reasons` entry names the stage and its expected window. Overrun is a
   stalling signal, not an at-risk one.
 - `on_track` path: recent event, no blocker, stage within window → `status = 'on_track'`.
 - **Blocker never softens**: 21+ days silent AND a raised blocker → `status = 'stalled'`,
   not `at_risk`.
 - **Blocker only worsens**: `on_track` + raised blocker → `at_risk`.
 - **Unknown stage**: a stage not in `STAGE_WINDOW_DAYS` with large `daysInStage` and recent
-  activity → `status = 'on_track'`, `stageOverrunDays = null`. A new stage must not mark
+  activity → `status = 'on_track'`, no stage-overrun reason. A new stage must not mark
   its whole cohort stalled.
 - No events at all: `daysSinceLastEvent === null` → `status = 'at_risk'` with
   `"no recorded activity"`, **never** `stalled` — including when `daysInStage` is large.
@@ -187,11 +190,11 @@ Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbe
 - Missing plan adds a reason but does not change status: `on_track` + `hasPlan: false`
   stays `on_track`.
 - `computedAt` is within one second of test execution time.
-- Missing engagement ID: throws or returns typed error — does not return a default `HealthResult`.
+- Missing, malformed or RLS-hidden engagement ID: the route answers 400 (`invalid_input`) or 404 (`not_found`) — never a default `PulseSignal`.
 
 ## Open questions
 
-1. `0002_engagement_events.sql` is deferred — what columns does `engagement_events` expose for blocker flags? Boolean column or an event-type enum value?
+1. ~~What columns does `engagement_events` expose for blocker flags?~~ **Resolved — an event-type enum value:** `kind = blocker_raised` (`0001_core.sql` enum, `0003_delivery.sql` table).
 2. Should health history be tracked (a `health_snapshots` table written periodically) for trend reporting, or is always-current sufficient for the MVP dashboard?
 3. ~~Are the thresholds uniform across stages, or per-stage?~~ **Resolved 2026-08-21 — both.** The silence thresholds (`STALLED_SILENCE_DAYS`, `AT_RISK_SILENCE_DAYS`) are uniform; stage overrun is per-stage via `STAGE_WINDOW_DAYS`. Still open: whether the six window values are right, which needs data from a producer for `engagement_events` (question 4).
 4. Who writes `engagement_events` — the table and its RLS exist; no producer does. The transition command becomes the first ([crm/lifecycle.md](../../crm/lifecycle.md) §4 writes an event on every transition), but it does not cover `session_held` or `note_added`. Until a fuller producer lands, engagements with no events read as `at_risk` with "no recorded activity".
@@ -210,6 +213,6 @@ Cited from [`roadmap.md`](../../../roadmap.md) — this spec does not mint numbe
 | Health service does not write `engagements.stage` (Q2 resolution) | 2026-08-06 meeting, via `design-system.md` §5 U5 | §7 / Rules | Carried — U5 resolved elsewhere 2026-08-21 ([crm/lifecycle.md](../../crm/lifecycle.md) §2); this service stays read-only |
 | Health-signal handoff to DSSG staff | `design-system.md:79` (handoff diagram) | §Responsibility, §3 Outputs | Carried |
 | Health taxonomy undesigned | prior Pulse spec §Outputs | §3 Health taxonomy | Closed — `on_track`/`at_risk`/`stalled` |
-| "Activity signal" undefined | prior Pulse spec §Inputs | §2 Inputs | Closed — `engagement_events`, migration 0002 |
+| "Activity signal" undefined | prior Pulse spec §Inputs | §2 Inputs | Closed — `engagement_events`, 0003_delivery |
 | HITL tier unassigned | prior Pulse spec §HITL tier | §5 HITL tier | Closed — L2; read-only |
 | Deterministic fallback undesigned | prior Pulse spec §Deterministic fallback | §6 No model call | Closed — no model path exists |
