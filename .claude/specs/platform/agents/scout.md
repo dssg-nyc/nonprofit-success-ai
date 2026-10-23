@@ -47,7 +47,7 @@ Scored from the intake answers (`src/agents/scout/routing.ts`):
 
 `routeScoutIntake()` in `src/agents/scout/routing.ts` is the deterministic fallback and runs
 the same three-step process the model path also produces. On the model path
-(`src/agents/scout/model.ts`, prompt `scout-routing-0.07` — the tiebreak, foothold floor and confidence rule in the heuristic's own words, R17; 0.06 states the floor as a prohibition above the tiebreak, adds a worked example per shape run 2 missed, and has the rationale name the intake detail instead of quoting a score, R18; 0.07 adds the IRS registry line inside the partner-data block and the registry rule above the tiebreak, R19) only step 1 is the model's: code
+(`src/agents/scout/model.ts`, prompt `scout-routing-0.06` — the tiebreak, foothold floor and confidence rule in the heuristic's own words, R17; 0.06 states the floor as a prohibition above the tiebreak, adds a worked example per shape run 2 missed, and has the rationale name the intake detail instead of quoting a score, R18) only step 1 is the model's: code
 scores readiness first (`scoreReadiness()`, the same rubric as the fallback) and hands the
 three scores and the signal to the model as facts; the model returns bucket, confidence,
 rationale and flags; `enforceRoutingRules()` then nulls a `something_else` bucket and caps a
@@ -58,30 +58,6 @@ readiness: 7 of its 10 fixture misses were a `Ready` the rubric did not give.)*
    keyword match; Q5/Q8 break ties when Q7 is ambiguous.
 2. **Confidence bucketing** from how cleanly the answers matched.
 3. **Readiness** from POC/clarity/foothold — see the composite rule below.
-
-### The IRS registry record (R19, D50)
-
-`api/route-intake` looks the applicant up in the IRS registry (ProPublica Nonprofit
-Explorer, `api/_scoutRegistry.ts` over the D49 upstream helpers — same process, no HTTP
-hop) before routing: by EIN when the form gave one, else by name, where a match is a single
-hit or a hit whose normalised name equals the org name. The reduced record
-(`ScoutRegistry`: EIN, name, city/state, NTEE, 501(c) subsection, revenue, assets, newest
-filing year, `source: 'propublica'`) reaches both paths as `ScoutRoutingInput.registry` —
-`undefined` means no lookup (evals, demo, an ambiguous or unavailable lookup), `null` that
-the lookup found nothing. Both paths apply one rule:
-
-- **Readiness is untouched.** The record never changes a score, the signal or the tier.
-- **Tiebreak only.** When the description is ambiguous and the applicant's own `scale`
-  matches neither org-size signal, registry revenue stands in: `>= $1,000,000` reads as a
-  larger org, `< $250,000` as a small one, anything between says nothing. Text wins.
-- **Flags for the reviewer:** no record matched; a subsection other than 501(c)(3); the
-  newest filing older than three years; no filing on record.
-- **One rationale sentence** names the record ("IRS records list …") with no numeric score.
-
-The route files the record and the lookup status (`matched` / `not_found` / `ambiguous` /
-`unavailable` / `skipped`) on the row (0011); the intake card shows the matched name and
-EIN beside what the applicant wrote, so a wrong name match is visible. The lookup can
-never fail the intake: any upstream failure is `unavailable` and routing proceeds without it.
 
 `something_else` primary_need bypasses auto-bucket entirely: `bucket = null`,
 `confidence = null`, `hitlTier = 'L3'` always.
@@ -192,10 +168,7 @@ Target: moves to `src/agents/scout/routing.ts` with tests. No tests exist yet.
 ## Contract
 
 - **Input:** `ScoutRoutingInput` — `scale`, `primary_need`, `primary_need_other?`,
-  `problem_description`, `current_systems`, `contact_name_role`, `timeline`,
-  `registry?` (`ScoutRegistry | null`, set by the route from the IRS lookup, R19). The
-  request (`ScoutIntakeRequest`) may also carry an optional `ein`; it is a lookup hint,
-  never stored as an answer
+  `problem_description`, `current_systems`, `contact_name_role`, `timeline`
 - **Output:** `ScoutResult` — `bucket` (ScoutBucket | null), `confidence`
   (High/Medium/Low/null), `rationale`, `poc_score`, `clarity_score`, `foothold_score`
   (each 1|2|3), `composite_signal` (Ready/Conditional/Not Ready), `flags[]`,
@@ -204,9 +177,7 @@ Target: moves to `src/agents/scout/routing.ts` with tests. No tests exist yet.
   (intake fields + computed output fields) and fills the routing provenance columns
   (`routing_source` `ai`/`derived`, `routing_run_id`, `routing_model`,
   `routing_prompt_version`, 0001_core) from the linked `agent_runs` row; review fields
-  are written later by admin, and the registry record + lookup status (`registry`,
-  `registry_lookup`, 0011) are copied from the route's lookup. The route answers
-  `{ ...ScoutResult, intakeId, routingSource, registry, registryLookup }`.
+  are written later by admin. The route answers `{ ...ScoutResult, intakeId, routingSource }`.
 
 ## Rules
 
@@ -214,7 +185,6 @@ Target: moves to `src/agents/scout/routing.ts` with tests. No tests exist yet.
 - `composite_signal` is derived from the three scores, not generated by the model, and since prompt 0.03 the three scores are not generated by the model either (`scoreReadiness()` in `routing.ts`; `scoutModelSchema` omits them). Evaluated as in the composite rule above: POC = 1 with sum > 3 → Not Ready; otherwise any score of 1 → Conditional.
 - A bucket other than the stated need's default is never High confidence (the description-wins rule gives it Low). `enforceRoutingRules()` in `model.ts` caps such an answer at Low with a flag, so a re-bucket cannot reach `L2` whatever the model returns.
 - `something_else` primary_need bypasses auto-bucket entirely: `bucket = null`, `confidence = null`, `hitlTier = 'L3'` always.
-- The IRS registry record is evidence for the reviewer, not for the router: it moves a bucket only as the org-size stand-in in the tiebreak, and only when the applicant named no size; it never changes readiness or the tier; a missing record is a flag, never a lower confidence. Both paths apply the rule (`routing.ts` and prompt 0.07), and the record is only ever fetched server-side — the browser never calls ProPublica and cannot supply a record (the RPC takes it from the route, which looked it up).
 - `/api/route-intake` requires a Supabase bearer token. The applicant has no account, so `ScoutIntakeForm` signs them in anonymously first (Supabase Auth, rate-limited per IP; no `users` profile is created — 0001_core) and the SPA treats that session as signed out. No token, or a failed route → nothing is filed and the form shows an error; the applicant is never thanked for an application that does not exist. Each session also has an hourly model-call budget (`check_model_budget()`, 0007): past `MODEL_CALLS_PER_HOUR` the intake is still filed, routed by the deterministic fallback with a `model_budget_exceeded` flag — the applicant is never turned away over a quota they cannot see; only the staff routes answer 429.
 - Intake fields are written once, through `submit_scout_intake()` only — `anon` and `authenticated` have no insert grant on `scout_intakes`. Review fields (`reviewStatus`, `reviewAction`, `finalBucket`, `reviewedBy`, etc.) are admin-only update. `reviewStatus` is `pending` → `needs_info` (parked while the admin asks the applicant something; no action or bucket) → `reviewed` (`approved`/`edited` only through `approve_scout_intake()`; `redirected` = declined, a direct update). A declined intake can be reopened by the same function with `p_reopen` (0010), which is how a declined intake re-enters the pipeline.
 - Deterministic fallback must produce the identical output shape as the model path — a drop-in swap, not a degraded path.
@@ -239,7 +209,6 @@ Cited from [`roadmap.md`](../../roadmap.md) — this spec does not mint numbers.
 - **D14** — meeting intelligence (§2) — SPECIFIED
 - **D23** — Scout eval suite; the two `compositeSignal` boundary cases land here — GAP
 - **D26** — `demoStore` → Supabase retarget for intake form and review queue — SPECIFIED
-- **D50** — IRS registry enrichment (`api/_scoutRegistry.ts`, 0011, prompt 0.07, intake card block, 6 eval cases) — BUILT 2026-10-14
 - ~~D10~~ `compositeSignal` Not-Ready bug — **BUILT** 2026-08-21, decisive-POC rule ported
   from the prototype. Closed; no registry row needed.
 

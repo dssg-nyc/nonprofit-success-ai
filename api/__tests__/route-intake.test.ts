@@ -1,12 +1,9 @@
-import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ScoutIntakeRequest, ScoutRegistry, ScoutResult } from '../../src/types';
+import type { ScoutIntakeRequest, ScoutResult } from '../../src/types';
 
-// Three seams are replaced: Supabase (auth + the user-scoped client's rpc), the agent's
-// model path, and global fetch (ProPublica — a 404 by default, so the registry lookup is
-// `not_found` unless a test says otherwise). The deterministic heuristic
-// (`routeScoutIntake`) stays real, so a fallback response is what the handler would
-// really file. No key, no network, no recorder.
+// Two seams are replaced: Supabase (auth + the user-scoped client's rpc) and the agent's
+// model path. The deterministic heuristic (`routeScoutIntake`) stays real, so a fallback
+// response is what the handler would really file. No key, no network, no recorder.
 type Result = { data: unknown; error: { code?: string; status?: number } | null };
 const db = vi.hoisted(() => ({
   user: { data: { user: { id: 'anon-user-1' } }, error: null } as Result,
@@ -40,38 +37,6 @@ const { POST } = await import('../route-intake');
 const { GatewayError } = await import('../../src/model/errors');
 const { scoutIntakeResponseSchema } = await import('../../src/schemas');
 const { routeScoutIntake } = await import('../../src/agents/scout/routing');
-
-const PROPUBLICA = 'https://projects.propublica.org/nonprofits/api/v2';
-const fixture = (name: string): unknown =>
-  JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), 'utf8'));
-let fetchFn: ReturnType<typeof vi.fn>;
-/** ProPublica by path prefix; anything unrouted is its 404. */
-const stubProPublica = (routes: Record<string, unknown | (() => Promise<Response>)> = {}) => {
-  fetchFn = vi.fn(async (url: string) => {
-    const path = url.slice(PROPUBLICA.length);
-    for (const [prefix, body] of Object.entries(routes)) {
-      if (path.startsWith(prefix)) {
-        return typeof body === 'function' ? (body as () => Promise<Response>)() : Response.json(body);
-      }
-    }
-    return Response.json({ error: 'not_found' }, { status: 404 });
-  });
-  vi.stubGlobal('fetch', fetchFn);
-};
-const propublicaUrls = () => fetchFn.mock.calls.map((c) => String((c as [string])[0]));
-/** The MoMA fixture as Scout stores it. */
-const MOMA: ScoutRegistry = {
-  ein: '131624100',
-  name: 'Museum Of Modern Art',
-  city: 'New York',
-  state: 'NY',
-  nteeCode: 'A510',
-  subsectionCode: 3,
-  revenue: expect.any(Number) as unknown as number,
-  assets: expect.any(Number) as unknown as number,
-  latestFilingYear: 2023,
-  source: 'propublica',
-};
 
 const INTAKE: ScoutIntakeRequest = {
   org_name: 'Bronx Literacy Fund',
@@ -137,13 +102,10 @@ beforeEach(() => {
   vi.stubEnv('SUPABASE_ANON_KEY', 'anon-key');
   vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  vi.spyOn(console, 'warn').mockImplementation(() => {});
-  stubProPublica();
 });
 
 afterEach(() => {
   vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -192,13 +154,7 @@ describe('POST /api/route-intake', () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual({
-      ...RESULT,
-      intakeId: INTAKE_ID,
-      routingSource: 'ai',
-      registry: null,
-      registryLookup: 'not_found',
-    });
+    expect(body).toEqual({ ...RESULT, intakeId: INTAKE_ID, routingSource: 'ai' });
     expect(scoutIntakeResponseSchema.safeParse(body).success).toBe(true);
     expect(agent.calls).toEqual([
       {
@@ -209,84 +165,8 @@ describe('POST /api/route-intake', () => {
         current_systems: INTAKE.current_systems,
         contact_name_role: INTAKE.contact_name_role,
         timeline: INTAKE.timeline,
-        registry: null,
       },
     ]);
-  });
-
-  describe('the registry lookup (R19)', () => {
-    beforeEach(() => {
-      agent.respond = async () => ({ result: RESULT, runId: 'run-1' });
-    });
-
-    it('searches ProPublica by org name before routing, and hands the match to the model, the row and the response', async () => {
-      stubProPublica({
-        '/search.json': {
-          total_results: 1,
-          num_pages: 1,
-          organizations: [{ ein: 131624100, name: 'Museum Of Modern Art', city: 'New York', state: 'NY', subseccd: 3 }],
-        },
-        '/organizations/131624100.json': fixture('org-moma'),
-      });
-      const res = await post(JSON.stringify(INTAKE));
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.registryLookup).toBe('matched');
-      expect(body.registry).toEqual(MOMA);
-      expect(scoutIntakeResponseSchema.safeParse(body).success).toBe(true);
-      expect(propublicaUrls()[0]).toContain(`/search.json?q=${encodeURIComponent(INTAKE.org_name)}`);
-      expect(agent.calls[0]).toMatchObject({ registry: MOMA });
-      expect(submitCalls()[0].args.p_intake).toMatchObject({ registry: MOMA, registry_lookup: 'matched' });
-    });
-
-    it('with an EIN on the form fetches that organization and never searches; the hint is not filed as a column', async () => {
-      stubProPublica({ '/organizations/131624100.json': fixture('org-moma') });
-      const res = await post(JSON.stringify({ ...INTAKE, ein: '13-1624100' }));
-      expect(res.status).toBe(200);
-      expect((await res.json()).registryLookup).toBe('matched');
-      expect(propublicaUrls()).toEqual([`${PROPUBLICA}/organizations/131624100.json`]);
-      expect(submitCalls()[0].args.p_intake).not.toHaveProperty('ein');
-    });
-
-    it('400 invalid_input for a malformed EIN, before any lookup', async () => {
-      const res = await post(JSON.stringify({ ...INTAKE, ein: '12-34' }));
-      expect(res.status).toBe(400);
-      expect(fetchFn).not.toHaveBeenCalled();
-    });
-
-    it('no record: the router sees null and flags it, the row says not_found', async () => {
-      agent.respond = async () => {
-        throw new GatewayError('model_timeout', 504, 'timed out');
-      };
-      db.rpcResults.submit_scout_intake = filed('L3', 'derived');
-      const body = await (await post(JSON.stringify(INTAKE))).json();
-      expect(body.registryLookup).toBe('not_found');
-      expect(body.registry).toBeNull();
-      expect(body.flags).toContain('Registry: no IRS record matched the org name — verify nonprofit status');
-      expect(submitCalls()[0].args.p_intake).toMatchObject({ registry: null, registry_lookup: 'not_found' });
-    });
-
-    it('several hits and no name match is ambiguous: no record, no flag, the router is told nothing', async () => {
-      stubProPublica({ '/search.json': fixture('search-harlem-ny') });
-      const body = await (await post(JSON.stringify({ ...INTAKE, org_name: 'Harlem' }))).json();
-      expect(body.registryLookup).toBe('ambiguous');
-      expect(agent.calls[0]).toMatchObject({ registry: undefined });
-      expect(submitCalls()[0].args.p_intake).toMatchObject({ registry: null, registry_lookup: 'ambiguous' });
-    });
-
-    it('ProPublica down: the intake is still filed and routed, lookup unavailable, with no org name in any log line', async () => {
-      stubProPublica({ '/search.json': () => Promise.resolve(new Response('', { status: 503 })) });
-      const res = await post(JSON.stringify(INTAKE));
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body).toMatchObject({ registryLookup: 'unavailable', registry: null, bucket: RESULT.bucket });
-      expect(body.flags).not.toContainEqual(expect.stringContaining('Registry:'));
-      expect(agent.calls[0]).toMatchObject({ registry: undefined });
-      expect(submitCalls()).toHaveLength(1);
-      const warned = (console.warn as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]));
-      expect(warned.some((l) => l.includes('registry_lookup'))).toBe(true);
-      expect(JSON.stringify([...warned, ...logged()])).not.toContain('Bronx');
-    });
   });
 
   it('files the row through submit_scout_intake with the form, the result and the run — never a tier', async () => {
@@ -342,16 +222,13 @@ describe('POST /api/route-intake', () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      // The default ProPublica stub is a 404, so the heuristic ran with `registry: null`.
-      const heuristic = routeScoutIntake({ ...INTAKE, primary_need: 'ml_predictive', registry: null });
+      const heuristic = routeScoutIntake({ ...INTAKE, primary_need: 'ml_predictive' });
       expect(body).toEqual({
         ...heuristic,
         hitlTier: 'L3',
         flags: [...heuristic.flags, 'Routed by the deterministic fallback — model unavailable (model_timeout)'],
         intakeId: INTAKE_ID,
         routingSource: 'derived',
-        registry: null,
-        registryLookup: 'not_found',
       });
       const [call] = submitCalls();
       expect(call.args).not.toHaveProperty('p_agent_run_id');

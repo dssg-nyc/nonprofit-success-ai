@@ -6,4 +6,3 @@ export * from './envoy';
 export * from './chronicle';
 export * from './approval';
 export * from './engagement';
-export * from './nonprofit';

@@ -9,7 +9,6 @@ import { checkModelBudget } from "./_budget";
 import { modelKeyConfigured } from "./_env";
 import { parseJsonBody } from "./_http";
 import { handler } from "./_request";
-import { lookupScoutRegistry } from "./_scoutRegistry";
 
 export const maxDuration = 30;
 
@@ -27,11 +26,6 @@ export const maxDuration = 30;
  *
  * The response's tier is the one filed, not the one computed: a fallback-routed intake
  * is `L3` whatever the heuristic's confidence, because no run backs it.
- *
- * Before routing, the applicant's IRS registry record is looked up from ProPublica
- * (`_scoutRegistry.ts`, R19) and handed to both routing paths as a fact and to the row
- * with its provenance. The lookup is best-effort: `unavailable` files the intake exactly
- * as it was filed before the record existed.
  */
 
 function json(body: unknown, status: number) {
@@ -54,14 +48,12 @@ export const POST = handler("route-intake", async (request: Request) => {
   if (!parsed.ok) return parsed.response;
   const valid = scoutIntakeRequestSchema.safeParse(parsed.body);
   if (!valid.success) return json({ error: "invalid_input" }, 400);
-  // `ein` is a lookup hint, not a column: the record carries the EIN ProPublica confirmed.
-  const { ein, ...intake } = valid.data;
+  const intake = valid.data;
   // Normalised once, used twice: the free-text need only means something beside
   // `something_else`, so the model and the row see the same value — never a stray
   // string under a fixed need, never a `undefined` the model sees but the row drops.
   const primaryNeedOther =
     intake.primary_need === "something_else" ? (intake.primary_need_other ?? "").trim() : "";
-  const lookup = await lookupScoutRegistry(intake.org_name, ein);
   const input: ScoutRoutingInput = {
     scale: intake.scale,
     primary_need: intake.primary_need as ScoutRoutingInput["primary_need"],
@@ -70,10 +62,6 @@ export const POST = handler("route-intake", async (request: Request) => {
     current_systems: intake.current_systems,
     contact_name_role: intake.contact_name_role,
     timeline: intake.timeline,
-    // `null` only when the lookup ran and found nothing: `ambiguous` and `unavailable`
-    // leave the router as uninformed as a skipped lookup, so neither earns the
-    // "no record matched" flag.
-    registry: lookup.status === "matched" || lookup.status === "not_found" ? lookup.registry : undefined,
   };
 
   // The model routes when it can; on any failure the heuristic does, and the intake
@@ -116,8 +104,6 @@ export const POST = handler("route-intake", async (request: Request) => {
       foothold_score: result.foothold_score,
       composite_signal: result.composite_signal,
       flags: result.flags,
-      registry: lookup.registry,
-      registry_lookup: lookup.status,
     },
     // A run id is only sent for a model result: the RPC refuses a run that did not
     // succeed, and the fallback's failed run is not the provenance of its result.
@@ -139,12 +125,7 @@ export const POST = handler("route-intake", async (request: Request) => {
     return rpcErrorResponse(rpcErr?.code);
   }
 
-  const response: ScoutIntakeResponse = {
-    ...result,
-    ...filed.data,
-    registry: lookup.registry,
-    registryLookup: lookup.status,
-  };
+  const response: ScoutIntakeResponse = { ...result, ...filed.data };
   return json(response, 200);
 });
 

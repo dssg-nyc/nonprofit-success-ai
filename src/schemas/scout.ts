@@ -23,40 +23,6 @@ export const scoutResultSchema = z.object({
 const PRIMARY_NEEDS = PRIMARY_NEED_OPTIONS.map((o) => o.value) as [string, ...string[]];
 
 /**
- * The applicant's IRS registry record, as `api/_scoutRegistry.ts` reduces a ProPublica
- * organization (`nonprofitDetailSchema`) to what Scout and the reviewer use. Looked up
- * server-side from `org_name` (or the form's optional EIN) before routing; `source` is
- * the provenance the row keeps. Revenue and assets come from the newest extracted
- * filing, else the IRS master file; null when neither has a figure.
- */
-export const scoutRegistrySchema = z.object({
-  ein: z.string().regex(/^\d{9}$/),
-  name: z.string(),
-  city: z.string(),
-  state: z.string(),
-  nteeCode: z.string().nullable(),
-  /** 501(c) subsection, e.g. 3 for 501(c)(3). */
-  subsectionCode: z.number().nullable(),
-  revenue: z.number().nullable(),
-  assets: z.number().nullable(),
-  /** Tax year of the newest filing ProPublica holds (with or without extracted data). */
-  latestFilingYear: z.number().nullable(),
-  source: z.literal("propublica"),
-});
-
-/**
- * What the lookup found. `matched` is the only status with a record; `skipped` is the
- * column default for rows written before the lookup existed and for demo intakes.
- */
-export const scoutRegistryLookupSchema = z.enum([
-  "matched",
-  "not_found",
-  "ambiguous",
-  "unavailable",
-  "skipped",
-]);
-
-/**
  * The whole intake as `/api/route-intake` takes it (0007): the form's fields, which the
  * handler routes and then files through `submit_scout_intake()`. Lengths mirror the
  * column checks in 0001_core so a too-long field is a 400 here, not a 23514 from the RPC.
@@ -74,22 +40,12 @@ export const scoutIntakeRequestSchema = z.object({
   current_systems: z.string().trim().min(1).max(500),
   timeline: z.string().trim().min(1).max(500),
   referral_source: z.string().trim().max(256).default(""),
-  /** Optional: the org's EIN, dashes allowed. Given, the registry lookup skips the name search. */
-  ein: z
-    .string()
-    .trim()
-    .transform((s) => s.replace(/-/g, ""))
-    .pipe(z.string().regex(/^\d{9}$/))
-    .optional(),
 });
 
 /** What the route returns: the routing result as filed, plus the row it created. */
 export const scoutIntakeResponseSchema = scoutResultSchema.extend({
   intakeId: z.guid(),
   routingSource: z.enum(["ai", "derived"]),
-  /** The registry record filed with the row, and how the lookup went. */
-  registry: scoutRegistrySchema.nullable(),
-  registryLookup: scoutRegistryLookupSchema,
 });
 
 /**

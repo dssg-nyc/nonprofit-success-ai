@@ -1,7 +1,6 @@
 import React from 'react';
-import { Flag, Mail, Clock, ExternalLink, Landmark, MessageSquareText, Sparkles } from 'lucide-react';
+import { Flag, Mail, Clock, MessageSquareText, Sparkles } from 'lucide-react';
 import { ScoutIntake, PRIMARY_NEED_OPTIONS } from '../../types';
-import type { ScoutRegistryLookup } from '../../types';
 import { relativeTime } from './review';
 
 /**
@@ -72,71 +71,6 @@ function Answer({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-/** One line for a lookup that produced no record. `skipped` shows nothing: nothing was looked up. */
-const REGISTRY_STATE: Partial<Record<ScoutRegistryLookup, string>> = {
-  not_found: 'No IRS record matched the org name — verify nonprofit status before approving.',
-  ambiguous: 'Several IRS records could match the org name; none was taken. Check ProPublica by hand.',
-  unavailable: 'The IRS registry lookup was unavailable when this intake was filed.',
-};
-
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-
-/**
- * The applicant's IRS registry record (ProPublica), fetched server-side when the intake
- * was filed (0011). Shown beside what they told us so a reviewer can see the match — the
- * name and EIN ProPublica returned, not the name on the form — and the facts Scout's
- * flags refer to. The record never moves a score or a tier; it informs the reviewer.
- */
-function RegistryBlock({ intake }: { intake: ScoutIntake }) {
-  const lookup = intake.registryLookup;
-  if (!lookup || lookup === 'skipped') return null;
-  const record = lookup === 'matched' ? intake.registry : null;
-  return (
-    <div className="pt-3 border-t border-slate-50 space-y-1.5">
-      <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-300">
-        <Landmark size={10} /> IRS registry
-      </p>
-      {record ? (
-        <>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            <span className="font-semibold">{record.name}</span>
-            <span className="text-slate-400"> · EIN {record.ein.slice(0, 2)}-{record.ein.slice(2)}</span>
-            {(record.city || record.state) && (
-              <span className="text-slate-400"> · {[record.city, record.state].filter(Boolean).join(', ')}</span>
-            )}
-          </p>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-500">
-            <RegistryFact label="Status" value={record.subsectionCode !== null ? `501(c)(${record.subsectionCode})` : 'unknown'} />
-            <RegistryFact label="NTEE" value={record.nteeCode ?? '—'} />
-            <RegistryFact label="Revenue" value={record.revenue !== null ? usd.format(record.revenue) : 'not reported'} />
-            <RegistryFact label="Assets" value={record.assets !== null ? usd.format(record.assets) : 'not reported'} />
-            <RegistryFact label="Newest filing" value={record.latestFilingYear !== null ? String(record.latestFilingYear) : 'none on record'} />
-          </dl>
-          <a
-            href={`https://projects.propublica.org/nonprofits/organizations/${record.ein}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-dssg-blue hover:underline"
-          >
-            View on ProPublica <ExternalLink size={10} />
-          </a>
-        </>
-      ) : (
-        <p className="text-xs text-slate-500 italic leading-relaxed">{REGISTRY_STATE[lookup]}</p>
-      )}
-    </div>
-  );
-}
-
-function RegistryFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex gap-1.5 min-w-0">
-      <dt className="text-slate-400 shrink-0">{label}</dt>
-      <dd className="truncate" title={value}>{value}</dd>
-    </div>
-  );
-}
-
 function primaryNeedLabel(intake: ScoutIntake): string {
   const label = PRIMARY_NEED_OPTIONS.find(o => o.value === intake.primary_need)?.label ?? intake.primary_need;
   return intake.primary_need_other ? `${label}: ${intake.primary_need_other}` : label;
@@ -177,7 +111,6 @@ export function IntakeBody({ intake }: { intake: ScoutIntake }) {
         <Answer label="Data and systems today" value={intake.current_systems} />
         <Answer label="Timeline" value={intake.timeline} />
         <Answer label="How they heard of DSSG" value={intake.referral_source} />
-        <RegistryBlock intake={intake} />
       </div>
 
       <div className="space-y-4">

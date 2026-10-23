@@ -18,7 +18,6 @@ interface ScoutIntakeFormProps {
 
 const initialForm = {
   org_name: '',
-  ein: '',
   contact_name_role: '',
   contact_email: '',
   mission: '',
@@ -78,12 +77,8 @@ export default function ScoutIntakeForm({ isDemo, introNote, onSubmitted }: Scou
     // in anonymously first. With no token, or a failed route, nothing was filed and the
     // applicant is told so, rather than shown a thank-you for an application that does
     // not exist.
-    // The EIN is optional and only a hint: the route looks the org up in the IRS registry
-    // by name without it, and never files it as an answer — the record it matched carries
-    // the EIN ProPublica confirmed.
     const intake: ScoutIntakeRequest = {
       ...form,
-      ein: form.ein.trim() || undefined,
       primary_need_other: form.primary_need === 'something_else' ? form.primary_need_other : undefined,
     };
 
@@ -165,18 +160,6 @@ export default function ScoutIntakeForm({ isDemo, introNote, onSubmitted }: Scou
               onChange={e => update('org_name', e.target.value)}
               className={inputClass}
               placeholder="e.g. Bronx Literacy Fund"
-            />
-          </Field>
-
-          <Field label="EIN (optional)">
-            <input
-              value={form.ein}
-              onChange={e => update('ein', e.target.value)}
-              className={inputClass}
-              inputMode="numeric"
-              pattern="[0-9]{2}-?[0-9]{7}"
-              title="Nine digits, with or without the dash — e.g. 13-1624100"
-              placeholder="e.g. 13-1624100 — helps us find your IRS record"
             />
           </Field>
 

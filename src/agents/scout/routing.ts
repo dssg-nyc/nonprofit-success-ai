@@ -4,7 +4,6 @@ import {
   ScoutBucket,
   ScoutConfidence,
   ScoutCompositeSignal,
-  type ScoutRegistry,
   type ScoutRoutingInput,
   type ScoutResult,
 } from "../../types";
@@ -36,16 +35,6 @@ const MINIMAL_SYSTEMS_SIGNAL =
 const LARGE_ORG_SIGNAL =
   /\b([2-9][0-9]|[1-9][0-9]{2,})\b|staff of|full[- ]time staff/i;
 const REAL_SYSTEMS_SIGNAL = /crm|salesforce|database|warehouse|data lake|erp/i;
-
-/**
- * Registry revenue standing in for `scale` in the tiebreak, only when the free text
- * names no org size. The bands are deliberately far apart: between them the registry
- * says nothing, and the tie falls to Advisory as before.
- */
-const REGISTRY_LARGE_REVENUE = 1_000_000;
-const REGISTRY_SMALL_REVENUE = 250_000;
-/** A newest filing older than this is worth a reviewer's glance. */
-const REGISTRY_STALE_YEARS = 3;
 
 const CONCRETE_ROLE_SIGNAL =
   /director|founder|\bed\b|executive director|manager|coordinator|lead|president|ceo/i;
@@ -186,50 +175,6 @@ function readinessSentence(
   return `Readiness is ${signal}: ${facts}; ${holding} holds it back.`;
 }
 
-const usd = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-
-/**
- * What the reviewer should check in the registry record. The record never moves a
- * score or a tier; it only earns a flag — including when there is none: an applicant
- * ProPublica does not know is either not a registered nonprofit or filed under another
- * name, and either is worth a look before approval.
- */
-export function registryFlags(registry: ScoutRegistry | null | undefined): string[] {
-  if (registry === undefined) return [];
-  if (registry === null) {
-    return ["Registry: no IRS record matched the org name — verify nonprofit status"];
-  }
-  const flags: string[] = [];
-  if (registry.subsectionCode !== null && registry.subsectionCode !== 3) {
-    flags.push(`Registry: 501(c)(${registry.subsectionCode}), not a 501(c)(3)`);
-  }
-  if (registry.latestFilingYear === null) {
-    flags.push("Registry: no IRS filing on record");
-  } else if (registry.latestFilingYear < new Date().getFullYear() - REGISTRY_STALE_YEARS) {
-    flags.push(`Registry: newest IRS filing is from ${registry.latestFilingYear}`);
-  }
-  return flags;
-}
-
-/** The registry half of the rationale: the record as a fact the reviewer can check, or its absence. */
-function registrySentence(registry: ScoutRegistry | null | undefined): string {
-  if (registry === undefined) return "";
-  if (registry === null) return " No IRS record matched the org name.";
-  const subsection =
-    registry.subsectionCode !== null ? `a 501(c)(${registry.subsectionCode})` : "a registered nonprofit";
-  const revenue =
-    registry.revenue !== null
-      ? ` with revenue of ${usd.format(registry.revenue)}${registry.latestFilingYear !== null ? ` in its ${registry.latestFilingYear} filing` : ""}`
-      : registry.latestFilingYear !== null
-        ? `, newest filing ${registry.latestFilingYear}`
-        : " with no filing on record";
-  return ` IRS records list ${registry.name} (EIN ${registry.ein.slice(0, 2)}-${registry.ein.slice(2)}) as ${subsection}${revenue}.`;
-}
-
 export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
   const flags: string[] = [];
 
@@ -238,11 +183,10 @@ export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
 
   if (input.primary_need === "something_else") {
     flags.push("Q6 = 'something else' — no auto-bucket, needs manual review");
-    flags.push(...registryFlags(input.registry));
     return {
       bucket: null,
       confidence: null,
-      rationale: `The applicant asked for something outside the listed needs${input.primary_need_other ? `: "${input.primary_need_other}"` : ""}, described as ${excerpt(input.problem_description)}. Scout does not auto-bucket this case, so it goes straight to human review. ${readinessSentence(input, poc_score, clarity_score, foothold_score, composite_signal)}${registrySentence(input.registry)}`,
+      rationale: `The applicant asked for something outside the listed needs${input.primary_need_other ? `: "${input.primary_need_other}"` : ""}, described as ${excerpt(input.problem_description)}. Scout does not auto-bucket this case, so it goes straight to human review. ${readinessSentence(input, poc_score, clarity_score, foothold_score, composite_signal)}`,
       poc_score,
       clarity_score,
       foothold_score,
@@ -297,20 +241,11 @@ export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
   }
 
   if (needsTiebreaker) {
-    // Org size: the applicant's words first; when they name no size, the registry's
-    // revenue stands in (a matched record only — `null` and `undefined` say nothing).
-    const textSmall = SMALL_ORG_SIGNAL.test(input.scale);
-    const textLarge = LARGE_ORG_SIGNAL.test(input.scale);
-    const revenue = textSmall || textLarge ? null : (input.registry?.revenue ?? null);
-    const isSmallOrg = textSmall || (revenue !== null && revenue < REGISTRY_SMALL_REVENUE);
-    const isLargeOrg = textLarge || (revenue !== null && revenue >= REGISTRY_LARGE_REVENUE);
-    const sizeEvidence =
-      revenue !== null && (isSmallOrg || isLargeOrg)
-        ? `an org with IRS-reported revenue of ${usd.format(revenue)}`
-        : `an org of "${input.scale.trim()}"`;
+    const isSmallOrg = SMALL_ORG_SIGNAL.test(input.scale);
     const hasMinimalSystems = MINIMAL_SYSTEMS_SIGNAL.test(
       input.current_systems,
     );
+    const isLargeOrg = LARGE_ORG_SIGNAL.test(input.scale);
     const hasRealSystems = REAL_SYSTEMS_SIGNAL.test(input.current_systems);
 
     if (isSmallOrg && hasMinimalSystems) {
@@ -319,14 +254,14 @@ export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
         "small org + minimal systems — routed to Advisory regardless of stated ask",
       );
       confidence = "Low";
-      rationale = `The description ${quoted} ${unclear}, and ${sizeEvidence} running on "${input.current_systems.trim()}" is usually better served starting in Advisory / Strategy than with ${need}.`;
+      rationale = `The description ${quoted} ${unclear}, and an org of "${input.scale.trim()}" running on "${input.current_systems.trim()}" is usually better served starting in Advisory / Strategy than with ${need}.`;
     } else if (isLargeOrg && hasRealSystems) {
       bucket = q6Bucket;
       flags.push(
         "ambiguous problem description; org scale/systems support the original ask",
       );
       confidence = "Medium";
-      rationale = `The description ${quoted} ${unclear}, but ${sizeEvidence} with "${input.current_systems.trim()}" in place can take on the ${q6Bucket} work it asked for, so Scout kept that bucket.`;
+      rationale = `The description ${quoted} ${unclear}, but an org of "${input.scale.trim()}" with "${input.current_systems.trim()}" in place can take on the ${q6Bucket} work it asked for, so Scout kept that bucket.`;
     } else {
       bucket = "Advisory / Strategy";
       flags.push(
@@ -337,8 +272,6 @@ export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
     }
   }
 
-  flags.push(...registryFlags(input.registry));
-
   const hitlTier = deriveHitlTier("scout", {
     confidence,
     compositeSignal: composite_signal,
@@ -347,7 +280,7 @@ export function routeScoutIntake(input: ScoutRoutingInput): ScoutResult {
   return {
     bucket,
     confidence,
-    rationale: `${rationale} ${readinessSentence(input, poc_score, clarity_score, foothold_score, composite_signal)}${registrySentence(input.registry)}`,
+    rationale: `${rationale} ${readinessSentence(input, poc_score, clarity_score, foothold_score, composite_signal)}`,
     poc_score,
     clarity_score,
     foothold_score,
