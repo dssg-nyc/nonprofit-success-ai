@@ -5,7 +5,7 @@
 
 \ir _shared/fixtures.psql
 
-select plan(111);
+select plan(116);
 
 -- user provisioning — the auth.users trigger
 -- ---------------------------------------------------------------------------
@@ -1112,6 +1112,48 @@ select throws_ok(
   $$ select submit_scout_intake(tests.intake_payload() || '{"poc_score": 7}'::jsonb) $$,
   '23514', null,
   'column constraints still apply through the RPC (0007)'
+);
+
+-- 0011: the registry record and lookup status are facts the route fetched. The RPC
+-- copies both, a payload without them files as `skipped`, and the table refuses a pair
+-- that disagrees or a record that does not say where it came from.
+select is(
+  (select r ->> 'routing_source'
+     from submit_scout_intake(tests.intake_payload()
+       || '{"org_name": "Registry Org", "registry_lookup": "matched",
+            "registry": {"ein": "131624100", "name": "Museum Of Modern Art", "city": "New York", "state": "NY",
+                         "nteeCode": "A510", "subsectionCode": 3, "revenue": 362023464, "assets": 2670935041,
+                         "latestFilingYear": 2023, "source": "propublica"}}'::jsonb) r),
+  'derived',
+  'submit_scout_intake files a matched registry record beside the result (0011)'
+);
+
+reset role;
+select results_eq(
+  $$ select registry_lookup, registry ->> 'ein', registry ->> 'source'
+       from scout_intakes where org_name = 'Registry Org' $$,
+  $$ values ('matched'::text, '131624100'::text, 'propublica'::text) $$,
+  'the row stores the record and the lookup status as filed (0011)'
+);
+select results_eq(
+  $$ select registry_lookup, registry is null
+       from scout_intakes where org_name = 'Payload Org' order by submitted_at desc limit 1 $$,
+  $$ values ('skipped'::text, true) $$,
+  'a payload with no registry keys files as skipped with no record (0011)'
+);
+select tests.logout();
+
+select throws_ok(
+  $$ select submit_scout_intake(tests.intake_payload() || '{"registry_lookup": "matched"}'::jsonb) $$,
+  '23514', null,
+  'matched without a record is refused (0011)'
+);
+
+select throws_ok(
+  $$ select submit_scout_intake(tests.intake_payload()
+       || '{"registry_lookup": "matched", "registry": {"ein": "131624100", "source": "irs"}}'::jsonb) $$,
+  '23514', null,
+  'a record that does not say it came from ProPublica is refused (0011)'
 );
 
 -- check_model_budget: per caller, per hour; refused calls do not count.

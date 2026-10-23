@@ -59,6 +59,8 @@ suite (green 2026-10-08). "Hosted" means nothing until #27 and #28 land.
 | D3 | Model gateway — `src/model/gateway.ts`, failure ladder, provider abstraction | R1 2026-08-22, hardened R2/R3 | `platform/infra/model-gateway.md` |
 | D4 | Observability — `agent_runs` recorder, `0001_core.sql` | R2 2026-08-22 | `platform/infra/observability.md` |
 | D47 | API hardening — request id on every log line and `x-request-id` (`api/_request.ts`), uncaught throws → logged 500, `cost_cents` from `src/model/pricing.ts`, per-user hourly model budget (`check_model_budget()`, 0007, 429), `health` probes Supabase (503 when unreachable); drain/alerts/dashboard stay D44 | 2026-10-08 | `stack/vercel-functions.md`, `platform/infra/observability.md` |
+| D49 | ProPublica nonprofit lookup — `GET /api/nonprofits/search` (q / state / NTEE / subsection / page) and `GET /api/nonprofits/:ein` (filings + IRS master-file amounts), bearer required, server-side only, browser-cached; `src/schemas/nonprofit.ts`, `searchNonprofits()` / `getNonprofit()`; answers GitHub #14's three questions | 2026-10-14 (#14) — client `searchNonprofits()` / `getNonprofit()` in `src/lib/api.ts`; UI trigger + HubSpot push (D35) later | `platform/services/nonprofit-lookup.md` |
+| D50 | Scout registry enrichment — `api/route-intake` looks the applicant up in ProPublica (`api/_scoutRegistry.ts` over the D49 helpers; EIN or exact-name match) before routing; `ScoutRoutingInput.registry` feeds the heuristic's tiebreak, flags and one rationale sentence and the prompt (`scout-routing-0.07`, registry line inside the partner-data block); `scout_intakes.registry` + `registry_lookup` (0011, `submit_scout_intake()` copies them); intake card "IRS registry" block, optional EIN on the form; 6 `scoutRouting` cases incl. an adversarial registry twin (35 total) | 2026-10-14 (#14) | `platform/agents/scout.md` §"The IRS registry record", `platform/services/nonprofit-lookup.md` |
 | D5 | Approval spine — `deriveHitlTier()`, `0002_approvals.sql` (queue UI is D26 / #29) | R2 2026-08-22 | `design-system.md` §2 |
 | D6 | Wire contracts — `src/schemas/`, `z.infer` types for Scout, Architect, Envoy, Chronicle, Pulse | R2–R8, complete 2026-10-07 | `design-system.md` §2 |
 | D7 | Scout to `src/agents/scout/` + first test suite | R1 2026-08-22 | `platform/agents/scout.md` |
@@ -151,7 +153,7 @@ All four land as comments on #28 before any migration is written.
 
 ## Adding an entry
 
-1. Append a row with the next free number (next: **D49**, **C5**). Never reuse, never renumber.
+1. Append a row with the next free number (next: **D51**, **C5**). Never reuse, never renumber.
 2. Put it in the section for its owner and milestone; move it to **Built** when it lands, keeping
    the number.
 3. Cite it from the spec as `D19` — do not restate the description.

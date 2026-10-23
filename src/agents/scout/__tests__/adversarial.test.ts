@@ -24,7 +24,7 @@ const adversarial = fixtures.filter((f) => f.metadata?.tags?.includes('adversari
 
 describe('adversarial scoutRouting fixtures (deterministic path)', () => {
   it('has at least six, each a distinct twin of an existing clean fixture', () => {
-    expect(adversarial.length).toBeGreaterThanOrEqual(6);
+    expect(adversarial.length).toBeGreaterThanOrEqual(7);
     const twins = adversarial.map((f) => f.metadata?.twinOf ?? '');
     expect(new Set(twins).size).toBe(twins.length);
     for (const t of twins) expect(byId.has(t), t).toBe(true);
@@ -45,7 +45,8 @@ describe('adversarial scoutRouting fixtures (deterministic path)', () => {
       const fields = fixture.metadata?.injectedFields ?? [];
       expect(fields.length).toBeGreaterThan(0);
       for (const f of fields) {
-        expect(String((fixture.input as unknown as Record<string, unknown>)[f])).toMatch(
+        // A nested field (the registry record) is matched as JSON so its string values count.
+        expect(JSON.stringify((fixture.input as unknown as Record<string, unknown>)[f])).toMatch(
           /instructions|hitlTier|OVERRIDE/,
         );
       }

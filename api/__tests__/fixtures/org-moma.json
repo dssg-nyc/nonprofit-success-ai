@@ -1,0 +1,77 @@
+{
+  "organization": {
+    "id": 131624100,
+    "ein": 131624100,
+    "name": "Museum Of Modern Art",
+    "careofname": "% CARLA MERCADO",
+    "address": "11 W 53RD ST",
+    "city": "New York",
+    "state": "NY",
+    "zipcode": "10019-5401",
+    "exemption_number": 0,
+    "subsection_code": 3,
+    "affiliation_code": 3,
+    "classification_codes": "2000",
+    "ruling_date": "1952-12-01",
+    "deductibility_code": 1,
+    "foundation_code": 15,
+    "activity_codes": "119000000",
+    "organization_code": 1,
+    "exempt_organization_status_code": 1,
+    "tax_period": "2025-06-01",
+    "asset_code": 9,
+    "income_code": 9,
+    "filing_requirement_code": 1,
+    "pf_filing_requirement_code": 0,
+    "accounting_period": 6,
+    "asset_amount": 2670935041,
+    "income_amount": 606362031,
+    "revenue_amount": 362023464,
+    "ntee_code": "A510",
+    "sort_name": null,
+    "created_at": "2023-05-09T20:23:20.390Z",
+    "updated_at": "2026-09-16T19:48:52.314Z",
+    "data_source": "current_2026_09_16",
+    "have_extracts": null,
+    "have_pdfs": null,
+    "latest_object_id": "202631339349300538"
+  },
+  "filings_with_data": [
+    {
+      "ein": 131624100,
+      "tax_prd": 202306,
+      "tax_prd_yr": 2023,
+      "formtype": 0,
+      "pdf_url": null,
+      "updated": "2025-08-05T16:07:59.310Z",
+      "totrevenue": 236680721,
+      "totfuncexpns": 280669509,
+      "totassetsend": 2490307043,
+      "totliabend": 376132235,
+      "pct_compnsatncurrofcr": 0.0
+    },
+    {
+      "ein": 131624100,
+      "tax_prd": 202206,
+      "tax_prd_yr": 2022,
+      "formtype": 0,
+      "pdf_url": "https://projects.propublica.org/nonprofits/download-filing?path=IRS%2F131624100_202206_990_2023060921420098.pdf",
+      "updated": "2024-08-28T20:05:14.600Z",
+      "totrevenue": 265321760,
+      "totfuncexpns": 247824189,
+      "totassetsend": 2507036549,
+      "totliabend": 473595915,
+      "pct_compnsatncurrofcr": 0.0
+    }
+  ],
+  "filings_without_data": [
+    {
+      "tax_prd": 202406,
+      "tax_prd_yr": 2024,
+      "formtype": 0,
+      "formtype_str": "990",
+      "pdf_url": "https://projects.propublica.org/nonprofits/download-filing?path=IRS%2F131624100_202406_990_2025052323451727.pdf"
+    }
+  ],
+  "api_version": 2
+}

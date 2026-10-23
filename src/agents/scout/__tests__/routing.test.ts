@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getOnboardingKitName,
+  registryFlags,
   routeScoutIntake,
 } from "../routing";
 import type {
@@ -8,6 +9,7 @@ import type {
   ScoutCompositeSignal,
   ScoutConfidence,
   ScoutHitlTier,
+  ScoutRegistry,
   ScoutRoutingInput,
 } from "../../../types";
 
@@ -26,6 +28,26 @@ const intake = (
   overrides: Partial<ScoutRoutingInput> = {},
 ): ScoutRoutingInput => ({
   ...BASE,
+  ...overrides,
+});
+
+const THIS_YEAR = new Date().getFullYear();
+
+const REGISTRY: ScoutRegistry = {
+  ein: "131624100",
+  name: "Museum Of Modern Art",
+  city: "New York",
+  state: "NY",
+  nteeCode: "A510",
+  subsectionCode: 3,
+  revenue: 362_023_464,
+  assets: 2_670_935_041,
+  latestFilingYear: THIS_YEAR - 1,
+  source: "propublica",
+};
+
+const registry = (overrides: Partial<ScoutRegistry> = {}): ScoutRegistry => ({
+  ...REGISTRY,
   ...overrides,
 });
 
@@ -136,6 +158,137 @@ describe("routeScoutIntake — tiebreaker", () => {
     );
     expect(result.flags).toContain("vague problem description");
     expect(result.confidence).not.toBe("High");
+  });
+
+  describe("registry revenue stands in when the text names no org size", () => {
+    // `scale` matches neither size signal, so without a registry this falls to Advisory.
+    const sizeless = intake({
+      scale: "a mid-sized community org",
+      current_systems: "Salesforce and a data warehouse",
+      problem_description: ambiguous,
+    });
+
+    it("revenue >= $1M reads as a larger org and keeps the Q6 bucket", () => {
+      const result = routeScoutIntake({ ...sizeless, registry: registry({ revenue: 1_000_000 }) });
+      expect(result.bucket).toBe("Analytics & Insight");
+      expect(result.confidence).toBe("Medium");
+      expect(result.rationale).toContain("IRS-reported revenue of $1,000,000");
+    });
+
+    it("revenue < $250k reads as a small org and routes to Advisory", () => {
+      const result = routeScoutIntake({
+        ...sizeless,
+        current_systems: "a few google sheets",
+        registry: registry({ revenue: 120_000 }),
+      });
+      expect(result.bucket).toBe("Advisory / Strategy");
+      expect(result.confidence).toBe("Low");
+    });
+
+    it("revenue between the bands says nothing — the tie falls to Advisory as before", () => {
+      const withRegistry = routeScoutIntake({ ...sizeless, registry: registry({ revenue: 500_000 }) });
+      const without = routeScoutIntake(sizeless);
+      expect(withRegistry.bucket).toBe(without.bucket);
+      expect(withRegistry.confidence).toBe(without.confidence);
+    });
+
+    it("the applicant's own words win over the registry", () => {
+      const result = routeScoutIntake({
+        ...sizeless,
+        scale: "just me and 3 volunteers",
+        current_systems: "a few google sheets",
+        registry: registry({ revenue: 50_000_000 }),
+      });
+      expect(result.bucket).toBe("Advisory / Strategy");
+      expect(result.rationale).not.toContain("IRS-reported revenue");
+    });
+
+    it("a null registry (lookup attempted, nothing matched) does not break the tie", () => {
+      const result = routeScoutIntake({ ...sizeless, registry: null });
+      expect(result.bucket).toBe(routeScoutIntake(sizeless).bucket);
+    });
+  });
+});
+
+describe("routeScoutIntake — registry record", () => {
+  it("never changes readiness scores or the tier", () => {
+    const plain = routeScoutIntake(intake());
+    const enriched = routeScoutIntake(intake({ registry: registry({ revenue: 5 }) }));
+    expect(enriched.poc_score).toBe(plain.poc_score);
+    expect(enriched.clarity_score).toBe(plain.clarity_score);
+    expect(enriched.foothold_score).toBe(plain.foothold_score);
+    expect(enriched.composite_signal).toBe(plain.composite_signal);
+    expect(enriched.hitlTier).toBe(plain.hitlTier);
+    expect(enriched.bucket).toBe(plain.bucket);
+  });
+
+  it("undefined means no lookup: output identical to the pre-registry router", () => {
+    expect(routeScoutIntake(intake({ registry: undefined }))).toEqual(routeScoutIntake(intake()));
+    expect(routeScoutIntake(intake()).flags.some((f) => f.startsWith("Registry:"))).toBe(false);
+    expect(routeScoutIntake(intake()).rationale).not.toContain("IRS record");
+  });
+
+  it("names the record in the rationale without quoting a score", () => {
+    const { rationale } = routeScoutIntake(intake({ registry: registry() }));
+    expect(rationale).toContain(
+      `IRS records list Museum Of Modern Art (EIN 13-1624100) as a 501(c)(3) with revenue of $362,023,464 in its ${THIS_YEAR - 1} filing.`,
+    );
+    expect(rationale).not.toMatch(/\d\s*\/\s*3\b/);
+  });
+
+  it("a null registry says so in the rationale and flags it", () => {
+    const result = routeScoutIntake(intake({ registry: null }));
+    expect(result.rationale).toContain("No IRS record matched the org name.");
+    expect(result.flags).toContain(
+      "Registry: no IRS record matched the org name — verify nonprofit status",
+    );
+  });
+
+  it("flags reach the 'something else' path too", () => {
+    const result = routeScoutIntake(intake({ primary_need: "something_else", registry: null }));
+    expect(result.flags).toContain(
+      "Registry: no IRS record matched the org name — verify nonprofit status",
+    );
+    expect(result.rationale).toContain("No IRS record matched the org name.");
+  });
+
+  describe("registryFlags", () => {
+    it("is empty for a clean, current 501(c)(3)", () => {
+      expect(registryFlags(registry())).toEqual([]);
+    });
+
+    it("is empty when no lookup was attempted", () => {
+      expect(registryFlags(undefined)).toEqual([]);
+    });
+
+    it("flags a subsection other than 501(c)(3)", () => {
+      expect(registryFlags(registry({ subsectionCode: 6 }))).toEqual([
+        "Registry: 501(c)(6), not a 501(c)(3)",
+      ]);
+    });
+
+    it("does not flag an unknown subsection", () => {
+      expect(registryFlags(registry({ subsectionCode: null }))).toEqual([]);
+    });
+
+    it("flags a newest filing older than three years, not one exactly three years old", () => {
+      expect(registryFlags(registry({ latestFilingYear: THIS_YEAR - 4 }))).toEqual([
+        `Registry: newest IRS filing is from ${THIS_YEAR - 4}`,
+      ]);
+      expect(registryFlags(registry({ latestFilingYear: THIS_YEAR - 3 }))).toEqual([]);
+    });
+
+    it("flags a record with no filing at all", () => {
+      expect(registryFlags(registry({ latestFilingYear: null }))).toEqual([
+        "Registry: no IRS filing on record",
+      ]);
+    });
+
+    it("stacks independent flags", () => {
+      expect(
+        registryFlags(registry({ subsectionCode: 4, latestFilingYear: THIS_YEAR - 10 })),
+      ).toHaveLength(2);
+    });
   });
 });
 

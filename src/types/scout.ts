@@ -4,6 +4,8 @@ import type {
   scoutApproveResponseSchema,
   scoutIntakeRequestSchema,
   scoutIntakeResponseSchema,
+  scoutRegistryLookupSchema,
+  scoutRegistrySchema,
   scoutResultSchema,
 } from '../schemas/scout';
 import type { WriteTimestamp } from './domain';
@@ -41,6 +43,11 @@ export type ScoutHitlTier = 'L2' | 'L3';
 export type ScoutReviewStatus = 'pending' | 'needs_info' | 'reviewed';
 export type ScoutReviewAction = 'approved' | 'edited' | 'redirected';
 
+/** The applicant's IRS registry record (ProPublica), reduced to what Scout and the reviewer read. */
+export type ScoutRegistry = z.infer<typeof scoutRegistrySchema>;
+/** How the server-side registry lookup went; `matched` is the only status with a record. */
+export type ScoutRegistryLookup = z.infer<typeof scoutRegistryLookupSchema>;
+
 export interface ScoutRoutingInput {
   scale: string;
   primary_need: PrimaryNeed;
@@ -49,6 +56,12 @@ export interface ScoutRoutingInput {
   current_systems: string;
   contact_name_role: string;
   timeline: string;
+  /**
+   * The registry record `api/route-intake` looked up before routing. `undefined`: no
+   * lookup was attempted (evals, demo, tests); `null`: attempted, nothing matched. Read
+   * by the tiebreak and the reviewer flags only — never by the readiness scores.
+   */
+  registry?: ScoutRegistry | null;
 }
 
 /**
@@ -102,4 +115,7 @@ export interface ScoutIntake {
   reviewedAt?: WriteTimestamp;
   reviewNotes?: string;
   onboardingKit?: string;
+  // registry enrichment (0011) — absent on demo intakes
+  registry?: ScoutRegistry | null;
+  registryLookup?: ScoutRegistryLookup;
 }
