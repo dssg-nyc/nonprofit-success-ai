@@ -15,6 +15,7 @@ This file explains what the routes *do* and how to operate them.
 | Route | Agent | Model call | Writes | Timeout |
 |---|---|---|---|---|
 | `GET /api/health` | — | no | — | 10s |
+| `GET /api/keepalive` | — | no | nothing (anon read) | 10s |
 | `POST /api/route-intake` | Scout | yes, with fallback | `submit_scout_intake()` | 30s |
 | `POST /api/architect-plan` | Architect | yes, with fallback | `submit_architect_draft()` | 30s |
 | `POST /api/envoy-draft` | Envoy | yes, with fallback | `submit_envoy_draft()` | 30s |
@@ -25,7 +26,8 @@ This file explains what the routes *do* and how to operate them.
 | `GET /api/nonprofits/search` | — | no (ProPublica) | nothing | 10s |
 | `GET /api/nonprofits/:ein` | — | no (ProPublica) | nothing | 10s |
 
-Every route except `health` requires `Authorization: Bearer <supabase access token>`.
+Every route except `health` and `keepalive` requires `Authorization: Bearer <supabase access token>`.
+`keepalive` is the Vercel Cron keep-alive (`vercel.json`, Mon and Thu 09:00 UTC) and requires `Authorization: Bearer $CRON_SECRET`; it reads one `users` row as the anon role so the Supabase project does not pause.
 Every response carries `x-request-id` (see Observability).
 
 ### What each route does
