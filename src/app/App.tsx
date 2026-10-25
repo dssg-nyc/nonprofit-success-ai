@@ -45,7 +45,7 @@ export default function App() {
       // no session, so the intent is kept until a session actually arrives.
       if (u) {
         const nextRole = await fetchRole();
-        const verdict = admitSignIn(readLoginIntent(), nextRole);
+        const verdict = admitSignIn(readLoginIntent(), nextRole, u.email);
         clearLoginIntent();
         if (!verdict.allowed) {
           setLoginNotice(verdict.notice ?? "Sign-in was refused.");

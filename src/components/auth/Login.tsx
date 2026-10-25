@@ -124,8 +124,8 @@ export default function Login({ onDemoMode, onLoginSuccess }: LoginProps) {
         <div id="login-panel" role="tabpanel" aria-labelledby={`login-tab-${tab}`} className="space-y-4">
           {isDiplomat ? (
             <p className="text-sm text-slate-600 leading-relaxed">
-              For DSSG and Data Diplomats team members. Sign in with your team Google account. DSSG
-              grants team access, so an account that is not on the team is turned away.
+              For DSSG and Data Diplomats team members. Sign in with your @datadiplomats.org Google
+              account. Other email domains are turned away, and DSSG grants team access.
             </p>
           ) : (
             <p className="text-sm text-slate-600 leading-relaxed">

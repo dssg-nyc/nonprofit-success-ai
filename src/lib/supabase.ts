@@ -2,7 +2,7 @@ import {createClient} from '@supabase/supabase-js';
 
 import type {Database} from './database.types';
 import {rowToDomain} from './rows';
-import {clearLoginIntent, writeLoginIntent} from './loginIntent';
+import {TEAM_EMAIL_DOMAIN, clearLoginIntent, writeLoginIntent} from './loginIntent';
 
 // Supabase client, following this repo's fail-fast env convention: a missing variable
 // fails at import with a named error.
@@ -200,7 +200,12 @@ export async function signInWithGoogle(intent: 'nonprofit' | 'diplomat'): Promis
   writeLoginIntent(intent);
   const {error} = await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: {redirectTo: `${window.location.origin}/login`},
+    options: {
+      redirectTo: `${window.location.origin}/login`,
+      // A hint that steers Google's chooser to Workspace accounts on the team domain. The
+      // hard check is admitSignIn, which runs on the returned session.
+      ...(intent === 'diplomat' ? {queryParams: {hd: TEAM_EMAIL_DOMAIN}} : {}),
+    },
   });
   if (error) {
     clearLoginIntent();

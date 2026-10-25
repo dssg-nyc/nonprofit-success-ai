@@ -4,6 +4,9 @@
 
 export type LoginIntent = 'nonprofit' | 'diplomat';
 
+/** The only email domain that may sign in through the Data Diplomats door. */
+export const TEAM_EMAIL_DOMAIN = 'datadiplomats.org';
+
 const INTENT_KEY = 'dssg_login_intent';
 const NOTICE_KEY = 'dssg_login_notice';
 
@@ -61,8 +64,22 @@ export interface SignInVerdict {
  * accounts, i.e. profiles whose role is admin. Nonprofit sign-ins are admitted with any
  * role, since a new partner gets the client role from the provisioning trigger.
  */
-export function admitSignIn(intent: LoginIntent | null, role: 'client' | 'admin' | null): SignInVerdict {
-  if (intent === 'diplomat' && role !== 'admin') {
+export function admitSignIn(
+  intent: LoginIntent | null,
+  role: 'client' | 'admin' | null,
+  email: string | null,
+): SignInVerdict {
+  if (intent !== 'diplomat') return { allowed: true };
+
+  // The team door takes only the team's own email domain, whatever the role.
+  const domain = email?.trim().toLowerCase().split('@')[1];
+  if (domain !== TEAM_EMAIL_DOMAIN) {
+    return {
+      allowed: false,
+      notice: `Data Diplomats sign-in needs a @${TEAM_EMAIL_DOMAIN} email. Use For Nonprofits for any other account.`,
+    };
+  }
+  if (role !== 'admin') {
     return {
       allowed: false,
       notice:
