@@ -2,7 +2,8 @@ import React from 'react';
 import { Flag, Mail, Clock, ExternalLink, Landmark, MessageSquareText, Sparkles } from 'lucide-react';
 import { ScoutIntake, PRIMARY_NEED_OPTIONS } from '../../types';
 import type { ScoutRegistryLookup } from '../../types';
-import { relativeTime } from './review';
+import { registryVerdict, relativeTime } from './review';
+import type { RegistryVerdict } from './review';
 
 /**
  * The parts of an intake card that every admin screen shows the same way — who applied,
@@ -32,42 +33,41 @@ export function Badge({ label, className }: { label: string; className: string }
 }
 
 /**
- * What each readiness score means and which answer it is scored from — so a reviewer can
- * check the pips against the intake instead of taking them on trust. Definitions follow
- * `scoreReadiness()` in agents/scout/routing.ts (the spec's foothold wording differs; see
- * scout.md "Open: score definitions vs code").
+ * What each readiness score means, so a reviewer can check the pips against the answers in
+ * the left column instead of taking them on trust. Definitions follow `scoreReadiness()`
+ * in agents/scout/routing.ts (the spec's foothold wording differs; see scout.md "Open:
+ * score definitions vs code").
  */
-const READINESS: { key: 'poc_score' | 'clarity_score' | 'foothold_score'; label: string; means: string; from: (i: ScoutIntake) => string }[] = [
-  { key: 'poc_score', label: 'POC', means: 'A named contact with a role who can unblock work', from: i => (i.contact_name_role ? `${i.contact_name_role} · ${i.timeline}` : i.timeline) },
-  { key: 'clarity_score', label: 'Clarity', means: 'How well-formed their own ask is', from: i => i.problem_description },
-  { key: 'foothold_score', label: 'Foothold', means: 'Real systems and data to build on', from: i => i.current_systems },
+const READINESS: { key: 'poc_score' | 'clarity_score' | 'foothold_score'; label: string; means: string }[] = [
+  { key: 'poc_score', label: 'POC', means: 'A named contact with a role who can unblock work' },
+  { key: 'clarity_score', label: 'Clarity', means: 'How well-formed their own ask is' },
+  { key: 'foothold_score', label: 'Foothold', means: 'Real systems and data to build on' },
 ];
 
-function ReadinessRow({ label, means, from, score }: { label: string; means: string; from: string; score: number }) {
+function ReadinessRow({ label, means, score }: { label: string; means: string; score: number }) {
   return (
-    <div className="flex items-start gap-3">
-      <div className="flex gap-0.5 mt-1 shrink-0">
+    <div className="flex items-center gap-3">
+      <div className="flex gap-0.5 shrink-0">
         {[1, 2, 3].map(n => (
           <div key={n} className={`w-2.5 h-2.5 rounded-full ${n <= score ? 'bg-dssg-blue' : 'bg-slate-200'}`} />
         ))}
       </div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-          {label} <span className="text-slate-300">{score}/3</span>
-          <span className="normal-case tracking-normal font-medium text-slate-400"> · {means}</span>
-        </p>
-        <p className="text-[11px] text-slate-500 truncate" title={from}>from: “{from}”</p>
-      </div>
+      <p className="m-0 text-[10px] font-bold uppercase tracking-widest text-slate-500 min-w-0">
+        {label} <span className="text-slate-300">{score}/3</span>
+        <span className="normal-case tracking-normal font-medium text-slate-400"> · {means}</span>
+      </p>
     </div>
   );
 }
 
+// `m-0`: the base `p` rule (index.css) adds a bottom margin; here the column's space-y
+// is the only gap, so a question sits on its answer and the gap falls between answers.
 function Answer({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
     <div>
-      <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-300">{label}</p>
-      <p className="text-xs text-slate-600 leading-relaxed">{value}</p>
+      <p className="m-0 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-300">{label}</p>
+      <p className="m-0 text-xs text-slate-600 leading-relaxed">{value}</p>
     </div>
   );
 }
@@ -77,6 +77,12 @@ const REGISTRY_STATE: Partial<Record<ScoutRegistryLookup, string>> = {
   not_found: 'No IRS record matched the org name — verify nonprofit status before approving.',
   ambiguous: 'Several IRS records could match the org name; none was taken. Check ProPublica by hand.',
   unavailable: 'The IRS registry lookup was unavailable when this intake was filed.',
+};
+
+const VERDICT_BADGE: Record<Exclude<RegistryVerdict, 'not_looked_up'>, { label: string; className: string; panel: string }> = {
+  verified: { label: 'Verified 501(c)(3)', className: 'bg-emerald-50 text-emerald-600 border-emerald-100', panel: 'bg-emerald-50/40 border-emerald-100' },
+  check: { label: 'Check status', className: 'bg-amber-50 text-amber-600 border-amber-100', panel: 'bg-amber-50/40 border-amber-100' },
+  unverified: { label: 'No IRS record', className: 'bg-rose-50 text-rose-600 border-rose-100', panel: 'bg-rose-50/40 border-rose-100' },
 };
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -91,11 +97,16 @@ function RegistryBlock({ intake }: { intake: ScoutIntake }) {
   const lookup = intake.registryLookup;
   if (!lookup || lookup === 'skipped') return null;
   const record = lookup === 'matched' ? intake.registry : null;
+  const verdict = registryVerdict(intake);
+  const badge = verdict === 'not_looked_up' ? null : VERDICT_BADGE[verdict];
   return (
-    <div className="pt-3 border-t border-slate-50 space-y-1.5">
-      <p className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-300">
-        <Landmark size={10} /> IRS registry
-      </p>
+    <div className={`rounded-xl border px-4 py-3 space-y-1.5 ${badge?.panel ?? 'bg-slate-50 border-slate-100'}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          <Landmark size={12} /> Nonprofit status · IRS registry
+        </p>
+        {badge && <Badge label={badge.label} className={badge.className} />}
+      </div>
       {record ? (
         <>
           <p className="text-xs text-slate-600 leading-relaxed">
@@ -172,8 +183,8 @@ export function IntakeBody({ intake }: { intake: ScoutIntake }) {
         <Answer label="Who they serve" value={intake.scale} />
         <Answer label="What brings them to DSSG" value={primaryNeedLabel(intake)} />
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-300">The problem, in their words</p>
-          <p className="text-xs text-slate-600 leading-relaxed italic">“{intake.problem_description}”</p>
+          <p className="m-0 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-300">The problem, in their words</p>
+          <p className="m-0 text-xs text-slate-600 leading-relaxed italic">“{intake.problem_description}”</p>
         </div>
         <Answer label="Data and systems today" value={intake.current_systems} />
         <Answer label="Timeline" value={intake.timeline} />
@@ -203,10 +214,10 @@ export function IntakeBody({ intake }: { intake: ScoutIntake }) {
           </div>
         )}
 
-        <div className="space-y-2.5 pt-3 border-t border-slate-50">
-          <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-300">Readiness · {intake.composite_signal}</p>
+        <div className="space-y-2 pt-3 border-t border-slate-50">
+          <p className="m-0 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-300">Readiness · {intake.composite_signal}</p>
           {READINESS.map(r => (
-            <ReadinessRow key={r.key} label={r.label} means={r.means} from={r.from(intake)} score={intake[r.key]} />
+            <ReadinessRow key={r.key} label={r.label} means={r.means} score={intake[r.key]} />
           ))}
         </div>
       </div>

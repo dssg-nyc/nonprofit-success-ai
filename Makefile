@@ -15,8 +15,19 @@ hooks:  ## Install the pre-commit hooks (one-time, per clone)
 dev:  ## Vite dev server (heuristic fallback only, no /api)
 	npm run dev
 
-dev-api:  ## Vercel dev server (serves /api too)
-	npx vercel dev
+# The functions read SUPABASE_* from .env (hosted) even when .env.local overrides the
+# browser's VITE_* values, so a local session would be refused. Point both sides at the
+# local stack when it is running, as api-test does.
+dev-api:  ## Vercel dev server (serves /api too), against the local stack when it is up
+	@env=$$($(SUPABASE) status -o env 2>/dev/null); \
+	pick() { printf '%s\n' "$$env" | sed -n "s/^$$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}$$/\1/p"; }; \
+	url=$$(pick API_URL); anon=$$(pick ANON_KEY); \
+	if [ -n "$$url" ] && [ -n "$$anon" ]; then \
+		echo "dev-api: local stack at $$url"; \
+		SUPABASE_URL=$$url SUPABASE_ANON_KEY=$$anon VITE_SUPABASE_URL=$$url VITE_SUPABASE_ANON_KEY=$$anon npx vercel dev; \
+	else \
+		echo "dev-api: local stack not running, using .env"; npx vercel dev; \
+	fi
 
 type-check:  ## tsc --noEmit
 	npm run type-check
