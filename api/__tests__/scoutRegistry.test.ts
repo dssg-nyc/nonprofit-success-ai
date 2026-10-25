@@ -49,6 +49,12 @@ describe('normaliseOrgName', () => {
     expect(normaliseOrgName('MUSEUM OF MODERN ART')).toBe('museum of modern art');
     expect(normaliseOrgName('Harlem Art Corp')).toBe('harlem art');
   });
+
+  it('drops an apostrophe instead of splitting the word, and reads & as and', () => {
+    expect(normaliseOrgName("Harlem Children's Zone")).toBe(normaliseOrgName('Harlem Childrens Zone Inc'));
+    expect(normaliseOrgName('Harlem Children\u2019s Zone')).toBe('harlem childrens zone');
+    expect(normaliseOrgName('Boys & Girls Club')).toBe(normaliseOrgName('Boys And Girls Club'));
+  });
 });
 
 describe('lookupScoutRegistry', () => {
