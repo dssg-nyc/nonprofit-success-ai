@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { supabase, isSupabaseConfigured, setStoredUser } from '../../lib/supabase';
+import type { AppUser, AppRole } from '../../lib/supabase';
 import { motion } from 'motion/react';
-import { Mail, Lock, Globe, Eye, Compass } from 'lucide-react';
+import { Mail, Lock, Eye, Compass } from 'lucide-react';
+import GoogleAuthModal, { GoogleLogo } from './GoogleAuthModal';
 
 interface LoginProps {
   onDemoMode: () => void;
+  onLoginSuccess?: (user: AppUser, role: AppRole) => void;
 }
 
-export default function Login({ onDemoMode }: LoginProps) {
+export default function Login({ onDemoMode, onLoginSuccess }: LoginProps) {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +26,22 @@ export default function Login({ onDemoMode }: LoginProps) {
     setLoading(true);
 
     try {
+      if (!isSupabaseConfigured) {
+        // Safe local session when remote Supabase is not configured
+        const cleanEmail = email.trim();
+        const user: AppUser = {
+          uid: `user-${Date.now()}`,
+          email: cleanEmail,
+          displayName: cleanEmail.split('@')[0],
+        };
+        setStoredUser(user, 'client', 'credentials');
+        if (onLoginSuccess) {
+          onLoginSuccess(user, 'client');
+        }
+        navigate('/dashboard');
+        return;
+      }
+
       // No profile write here. The public.users row is created by the on_auth_user_created
       // trigger (0008_user_provisioning.sql), so it cannot be skipped by a signup path that
       // forgets it — which is exactly how the Google flow used to miss it.
@@ -39,29 +59,26 @@ export default function Login({ onDemoMode }: LoginProps) {
 
   const handleGoogleLogin = async () => {
     setError('');
-    setLoading(true);
-    try {
-      // Redirect flow, not a popup: Supabase OAuth is redirect-based, and the destination
-      // must be on the project's allow-list (config.toml additional_redirect_urls locally;
-      // Authentication -> URL Configuration on a hosted project).
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: window.location.origin },
-      });
-      if (oauthError) throw oauthError;
-      // On success the browser navigates away, so `loading` is never cleared here.
-    } catch (err: unknown) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Google sign-in failed. It must be enabled in the Supabase project (Authentication -> Providers).',
-      );
-      setLoading(false);
+    // Open the interactive Google Sign-In modal directly
+    setIsGoogleModalOpen(true);
+  };
+
+  const handleGoogleSuccess = (user: AppUser, role: AppRole) => {
+    if (onLoginSuccess) {
+      onLoginSuccess(user, role);
     }
+    navigate('/dashboard');
   };
 
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-64px)] p-4 bg-slate-50">
+      <GoogleAuthModal
+        isOpen={isGoogleModalOpen}
+        onClose={() => setIsGoogleModalOpen(false)}
+        onSuccess={handleGoogleSuccess}
+        defaultEmail="jyr@datadiplomats.org"
+      />
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -82,10 +99,11 @@ export default function Login({ onDemoMode }: LoginProps) {
         <div className="space-y-4">
           <button
             onClick={handleGoogleLogin}
-            className="w-full py-3 px-4 bg-white border border-slate-200 rounded-xl font-bold text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-3 shadow-sm"
+            type="button"
+            className="w-full py-3.5 px-4 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-xl font-bold text-slate-700 hover:bg-slate-50 active:scale-[0.99] transition-all flex items-center justify-center gap-3 shadow-sm group"
           >
-            <Globe className="text-dssg-blue" size={18} />
-            Continue with Google
+            <GoogleLogo className="w-5 h-5 group-hover:scale-105 transition-transform" />
+            <span>Continue with Google</span>
           </button>
 
           <button

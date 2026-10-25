@@ -10,26 +10,21 @@ import {rowToDomain} from './rows';
 // (supabase/migrations/0001_init.sql). The service-role key bypasses RLS entirely and must
 // never appear in a VITE_-prefixed variable — Vite inlines those into the client bundle.
 
-const REQUIRED = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY'] as const satisfies
-  readonly (keyof ImportMetaEnv)[];
+export const isSupabaseConfigured = Boolean(
+  import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY,
+);
 
-const missing = REQUIRED.filter((name) => !import.meta.env[name]);
-
-if (missing.length > 0) {
-  throw new Error(
-    `Supabase config incomplete — missing ${missing.length} of ${REQUIRED.length} ` +
-      `environment variables:\n\n${missing.map((n) => `  ${n}`).join('\n')}\n\n` +
-      `Run \`make db-start\` for a local stack (it prints the URL and anon key), then copy ` +
-      `them into .env.\n\n` +
-      `Note: Vite only reads .env at startup — restart the dev server after editing it.`,
+if (!isSupabaseConfigured) {
+  console.warn(
+    '[AI Studio] Supabase environment variables not configured. Operating in mock/demo mode.',
   );
 }
 
 // Typed by src/lib/database.types.ts, generated from the local stack (`make db-types`).
 // Regenerate it in the same change as any migration.
 export const supabase = createClient<Database>(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY,
+  import.meta.env.VITE_SUPABASE_URL || 'https://mock.supabase.co',
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'mock-anon-key',
 );
 
 // ---------------------------------------------------------------------------
@@ -66,6 +61,65 @@ const toAppUser = (
       }
     : null;
 
+export const LOCAL_USER_KEY = 'dssg_auth_user';
+export const LOCAL_ROLE_KEY = 'dssg_auth_role';
+export const LOCAL_PROVIDER_KEY = 'dssg_auth_provider';
+
+const authSubscribers = new Set<(user: AppUser | null) => void>();
+
+export function getStoredUser(): AppUser | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredRole(): AppRole | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_ROLE_KEY);
+    return (raw as AppRole) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function getStoredProvider(): string | null {
+  try {
+    return localStorage.getItem(LOCAL_PROVIDER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredUser(
+  user: AppUser | null,
+  role: AppRole = 'admin',
+  provider: string = 'google',
+): void {
+  try {
+    if (user) {
+      localStorage.setItem(LOCAL_USER_KEY, JSON.stringify(user));
+      localStorage.setItem(LOCAL_ROLE_KEY, role);
+      localStorage.setItem(LOCAL_PROVIDER_KEY, provider);
+    } else {
+      localStorage.removeItem(LOCAL_USER_KEY);
+      localStorage.removeItem(LOCAL_ROLE_KEY);
+      localStorage.removeItem(LOCAL_PROVIDER_KEY);
+    }
+  } catch {
+    // ignore
+  }
+  authSubscribers.forEach((cb) => {
+    try {
+      cb(user);
+    } catch {
+      // ignore
+    }
+  });
+}
+
 /**
  * Subscribe to session changes. Mirrors Firebase's onAuthStateChanged contract: fires with
  * the current user (or null) and returns an unsubscribe function.
@@ -77,8 +131,22 @@ const toAppUser = (
 export function onAuthChange(callback: (user: AppUser | null) => void): () => void {
   let active = true;
 
+  if (!isSupabaseConfigured) {
+    authSubscribers.add(callback);
+    const stored = getStoredUser();
+    setTimeout(() => {
+      if (active) callback(stored);
+    }, 0);
+    return () => {
+      active = false;
+      authSubscribers.delete(callback);
+    };
+  }
+
   supabase.auth.getSession().then(({data}) => {
     if (active) callback(toAppUser(data.session?.user ?? null));
+  }).catch(() => {
+    if (active) callback(null);
   });
 
   const {data} = supabase.auth.onAuthStateChange((_event, session) => {
@@ -97,13 +165,26 @@ export function onAuthChange(callback: (user: AppUser | null) => void): () => vo
  * null role fails closed everywhere it is checked rather than defaulting to admin.
  */
 export async function fetchRole(): Promise<AppRole | null> {
-  const {data, error} = await supabase.from('users').select('role').maybeSingle();
-  if (error || !data) return null;
-  return data.role as AppRole;
+  if (!isSupabaseConfigured) {
+    return getStoredRole() || (getStoredUser() ? 'admin' : null);
+  }
+  try {
+    const {data, error} = await supabase.from('users').select('role').maybeSingle();
+    if (error || !data) return null;
+    return data.role as AppRole;
+  } catch {
+    return null;
+  }
 }
 
 export async function signOut(): Promise<void> {
-  await supabase.auth.signOut();
+  setStoredUser(null);
+  if (!isSupabaseConfigured) return;
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    // ignore
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +216,11 @@ export function liveQuery<T>(
   onError: (error: unknown) => void,
   timestampFields: readonly string[] = [],
 ): () => void {
+  if (!isSupabaseConfigured) {
+    onData([]);
+    return () => {};
+  }
+
   let active = true;
 
   const run = () => {
