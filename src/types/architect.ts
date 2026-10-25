@@ -161,7 +161,6 @@ export interface ArchitectAssessment {
   ninetyDayPlan: NinetyDayPlan;
   // meta
   createdBy: string;
-  createdByEmail: string;
   createdAt: WriteTimestamp;
   updatedAt: WriteTimestamp;
 }

@@ -1,5 +1,8 @@
 /** Helpers the Scout admin screens share that are not components (kept apart for fast refresh). */
 
+import { registryFlags } from '../../agents/scout/routing';
+import type { ScoutIntake } from '../../types';
+
 export function relativeTime(seconds?: number): string {
   if (!seconds) return '';
   const mins = Math.max(0, Math.round((Date.now() / 1000 - seconds) / 60));
@@ -29,5 +32,26 @@ export function decisionErrorMessage(code: string): string {
       return 'Choose a bucket before approving — Scout could not assign one.';
     default:
       return 'Could not save the review decision. Nothing was changed.';
+  }
+}
+
+/**
+ * What a reviewer still has to do about the registry record: the verdict badge on the
+ * application card's Nonprofit status panel.
+ */
+export type RegistryVerdict = 'verified' | 'check' | 'unverified' | 'not_looked_up';
+
+export function registryVerdict(intake: ScoutIntake): RegistryVerdict {
+  switch (intake.registryLookup) {
+    case 'matched':
+      return intake.registry && intake.registry.subsectionCode === 3 && registryFlags(intake.registry).length === 0
+        ? 'verified'
+        : 'check';
+    case 'not_found':
+    case 'ambiguous':
+    case 'unavailable':
+      return 'unverified';
+    default:
+      return 'not_looked_up';
   }
 }

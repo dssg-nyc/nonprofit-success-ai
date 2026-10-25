@@ -1,9 +1,26 @@
 -- Core schema: the firestore.rules port (207 lines) plus tenancy, telemetry and the
 -- provenance columns that hang off them.
 --
--- This is the squashed form of the nineteen migrations that preceded the first hosted
--- project (0001_init .. 0019_table_privileges, 2026-08 .. 2026-10). Nothing had been
--- pushed anywhere, so the history was folded into six files that each own one concern:
+-- Second squash (2026-10-25, NPS #28). The first folded nineteen migrations into
+-- 0001–0006 (2026-10-08); 0007–0011 followed. Both sets are kept, unapplied, in
+-- migrations/archived/. This set is the same schema with one change of ownership:
+--
+--   NO PERSONAL DATA IN SUPABASE. Salesforce is the system of record for people and
+--   relationships (NPS #52); Supabase holds app operations and the Salesforce ids that
+--   point at them. The columns that held personal data are gone:
+--
+--     users.email, users.display_name        -> users.salesforce_contact_id
+--     businesses.address                     -> businesses.salesforce_account_id
+--     scout_intakes.contact_name_role,
+--       contact_email                        -> scout_intakes.salesforce_contact_id
+--                                               (+ salesforce_account_id)
+--     scout_intakes.reviewed_by_email        -> dropped (reviewed_by is the uuid)
+--     architect_assessments.created_by_email -> dropped (created_by is the uuid)
+--
+--   organizations gains salesforce_account_id. auth.users still holds the sign-in email:
+--   Supabase Auth needs it to sign anyone in, and no API role can read that table.
+--   Until the Salesforce integration exists, the ids point at the local-only stand-in in
+--   supabase/migrations/reference/salesforce/ (not a migration, never on the hosted project).
 --
 --   0001_core        users, businesses, engagements, scout_intakes, architect_assessments,
 --                    organizations / organization_members, agent_runs / tool_calls
@@ -12,6 +29,8 @@
 --   0004_drafts      communications, chronicle_drafts, lessons and the submit_* RPCs
 --   0005_lifecycle   current_engagement_stage(), transition_engagement()
 --   0006_views       agent_run_metrics, provenance_chain
+--   0007_scout       submit_scout_intake(), approve_scout_intake(), the model-call budget
+--                    (archived 0007–0011 folded: needs_info, reopen, registry, admin read)
 --
 -- Mapping conventions used throughout:
 --   * Firestore "entity validation" functions  -> column types, NOT NULL, CHECK constraints
@@ -117,7 +136,9 @@ create type scout_bucket as enum (                                        -- rul
 create type scout_confidence as enum ('High', 'Medium', 'Low');           -- rules:86
 create type scout_composite_signal as enum ('Ready', 'Conditional', 'Not Ready');  -- rules:89
 create type scout_hitl_tier as enum ('L2', 'L3');                         -- rules:91
-create type scout_review_status as enum ('pending', 'reviewed');          -- rules:92,188
+-- `needs_info` (archived 0010): a thin application parked, not declined. A queue state,
+-- not a decision — approve_scout_intake() treats it like `pending`.
+create type scout_review_status as enum ('pending', 'reviewed', 'needs_info');  -- rules:92,188
 create type scout_review_action as enum ('approved', 'edited', 'redirected');  -- rules:189
 
 create type primary_need as enum (                                        -- rules:79
@@ -143,17 +164,30 @@ create type composite_level as enum ('Foundational', 'Developing', 'Established'
 -- Provenance (.claude/specs/db/data-model.md §7): who or what produced a row's content.
 create type provenance_source as enum ('verified', 'derived', 'ai', 'human');
 
+-- A Salesforce record id: 15 characters (case-sensitive) or 18 (the case-safe form the
+-- REST API returns). The first three characters are the object's key prefix — 001
+-- Account, 003 Contact — so a column can also say which object it points at. No foreign
+-- key: the record lives in Salesforce (locally, the supabase/migrations/reference/salesforce/ stand-in).
+create domain salesforce_id as text
+  check (value ~ '^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$');
+
+comment on domain salesforce_id is
+  'A Salesforce record id (15 or 18 chars). Supabase stores the id, never the record: names, emails and addresses live in Salesforce.';
+
 -- ---------------------------------------------------------------------------
 -- users — rules:96–102
 -- ---------------------------------------------------------------------------
 
+-- rules:43 email and rules:45 displayName are not ported: a person's name and email are
+-- Salesforce Contact fields. The session carries the sign-in email (auth.users), which
+-- is all the SPA shows.
 create table users (
-  id            uuid primary key references auth.users (id) on delete cascade,
-  email         text not null check (char_length(email) <= 256),   -- rules:43
-  display_name  text check (char_length(display_name) <= 128),     -- rules:45
-  role          user_role not null default 'client',               -- rules:44,98
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  id                    uuid primary key references auth.users (id) on delete cascade,
+  role                  user_role not null default 'client',               -- rules:44,98
+  salesforce_contact_id salesforce_id
+                        check (salesforce_contact_id is null or left(salesforce_contact_id, 3) = '003'),
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now()
 );
 
 comment on column users.role is
@@ -161,6 +195,9 @@ comment on column users.role is
   'Elevation to admin is an out-of-band operation performed with the service role, which '
   'bypasses RLS and the immutability trigger by design. Authority checks read '
   'organization_members, not this column (is_admin()).';
+comment on column users.salesforce_contact_id is
+  'The person''s Salesforce Contact (key prefix 003). Null until linked. Set out of band, '
+  'never by the user: a self-chosen id would point a session at someone else''s record.';
 
 -- ---------------------------------------------------------------------------
 -- organizations / organization_members — tenancy
@@ -171,9 +208,12 @@ comment on column users.role is
 -- ---------------------------------------------------------------------------
 
 create table organizations (
-  id         uuid primary key default gen_random_uuid(),
-  name       text not null check (char_length(name) <= 256),
-  created_at timestamptz not null default now()
+  id                    uuid primary key default gen_random_uuid(),
+  name                  text not null check (char_length(name) <= 256),
+  -- The organization's Salesforce Account (key prefix 001). Null until linked.
+  salesforce_account_id salesforce_id unique
+                        check (salesforce_account_id is null or left(salesforce_account_id, 3) = '001'),
+  created_at            timestamptz not null default now()
 );
 
 create table organization_members (
@@ -199,7 +239,11 @@ create table businesses (
   industry        text check (char_length(industry) <= 128),           -- rules:54
   owner_id        uuid not null references users (id) on delete cascade,  -- rules:52
   certified       boolean not null default false,                      -- rules:55
-  address         text,                                                -- rules:111 (updatable)
+  -- rules:111 `address` is not ported: it is the Account's BillingAddress in Salesforce.
+  -- The Account itself — set from the intake by approve_scout_intake() (0007_scout),
+  -- otherwise null until linked. Locked like scout_intake_id (trigger below).
+  salesforce_account_id salesforce_id
+                  check (salesforce_account_id is null or left(salesforce_account_id, 3) = '001'),
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now(),
   organization_id uuid references organizations (id)
@@ -208,6 +252,8 @@ create table businesses (
 
 create index businesses_owner_id_idx on businesses (owner_id);
 create index businesses_organization_id_idx on businesses (organization_id);
+create index businesses_salesforce_account_id_idx
+  on businesses (salesforce_account_id) where salesforce_account_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- engagements — rules:116–128
@@ -309,8 +355,14 @@ create table scout_intakes (
 
   -- intake fields (public, write-once). rules:74–84
   org_name            text not null check (char_length(org_name) <= 256),
-  contact_name_role   text not null check (char_length(contact_name_role) <= 256),
-  contact_email       text not null check (char_length(contact_email) <= 256),
+  -- rules:75–76 contactNameRole / contactEmail are not stored here. /api/route-intake
+  -- records the applicant in Salesforce first (api/_salesforce.ts) — an unverified
+  -- applicant Account and its primary Contact (NPS #52, two-stage recording) — and the
+  -- intake keeps the two ids. Reading the contact means asking Salesforce.
+  salesforce_account_id salesforce_id not null
+                      check (left(salesforce_account_id, 3) = '001'),
+  salesforce_contact_id salesforce_id not null
+                      check (left(salesforce_contact_id, 3) = '003'),
   mission             text not null check (char_length(mission) <= 1000),
   scale               text not null check (char_length(scale) <= 500),
   primary_need        primary_need not null,
@@ -337,8 +389,8 @@ create table scout_intakes (
   review_status       scout_review_status not null default 'pending',
   review_action       scout_review_action,
   final_bucket        scout_bucket,
+  -- rules:190 reviewedByEmail is not ported: reviewed_by names the reviewer.
   reviewed_by         uuid references users (id),
-  reviewed_by_email   text check (char_length(reviewed_by_email) <= 256),
   reviewed_at         timestamptz,
   review_notes        text,
   onboarding_kit      text,
@@ -347,34 +399,61 @@ create table scout_intakes (
   organization_id     uuid references organizations (id),
 
   -- Routing provenance (data-model.md §7): what produced bucket/confidence/rationale.
-  -- 'ai' holds exactly when a run is named; the public form is forced to 'derived' by
-  -- its insert policy, so a submitter cannot self-assert model provenance.
+  -- 'ai' holds exactly when a run is named; submit_scout_intake() (0007_scout) derives
+  -- it from the run, so a submitter cannot self-assert model provenance.
   routing_source         provenance_source not null default 'derived',
   routing_run_id         uuid references agent_runs (id),
   routing_model          text,
   routing_prompt_version text,
 
+  -- Registry enrichment (R19, roadmap D50; archived 0011). /api/route-intake looks the
+  -- applicant up in the IRS registry (ProPublica, api/_scoutRegistry.ts) before routing
+  -- and files the reduced record and how the lookup went. Facts the route fetched, never
+  -- claims the applicant made. The record is organization data from a public registry.
+  registry            jsonb,
+  registry_lookup     text not null default 'skipped'
+                      constraint scout_intakes_registry_lookup_check
+                      check (registry_lookup in ('matched', 'not_found', 'ambiguous', 'unavailable', 'skipped')),
+
   -- rules:188–190 required a reviewed row to carry an action and a final bucket. As a
   -- table constraint this holds for every writer, not only the ones going through the
   -- update policy.
   constraint scout_intakes_review_complete check (
-    review_status = 'pending'
+    review_status <> 'reviewed'
     or (review_action is not null and final_bucket is not null)
+  ),
+  -- The one-door rule for the parked state: a `needs_info` row never carries a decision.
+  -- review_notes and reviewed_by/_at are the reviewer's request; the action and bucket
+  -- arrive only with the approve, decline or reopen that ends the wait.
+  constraint scout_intakes_needs_info_undecided check (
+    review_status = 'reviewed' or (review_action is null and final_bucket is null)
   ),
   constraint scout_intakes_routing_provenance check (
     routing_source in ('derived', 'ai')
     and (routing_source = 'ai') = (routing_run_id is not null)
-  )
+  ),
+  -- `matched` is the one status with a record, and the only way a record gets in.
+  constraint scout_intakes_registry_matched
+    check ((registry_lookup = 'matched') = (registry is not null)),
+  -- A stored record always says where it came from (data-model.md §7).
+  constraint scout_intakes_registry_source
+    check (registry is null or registry ->> 'source' = 'propublica')
 );
 
 create index scout_intakes_review_status_idx on scout_intakes (review_status);
 create index scout_intakes_organization_id_idx on scout_intakes (organization_id);
 create index scout_intakes_routing_run_id_idx
   on scout_intakes (routing_run_id) where routing_run_id is not null;
+create index scout_intakes_salesforce_account_id_idx on scout_intakes (salesforce_account_id);
 
 comment on table scout_intakes is
-  'Public intake. Anonymous INSERT is allowed (rules:184) because prospective orgs have '
-  'no account yet; everything else is admin-only because rows contain applicant PII.';
+  'Public intake, filed only through submit_scout_intake() (0007_scout). Admin-only read: '
+  'the answers describe the applicant organization. The applicant''s name and email are '
+  'not here — salesforce_contact_id points at them.';
+comment on column scout_intakes.registry is
+  'The applicant''s IRS registry record as `api/_scoutRegistry.ts` reduced it (ScoutRegistry on the wire): ein, name, city, state, nteeCode, subsectionCode, revenue, assets, latestFilingYear, source. Null unless registry_lookup = matched.';
+comment on column scout_intakes.registry_lookup is
+  'How the server-side registry lookup went before routing: matched / not_found / ambiguous / unavailable, or skipped (no lookup: demo intakes).';
 
 -- The scout intake a business came from. Set by the Scout-approve transition (T2, not
 -- built), read by transition_engagement()'s initial_meeting guard and by the lesson.
@@ -449,9 +528,8 @@ create table architect_assessments (
   charter                  jsonb not null check (jsonb_typeof(charter) = 'object'),
   ninety_day_plan          jsonb not null check (jsonb_typeof(ninety_day_plan) = 'object'),
 
-  -- meta. rules:177
+  -- meta. rules:177 (createdByEmail not ported: created_by names the author)
   created_by               uuid not null references users (id),
-  created_by_email         text not null check (char_length(created_by_email) <= 256),
   created_at               timestamptz not null default now(),
   updated_at               timestamptz not null default now(),
   organization_id          uuid references organizations (id),
@@ -546,7 +624,7 @@ grant execute on function is_admin()     to authenticated;
 -- config.toml enable_anonymous_sign_ins; src/lib/session.ts) get no profile: such a user
 -- is role `authenticated` with `is_anonymous = true` and no email — not a member, so no
 -- role, so is_admin() is false and no membership policy matches. RLS then grants exactly
--- what `anon` has: insert one pending intake. If the visitor later signs up for real,
+-- what `anon` has: nothing on the tables, EXECUTE on submit_scout_intake(). If the visitor later signs up for real,
 -- GoTrue links the identity to the same row (an UPDATE this after-insert trigger never
 -- sees); the SPA path that handles a missing profile covers that case.
 -- ---------------------------------------------------------------------------
@@ -563,16 +641,11 @@ begin
     return new;
   end if;
 
-  insert into public.users (id, email, display_name, role)
+  -- No email or name is copied: auth.users keeps the sign-in identity, and the person's
+  -- record is the Salesforce Contact that salesforce_contact_id is later linked to.
+  insert into public.users (id, role)
   values (
     new.id,
-    new.email,
-    -- Google returns a display name in raw_user_meta_data; email/password signups do not.
-    coalesce(
-      new.raw_user_meta_data ->> 'full_name',
-      new.raw_user_meta_data ->> 'name',
-      null
-    ),
     -- Always 'client'. rules:98 forced the same on self-insert, and users.role is
     -- immutable after insert (rules:100), so elevation to admin stays an out-of-band
     -- service-role operation. A trigger that honoured a client-supplied role would hand
@@ -607,7 +680,10 @@ comment on function handle_new_user is
 -- could flip to get through.
 -- ---------------------------------------------------------------------------
 
--- rules:100 — role is immutable. rules:101 — only display_name/updated_at may change.
+-- rules:100 — role is immutable. rules:101 — only display_name/updated_at may change;
+-- display_name is not ported, so a user's own update can only touch updated_at.
+-- salesforce_contact_id is linked out of band (definer or migration), never by the user:
+-- a self-set id would point a profile at someone else's Contact.
 create or replace function users_enforce_immutable()
 returns trigger
 language plpgsql
@@ -616,8 +692,13 @@ begin
   if new.role is distinct from old.role then
     raise exception 'users.role is immutable' using errcode = 'check_violation';
   end if;
-  if new.id is distinct from old.id or new.email is distinct from old.email then
-    raise exception 'users.id and users.email are immutable' using errcode = 'check_violation';
+  if new.id is distinct from old.id then
+    raise exception 'users.id is immutable' using errcode = 'check_violation';
+  end if;
+  if new.salesforce_contact_id is distinct from old.salesforce_contact_id
+     and current_user in ('anon', 'authenticated', 'service_role') then
+    raise exception 'users.salesforce_contact_id is linked only out of band'
+      using errcode = 'check_violation';
   end if;
   if new.created_at is distinct from old.created_at then
     raise exception 'users.created_at is immutable' using errcode = 'check_violation';
@@ -654,6 +735,11 @@ begin
     raise exception 'businesses.scout_intake_id is set only by the lifecycle command'
       using errcode = 'check_violation';
   end if;
+  if new.salesforce_account_id is distinct from old.salesforce_account_id
+     and current_user in ('anon', 'authenticated', 'service_role') then
+    raise exception 'businesses.salesforce_account_id is set only by the lifecycle command'
+      using errcode = 'check_violation';
+  end if;
   new.updated_at := now();
   return new;
 end;
@@ -671,6 +757,11 @@ begin
   if new.scout_intake_id is not null
      and current_user in ('anon', 'authenticated', 'service_role') then
     raise exception 'businesses.scout_intake_id is set only by the lifecycle command'
+      using errcode = 'check_violation';
+  end if;
+  if new.salesforce_account_id is not null
+     and current_user in ('anon', 'authenticated', 'service_role') then
+    raise exception 'businesses.salesforce_account_id is set only by the lifecycle command'
       using errcode = 'check_violation';
   end if;
   return new;
@@ -721,8 +812,8 @@ create trigger engagements_enforce_transitions_trg
 -- rules:187 — hasOnly(reviewStatus, reviewAction, finalBucket, reviewedBy,
 -- reviewedByEmail, reviewedAt, reviewNotes, onboardingKit). Everything the public form
 -- wrote is therefore write-once: an admin reviews an intake, it never edits the
--- applicant's own answers. The routing provenance columns are write-once for the same
--- reason: a review must not rewrite the record of what produced the routing.
+-- applicant's own answers. The routing provenance, registry and Salesforce id columns
+-- are write-once for the same reason: a review must not rewrite what the route filed.
 -- organization_id is NOT listed: it starts null and is set during review.
 -- rules:191 — reviewed_by must be the acting admin.
 create or replace function scout_intakes_enforce_review_only()
@@ -730,19 +821,21 @@ returns trigger
 language plpgsql
 as $$
 begin
-  if (new.org_name, new.contact_name_role, new.contact_email, new.mission, new.scale,
+  if (new.org_name, new.salesforce_account_id, new.salesforce_contact_id, new.mission, new.scale,
       new.primary_need, new.primary_need_other, new.problem_description,
       new.current_systems, new.timeline, new.referral_source, new.submitted_at,
       new.bucket, new.confidence, new.rationale, new.poc_score, new.clarity_score,
       new.foothold_score, new.composite_signal, new.flags, new.hitl_tier, new.id,
-      new.routing_source, new.routing_run_id, new.routing_model, new.routing_prompt_version)
+      new.routing_source, new.routing_run_id, new.routing_model, new.routing_prompt_version,
+      new.registry, new.registry_lookup)
      is distinct from
-     (old.org_name, old.contact_name_role, old.contact_email, old.mission, old.scale,
+     (old.org_name, old.salesforce_account_id, old.salesforce_contact_id, old.mission, old.scale,
       old.primary_need, old.primary_need_other, old.problem_description,
       old.current_systems, old.timeline, old.referral_source, old.submitted_at,
       old.bucket, old.confidence, old.rationale, old.poc_score, old.clarity_score,
       old.foothold_score, old.composite_signal, old.flags, old.hitl_tier, old.id,
-      old.routing_source, old.routing_run_id, old.routing_model, old.routing_prompt_version)
+      old.routing_source, old.routing_run_id, old.routing_model, old.routing_prompt_version,
+      old.registry, old.registry_lookup)
   then
     raise exception 'scout_intakes: only review fields may be updated'
       using errcode = 'check_violation';
@@ -863,6 +956,13 @@ create policy businesses_select_own on businesses
   using (owner_id = auth.uid()
          and organization_id in (select user_org_ids()));
 
+-- An admin reads every business in their org, not only their own: an approved intake's
+-- business is owned by whichever admin approved it, and the pipeline is shared (archived
+-- 0009).
+create policy businesses_select_admin on businesses
+  for select to authenticated
+  using (is_admin() and organization_id in (select user_org_ids()));
+
 -- rules:108 `allow create: if isSignedIn() && isValidBusiness()` — validation includes
 -- `ownerId == request.auth.uid` (rules:52)
 create policy businesses_insert_own on businesses
@@ -940,38 +1040,21 @@ create policy scout_intakes_select_admin on scout_intakes
          and (organization_id is null
               or organization_id in (select user_org_ids())));
 
--- rules:184 `allow create: if isValidScoutIntake(...)` — NO auth predicate. This is the
--- public intake: a prospective org has no account. `anon` and `authenticated` (the
--- anonymous session) both get it; `review_status = 'pending'` (rules:92) stops a
--- submitter from filing a row that is already marked reviewed, organization_id is null
--- until review, and the routing provenance is forced to 'derived' with no run, model or
--- prompt version — T2 writes real routing provenance through a definer RPC, never from
--- the client.
-create policy scout_intakes_insert_public on scout_intakes
-  for insert to anon, authenticated
-  with check (
-    review_status = 'pending'
-    and review_action is null
-    and final_bucket is null
-    and reviewed_by is null
-    and reviewed_by_email is null
-    and reviewed_at is null
-    and organization_id is null
-    and routing_source = 'derived'
-    and routing_run_id is null
-    and routing_model is null
-    and routing_prompt_version is null
-  );
+-- rules:184 `allow create` (the public intake) has NO insert policy here and no INSERT
+-- grant: an intake is filed only by submit_scout_intake() (0007_scout), called by
+-- /api/route-intake after it has recorded the applicant in Salesforce. The browser
+-- never writes scout_intakes.
 
--- rules:185–191 — admin-only, and only into the reviewed state. The with-check allows
--- organization_id to be set during review (null -> the reviewer's org).
+-- rules:185–191 — admin-only, and only out of the pending state: into `reviewed`, or
+-- parked as `needs_info`. The with-check allows organization_id to be set during review
+-- (null -> the reviewer's org).
 create policy scout_intakes_update_admin on scout_intakes
   for update to authenticated
   using (is_admin()
          and (organization_id is null
               or organization_id in (select user_org_ids())))
   with check (is_admin()
-              and review_status = 'reviewed'
+              and review_status <> 'pending'
               and (organization_id is null
                    or organization_id in (select user_org_ids())));
 
@@ -1010,8 +1093,8 @@ create policy architect_assessments_update_admin on architect_assessments
 -- Revoke first (the default privileges granted ALL), then grant exactly the commands the
 -- policies open. DELETE is withheld from scout_intakes and architect_assessments to match
 -- rules:192/204 (audit trail); INSERT/UPDATE on engagements and architect_assessments go
--- only through their RPCs; `anon` gets exactly one privilege — INSERT on the public
--- intake (rules:184). Telemetry is append-only for every API role, service_role included
+-- only through their RPCs; INSERT on scout_intakes goes only through
+-- submit_scout_intake() (0007_scout), so `anon` gets no table privilege at all. Telemetry is append-only for every API role, service_role included
 -- (observability.md: "deny UPDATE and DELETE for all roles including service-role").
 -- ---------------------------------------------------------------------------
 
@@ -1025,10 +1108,8 @@ grant select                          on organizations         to authenticated;
 grant select                          on organization_members  to authenticated;
 grant select, insert, update, delete  on businesses            to authenticated;
 grant select, delete                  on engagements           to authenticated;
-grant select, insert, update          on scout_intakes         to authenticated;
+grant select, update                  on scout_intakes         to authenticated;
 grant select                          on architect_assessments to authenticated;
-
-grant insert on scout_intakes to anon;
 
 grant select         on agent_runs, tool_calls to authenticated;
 grant select, insert on agent_runs, tool_calls to service_role;

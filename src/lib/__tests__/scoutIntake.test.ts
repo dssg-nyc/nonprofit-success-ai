@@ -6,8 +6,8 @@ import { rowToDomain } from '../rows';
 const ROW = {
   id: '0d73afe2-648b-54bc-8111-033b3e08bb8c',
   org_name: 'Harlem Community Pantry',
-  contact_name_role: 'Dana Reyes, Executive Director',
-  contact_email: 'dana@harlempantry.org',
+  salesforce_account_id: '001DS0000000001AAA',
+  salesforce_contact_id: '003DS0000000001AAA',
   mission: 'Food pantry.',
   scale: '400 families a week',
   primary_need: 'analyze_data',
@@ -30,7 +30,6 @@ const ROW = {
   review_action: null,
   final_bucket: null,
   reviewed_by: null,
-  reviewed_by_email: null,
   reviewed_at: null,
   review_notes: null,
   onboarding_kit: null,
@@ -61,8 +60,6 @@ describe('scoutIntakeFromRow', () => {
 
   it('keeps the applicant answers and scores in the snake_case the form and scorer use', () => {
     expect(intake.org_name).toBe('Harlem Community Pantry');
-    expect(intake.contact_name_role).toBe('Dana Reyes, Executive Director');
-    expect(intake.contact_email).toBe('dana@harlempantry.org');
     expect(intake.primary_need).toBe('analyze_data');
     expect(intake.problem_description).toBe('Cannot report outcomes.');
     expect(intake.current_systems).toBe('Google Sheets');
@@ -71,6 +68,13 @@ describe('scoutIntakeFromRow', () => {
     expect(intake.clarity_score).toBe(3);
     expect(intake.foothold_score).toBe(2);
     expect(intake.composite_signal).toBe('Ready');
+  });
+
+  it('carries the Salesforce ids, and no contact (NPS #28)', () => {
+    expect(intake.salesforceAccountId).toBe('001DS0000000001AAA');
+    expect(intake.salesforceContactId).toBe('003DS0000000001AAA');
+    expect(intake.contact_name_role).toBeUndefined();
+    expect(intake.contact_email).toBeUndefined();
   });
 
   it('leaves the review and routing fields camelCase, with timestamps converted', () => {

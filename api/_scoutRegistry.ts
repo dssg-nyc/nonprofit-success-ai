@@ -20,10 +20,16 @@ export type ScoutRegistryResult =
 /** Words that vary between how an applicant writes a name and how the IRS files it. */
 const NAME_NOISE = /\b(inc|incorporated|corp|corporation|the)\b/g;
 
-/** Lower-case, punctuation and filler words gone, whitespace collapsed. */
+/**
+ * Lower-case, punctuation and filler words gone, whitespace collapsed. An apostrophe is
+ * dropped rather than spaced, since the IRS files "Children's" as "Childrens", and `&` reads as
+ * `and`, so either spelling matches the other.
+ */
 export function normaliseOrgName(name: string): string {
   return name
     .toLowerCase()
+    .replace(/['\u2019]/g, '')
+    .replace(/&/g, ' and ')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(NAME_NOISE, ' ')
     .replace(/\s+/g, ' ')

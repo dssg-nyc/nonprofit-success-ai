@@ -162,6 +162,10 @@ export default function App() {
               element={
                 !user ? (
                   <Navigate to="/login" />
+                ) : isAdmin ? (
+                  // Staff are not applicants: the 501(c)(3) check is the IRS registry block on
+                  // each application in Admin Review, filed server-side with the Scout intake.
+                  <Dashboard isDemo={effectiveIsDemo} />
                 ) : (
                   <FirstTimeIntakeGate user={user} isDemo={effectiveIsDemo}>
                     <Dashboard isDemo={effectiveIsDemo} />

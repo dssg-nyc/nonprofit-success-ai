@@ -33,9 +33,11 @@ These local keys are fixed dev values, identical on every machine — not secret
 
 `studio` and `analytics` are disabled in `config.toml` (2026-08-21): their containers
 failed health checks on this machine and neither is needed for schema work. `storage` is
-enabled (nothing uses it yet). `[db.seed]` loads the git-ignored `seed.sql` on every
-`db reset` (see "Local data" below); the pgTAP suite does not depend on it and seeds its
-own rows inside each test transaction. Re-enable Studio if you want the UI on :54323.
+enabled (nothing uses it yet). `[db.seed]` loads the Salesforce stand-in
+(`migrations/reference/salesforce/schema.sql`, `seed.sql`) and then the git-ignored `seed.sql` on
+every `db reset` (see "Local data" and "The Salesforce stand-in" below); the pgTAP suite
+seeds its own rows inside each test transaction, and only `salesforce.test.sql` needs the
+stand-in schema. `[api].schemas` exposes `salesforce` so the intake route can reach it. Re-enable Studio if you want the UI on :54323.
 
 ## Local data
 
@@ -57,11 +59,42 @@ and sets `role = 'admin'` — the operator step a real admin goes through — an
 account a member of the organization, which is what `is_admin()` reads. Every insert is
 `on conflict do nothing`, so applying it twice is a no-op.
 
+The file's rows point at the stand-in's fixed ids (`001DS0000000000AAA` is DSSG NYC's
+Account): the app tables hold no names or emails (NPS #28), only Salesforce ids.
+
 There is deliberately no partner data in the seed: submit the public intake form, review
 it in the queue and approve it, so what the UI shows locally is what a real flow produced.
 Google sign-in stays disabled locally; use the email form. The pgTAP fixtures
 (`tests/_shared/fixtures.psql`) are the only checked-in rows, and they roll back with each
 test file.
+
+## The Salesforce stand-in
+
+`migrations/reference/salesforce/` is a **local-only** model of the Salesforce org the integration (NPS #52)
+will talk to: a `salesforce` Postgres schema with the objects the portal needs (`account`,
+`contact`, `account_contact_relation`, `campaign`, `gift_transaction`,
+`volunteer_initiative`, `volunteer_assignment`) and their real id shapes (`001` Account,
+`003` Contact, …), plus fictional seed rows at fixed ids. It is not a migration: the CLI
+loads it as seed data, so `supabase db push` never sends it to a hosted project.
+
+The split it enforces is the point of #28. **Salesforce owns people and organizations**
+— names, emails, phones, addresses; **Supabase owns workflow** and refers to them by id:
+`users.salesforce_contact_id`, `organizations.salesforce_account_id`,
+`businesses.salesforce_account_id`, `scout_intakes.salesforce_account_id` /
+`salesforce_contact_id` (all the `salesforce_id` domain, 0001_core).
+
+Every stand-in table is closed to `anon` and `authenticated`; two definer RPCs are the
+only doors, and `api/_salesforce.ts` is the only caller in the app:
+
+| RPC | Caller | Does |
+|---|---|---|
+| `salesforce.upsert_applicant(org, ein, name_role, email)` | intake route (anonymous session) | Stage one of #52: unverified Account by EIN (else name), primary Contact by email; idempotent; returns `{account_id, contact_id}` |
+| `salesforce.get_contacts(ids[])` | staff (`is_admin()`) | Reads Contacts back by id — the review queue's "who applied", until the real read path exists |
+
+When the integration lands, `_salesforce.ts` switches to the Salesforce REST API under a
+server-side integration user and this folder is deleted — it lives under `reference/` because it is temporary. Until then the
+hosted project has no `salesforce` schema, so a hosted intake answers 502
+`salesforce_unavailable`.
 
 ## Hosted project
 
@@ -120,7 +153,9 @@ Numbered `NNNN_<name>.sql` and applied in numeric order. The original nineteen f
 (0001–0019, one per issue) were squashed on 2026-10-08 into six that read as a schema
 rather than a changelog; nothing has been pushed to a hosted project, so there was no
 history to preserve. `0001_core.sql` keeps the `-- rules:NN` citations (about a hundred) into
-`reference/firestore.rules`. `0007` is the first post-squash migration.
+`reference/firestore.rules`. The post-squash `0007`–`0011` were folded into one
+`0007_scout.sql` on 2026-10-25 (NPS #28, still nothing pushed), when the PII columns came
+out of the schema; the originals are in `reference/archived/`.
 
 | File | What it adds |
 |---|---|
@@ -130,10 +165,7 @@ history to preserve. `0001_core.sql` keeps the `-- rules:NN` citations (about a 
 | `0004_drafts.sql` | `communications`, `chronicle_drafts`, `lessons`, `promoted_lessons`; `submit_architect_draft()`, `submit_envoy_draft()`, `submit_chronicle_draft()`, `derive_engagement_outcome()`, `promote_lesson()` — each draft lands beside a pending L3 approval in one transaction |
 | `0005_lifecycle.sql` | `current_engagement_stage()`, `transition_engagement()` — the only stage writer; guards, L3 approval row, `stage_advanced` / `stage_reverted` events |
 | `0006_views.sql` | `agent_run_metrics` (Q5 errors, latency, cost, override rate per agent per day), `provenance_chain` — the §7 reconstruction query |
-| `0007_scout_intake_and_budget.sql` | `submit_scout_intake()` — the only writer of `scout_intakes`, derives `hitl_tier` from the Scout run; `check_model_budget()` per-user hourly model-call limit |
-| `0008_scout_approve.sql` | `approve_scout_intake()` — the one writer of `businesses.scout_intake_id`; opens the pipeline from a reviewed intake through `transition_engagement()` |
-| `0009_businesses_admin_read.sql` | `businesses_select_admin` — staff read every business in their org, matching the engagement read they already held; no write |
-| `0010_scout_review_needs_info_and_reopen.sql` | `needs_info` review status (parked, no action or bucket); `approve_scout_intake()` gains `p_reopen` so an admin can re-review a declined (`redirected`) intake, recorded as `reopened` in the audit row |
+| `0007_scout.sql` | `submit_scout_intake()` — the only writer of `scout_intakes`, derives `hitl_tier` from the Scout run, files the registry record and the applicant's Salesforce ids; `check_model_budget()` per-user hourly model-call limit; `approve_scout_intake()` — the one writer of `businesses.scout_intake_id` (and the business's `salesforce_account_id`), opens the pipeline through `transition_engagement()`, `p_reopen` re-reviews a declined intake. (`needs_info`, `businesses_select_admin` and the registry columns, once 0009–0011, now sit in 0001_core) |
 
 Nineteen tables, RLS enabled and forced on every one; every id defaults to
 `gen_random_uuid()`. Every `organization_id` references `organizations`, and admin reads
@@ -144,20 +176,22 @@ on telemetry and approvals are scoped to the caller's orgs via `user_org_ids()`.
 The files above are a history: the CLI applies `migrations/*.sql` flat, in numeric order,
 so the folder cannot be laid out by subject. This is the map of what the schema holds
 today, by the kind of data each table carries. Every table is the portal's own
-operational data; nothing retrieved from outside (public filings, a CRM) is in the
-schema yet.
+operational data. Nothing that identifies a person is: names, emails, phones and
+addresses live in Salesforce and the tables hold `salesforce_*_id` references (see "The
+Salesforce stand-in" above).
 
 | Cluster | Tables | Owned by | Trust posture |
 |---|---|---|---|
 | **Identity and tenancy** | `users`, `organizations`, `organization_members` | 0001 | Provisioned by Auth (`handle_new_user()`); `users.role` immutable to every API role. Access model to be replaced by C1 (below) |
-| **Partner pipeline** | `businesses`, `engagements`, `engagement_events`, `milestones`, `tasks`, `documents` | 0001, 0003, 0005, 0008, 0009 | Partner-owned rows, org-scoped staff reads; stage changes only through `transition_engagement()`, pipeline entry only through `approve_scout_intake()` |
-| **Agent output** | `scout_intakes`, `architect_assessments`, `communications`, `chronicle_drafts`, `lessons`, `promoted_lessons` | 0001, 0004, 0007, 0010 | Written only by the `submit_*` definer functions, each beside a pending L3 approval; review-only updates by staff |
+| **Partner pipeline** | `businesses`, `engagements`, `engagement_events`, `milestones`, `tasks`, `documents` | 0001, 0003, 0005, 0007 | Partner-owned rows, org-scoped staff reads; stage changes only through `transition_engagement()`, pipeline entry only through `approve_scout_intake()` |
+| **Agent output** | `scout_intakes`, `architect_assessments`, `communications`, `chronicle_drafts`, `lessons`, `promoted_lessons` | 0001, 0004, 0007 | Written only by the `submit_*` definer functions, each beside a pending L3 approval; review-only updates by staff |
 | **HITL spine and provenance** | `approvals`, `audit_events`, `agent_runs`, `tool_calls` | 0001, 0002 | Append-only; `agent_runs` written by the recorder's service role alone; the `provenance_chain` view (0006) reconstructs a decision from these |
 | **Plumbing** | `model_call_budget`; views `agent_run_metrics`, `provenance_chain` | 0006, 0007 | No role reads or writes the budget table directly; views are `security_invoker` |
 
 When a second kind of data lands it gets its own Postgres schema rather than more tables
 in `public`: the knowledge base (`knowledge.md`, D37 — public sources such as filings,
-chunked and embedded) as `knowledge`, a CRM sync (D35, parked) as `crm`. A schema is the
+chunked and embedded) as `knowledge`. The CRM already has one: `salesforce`, the
+local stand-in above, which is the shape a sync (D35) would land in. A schema is the
 boundary RLS and grants are easiest to reason about per data type, and it keeps the
 public-source cluster's "everyone reads" posture from ever sharing a policy file with
 partner records.
@@ -218,6 +252,7 @@ squashed files may still be edited in place; after it, take the next free number
 | `core.test.sql` | Provisioning, default deny, every `0001_core` table and trigger, the routine-privilege allow-lists, routing provenance, `submit_scout_intake()` / `check_model_budget()` |
 | `spine.test.sql` | Telemetry, approvals, audit events, milestones / tasks, documents, `agent_run_metrics` |
 | `rpcs.test.sql` | The draft commands, `transition_engagement()`, lessons, `provenance_chain` — blocks that build on each other's rows |
+| `salesforce.test.sql` | The stand-in's boundary: no direct table reads, `upsert_applicant()` idempotency and name/title split, `get_contacts()` admin-only. Needs `migrations/reference/salesforce/schema.sql` loaded (every `db reset` / `db start` does) |
 
 It documents what the schema does today, including the org model (see above), not what
 C1 will make it. Every row count is scoped to fixture ids, so rows left in the local

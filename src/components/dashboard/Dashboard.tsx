@@ -19,7 +19,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [newBusiness, setNewBusiness] = useState({ name: '', type: 'small_business' as BusinessType, industry: '', address: '' });
+  const [newBusiness, setNewBusiness] = useState({ name: '', type: 'small_business' as BusinessType, industry: '' });
   const [recentLead, setRecentLead] = useState<SalesforceLead | null>(null);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const navigate = useNavigate();
@@ -84,7 +84,7 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
       if (error) handleSupabaseError(error, OperationType.CREATE, 'businesses');
 
       setShowAddModal(false);
-      setNewBusiness({ name: '', type: 'small_business', industry: '', address: '' });
+      setNewBusiness({ name: '', type: 'small_business', industry: '' });
     } catch (err) {
       console.error('Dashboard: add business failed — not created', err);
       setError('Could not add the business. Nothing was saved.');

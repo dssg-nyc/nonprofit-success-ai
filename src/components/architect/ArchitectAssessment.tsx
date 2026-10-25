@@ -190,7 +190,6 @@ export default function ArchitectAssessment({ isDemo }: Props) {
         charter,
         ninetyDayPlan: plan,
         createdBy: DEMO_USER.uid,
-        createdByEmail: DEMO_USER.email,
         createdAt: { seconds: Date.now() / 1000 },
         updatedAt: { seconds: Date.now() / 1000 },
       } as ArchitectAssessmentDoc;

@@ -3,7 +3,7 @@
 The server side of the portal: ten routes under `/api`, deployed as Vercel
 serverless functions by filesystem convention (this is a Vite SPA, not Next.js).
 Each `.ts` file without a leading underscore is a route; `_env.ts`, `_http.ts`,
-`_auth.ts`, `_request.ts`, `_budget.ts` and `_propublica.ts` are shared helpers. Tests live in
+`_auth.ts`, `_request.ts`, `_budget.ts`, `_propublica.ts`, `_scoutRegistry.ts` and `_salesforce.ts` are shared helpers. Tests live in
 `__tests__/`: `*.test.ts` are unit tests (`npm test`), `*.int.test.ts` run against the
 local Supabase stack (`make api-test`) — see Testing.
 
@@ -53,9 +53,14 @@ tier the database filed, and the IRS registry lookup: before routing, the route 
 org up in ProPublica (`_scoutRegistry.ts` over `_propublica.ts` — by the form's optional
 `ein`, else by an exact-name search match) and files the reduced record and its status
 (`registry`, `registryLookup`: `matched` / `not_found` / `ambiguous` / `unavailable`) on
-the row (0011). The record feeds Scout as evidence only (tiebreak, flags, one rationale
+the row (0007). The record feeds Scout as evidence only (tiebreak, flags, one rationale
 sentence; never readiness or tier); a failed lookup is `unavailable` and the intake is
-still filed. The org name and EIN never reach the logs. Public visitors reach it with an anonymous Supabase session
+still filed. The org name and EIN never reach the logs. The contact never reaches the
+row (NPS #28): before the lookup, `_salesforce.ts` upserts the applicant into Salesforce
+(an unverified Account and its primary Contact, #52) and the row files only
+`salesforce_account_id` / `salesforce_contact_id`. Today the other side is the local
+stand-in (`supabase/migrations/reference/salesforce/`); where it is absent (any hosted project, until the
+integration lands) the route answers `502 salesforce_unavailable` before any model call. Public visitors reach it with an anonymous Supabase session
 (`src/lib/session.ts`, rate-limited per IP by Supabase Auth); without a token nothing
 is filed and the form says so.
 
@@ -87,8 +92,7 @@ structural guards in code (`src/lib/lifecycle.ts`) so the error names the proble
 then calls `transition_engagement()`, which is the authority and re-checks everything.
 
 **`scout-approve`** — the Scout-approve command (lifecycle §4 row 1), the way a
-business enters the pipeline. One call to `approve_scout_intake()` (0008, redefined in
-0010): reviews a `pending` or `needs_info` intake as `approved` (or `edited` when a
+business enters the pipeline. One call to `approve_scout_intake()` (0007): reviews a `pending` or `needs_info` intake as `approved` (or `edited` when a
 different `finalBucket` is given), or takes one the review queue already approved;
 creates the `businesses` row linked by `scout_intake_id` if absent — the one column the
 0001_core trigger lets only a non-API role set, which is why the browser cannot do this;
@@ -167,7 +171,7 @@ to explain why it fell back and treats a non-2xx as "no result", never as data.
 | 422 | `intake_not_reviewed`, `membership_stage_required`, `stage_skipped`, `reason_required`, `guard_unmet` |
 | 429 | `model_budget_exceeded` (with `Retry-After`), `model_rate_limited`, `model_quota_exhausted` |
 | 500 | `internal_error` — an uncaught throw, logged with the request id |
-| 502 | `model_call_failed`, `model_parse_error`, `draft_save_failed`, `intake_write_failed`, `transition_failed`, `*_lookup_failed` |
+| 502 | `model_call_failed`, `model_parse_error`, `draft_save_failed`, `intake_write_failed`, `salesforce_unavailable`, `transition_failed`, `*_lookup_failed` |
 | 503 | `model_unavailable`, `auth_not_configured`, `auth_unavailable`, `lookup_failed` |
 | 504 | `model_timeout` |
 
@@ -353,7 +357,9 @@ production down. `npm run type-check` also runs `tsconfig.api.json` (`NodeNext`,
   thinking-token surcharge, and `GATEWAY_PRICING` must be kept current when the model
   changes.
 - **No CORS config.** Same-origin only, by Vercel default.
-- **0007 and 0008 are applied locally only** (as is everything else) until #27 / #28.
+- **0007 is applied locally only** (as is everything else) until #27. The hosted
+  intake needs the Salesforce integration (#52) too: the stand-in is local-only, so a
+  hosted `route-intake` answers 502 `salesforce_unavailable` until it lands.
 - **The model path is measured only by eval runs** — CI never calls a model, and
   `cd.yml` only polls `/api/health` after a deploy. Posting one real intake to a
   deployment is a hand step (sign in anonymously, `POST /api/route-intake`, then check

@@ -57,9 +57,12 @@ export default function SiteHeader({ user, isAdmin, isGoogle, onLogout }: SiteHe
               <NavLink to="/dashboard" className="nav-link" onClick={closeMenu}>
                 Overview
               </NavLink>
-              <NavLink to="/onboarding" className="nav-link" onClick={closeMenu}>
-                501(c)(3) Intake
-              </NavLink>
+              {/* Staff validate 501(c)(3) status in Admin Review, not through the applicant gate. */}
+              {!isAdmin && (
+                <NavLink to="/onboarding" className="nav-link" onClick={closeMenu}>
+                  501(c)(3) Intake
+                </NavLink>
+              )}
               {isAdmin && (
                 <NavLink to="/admin" className="nav-link" onClick={closeMenu}>
                   Admin Review

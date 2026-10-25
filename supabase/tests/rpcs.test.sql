@@ -17,21 +17,21 @@ select plan(235);
 reset role;
 
 insert into scout_intakes (
-  id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+  id, org_name, salesforce_account_id, salesforce_contact_id, mission, scale, primary_need,
   problem_description, current_systems, timeline, referral_source,
   bucket, confidence, rationale, poc_score, clarity_score, foothold_score,
   composite_signal, flags, hitl_tier,
   review_status, review_action, final_bucket, organization_id
 ) values (
   '6378f799-caa0-5acf-b06c-cec9496b7212',
-  'Charter Org', 'Sam Lee, ED', 'sam@example.org', 'Food access.',
+  'Charter Org', '001DS0000000002AAA', '003DS0000000002AAA', 'Food access.',
   '12 sites', 'analyze_data', 'Cannot see shortages.', 'Spreadsheets',
   'Next quarter', 'Referral',
   'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2',
   'reviewed', 'redirected', 'Data Infrastructure', :org_id
 ), (
   '873d261b-9deb-54b0-b549-91b2af53f599',
-  'Unreviewed Org', 'Kim Park, ED', 'kim@example.org', 'Tutoring.',
+  'Unreviewed Org', '001DS0000000002AAA', '003DS0000000002AAA', 'Tutoring.',
   '200 students', 'analyze_data', 'No outcome data.', 'Paper',
   'Next year', 'Referral',
   'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2',
@@ -268,14 +268,14 @@ values
 
 -- A second reviewed intake, for the "run already behind another assessment" rejection.
 insert into scout_intakes (
-  id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+  id, org_name, salesforce_account_id, salesforce_contact_id, mission, scale, primary_need,
   problem_description, current_systems, timeline, referral_source,
   bucket, confidence, rationale, poc_score, clarity_score, foothold_score,
   composite_signal, flags, hitl_tier,
   review_status, review_action, final_bucket, organization_id
 ) values (
   '1d944c26-5036-515d-9d60-434e986dab20',
-  'Second Charter Org', 'Pat Doe, ED', 'pat@example.org', 'Housing.',
+  'Second Charter Org', '001DS0000000002AAA', '003DS0000000002AAA', 'Housing.',
   '4 sites', 'analyze_data', 'Cannot see waitlists.', 'Spreadsheets',
   'Next quarter', 'Referral',
   'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2',
@@ -780,14 +780,14 @@ select lives_ok(
 reset role;
 
 insert into scout_intakes (
-  id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+  id, org_name, salesforce_account_id, salesforce_contact_id, mission, scale, primary_need,
   problem_description, current_systems, timeline, referral_source,
   bucket, confidence, rationale, poc_score, clarity_score, foothold_score,
   composite_signal, flags, hitl_tier,
   review_status, review_action, final_bucket, organization_id
 ) values (
   '387980d0-271f-5351-961c-e561be1b724a',
-  'Transition Org', 'Lee Kim, ED', 'lee@example.org', 'Youth programs.',
+  'Transition Org', '001DS0000000002AAA', '003DS0000000002AAA', 'Youth programs.',
   '300 youth', 'analyze_data', 'Cannot show outcomes.', 'Spreadsheets',
   'Next quarter', 'Referral',
   'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2',
@@ -809,7 +809,7 @@ insert into architect_assessments (
        q17a_wish_list, q17b_biggest_worry, q18_past_blockers,
        di_score, gov_score, tooling_score, dc_score, tc_score,
        points, composite_level, charter, ninety_day_plan,
-       created_by, created_by_email
+       created_by
      ) values (
        '387980d0-271f-5351-961c-e561be1b724a', '387980d0-271f-5351-961c-e561be1b724a',
        'Transition Org', 'Analytics & Insight', 'Ready',
@@ -818,7 +818,7 @@ insert into architect_assessments (
        'board', 'semi_automated', '{spreadsheets}', 'some_adhoc', 'requires_approval',
        'wish', 'worry', 'blockers', 2, 2, 2, 2, 2, 10, 'Developing',
        '{}'::jsonb, '{}'::jsonb,
-       '33333333-3333-3333-3333-333333333333', 'admin@dssg.nyc'
+       '33333333-3333-3333-3333-333333333333'
      );
 
 -- scout_intake_id is writable only by a non-API role (0001_core trigger); the fixture is the
@@ -2059,35 +2059,35 @@ reset role;
 -- normal case), a pending one with no bucket, one the review queue already approved,
 -- and a pending one to approve into a different bucket.
 insert into scout_intakes (
-  id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+  id, org_name, salesforce_account_id, salesforce_contact_id, mission, scale, primary_need,
   problem_description, current_systems, timeline, referral_source,
   bucket, confidence, rationale, poc_score, clarity_score, foothold_score,
   composite_signal, flags, hitl_tier,
   review_status, review_action, final_bucket, organization_id
 ) values (
   '365db816-43ef-5e82-899b-421e623d66d0',
-  'Approve Org', 'Pat Diaz, ED', 'pat@example.org', 'Housing.',
+  'Approve Org', '001DS0000000002AAA', '003DS0000000002AAA', 'Housing.',
   '40 staff', 'analyze_data', 'No view of outcomes.', 'Spreadsheets',
   'Next quarter', 'Referral',
   'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2',
   'pending', null, null, null
 ), (
   '8abc65b1-e11b-58f1-a9c1-b3c0a4843ad5',
-  'No Bucket Org', 'Lou Chen, ED', 'lou@example.org', 'Arts.',
+  'No Bucket Org', '001DS0000000002AAA', '003DS0000000002AAA', 'Arts.',
   '5 staff', 'something_else', 'Unclear.', 'None',
   'Someday', 'Referral',
   null, null, 'Could not route.', 1, 1, 1, 'Not Ready', '{}', 'L3',
   'pending', null, null, null
 ), (
   'e5b56247-74df-5251-8b09-81a8ec9bc4d2',
-  'Queue Approved Org', 'Ana Ruiz, ED', 'ana@example.org', 'Youth.',
+  'Queue Approved Org', '001DS0000000002AAA', '003DS0000000002AAA', 'Youth.',
   '20 staff', 'build_tool', 'Need a dashboard.', 'Sheets',
   'Next quarter', 'Referral',
   'Tooling & Automation', 'Medium', 'Clear need.', 2, 2, 2, 'Conditional', '{}', 'L3',
   'reviewed', 'approved', 'Tooling & Automation', :org_id
 ), (
   'e0b3425a-5d43-5e11-828e-e3fa4795946d',
-  'Edited Org', 'Kai Wong, ED', 'kai@example.org', 'Food.',
+  'Edited Org', '001DS0000000002AAA', '003DS0000000002AAA', 'Food.',
   '10 staff', 'organize_data', 'Messy data.', 'Paper',
   'Next quarter', 'Referral',
   'Data Infrastructure', 'Medium', 'Clear need.', 2, 2, 2, 'Conditional', '{}', 'L3',

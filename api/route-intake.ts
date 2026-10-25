@@ -9,6 +9,7 @@ import { checkModelBudget } from "./_budget.js";
 import { modelKeyConfigured } from "./_env.js";
 import { parseJsonBody } from "./_http.js";
 import { handler } from "./_request.js";
+import { upsertApplicant } from "./_salesforce.js";
 import { lookupScoutRegistry } from "./_scoutRegistry.js";
 
 export const maxDuration = 30;
@@ -32,6 +33,13 @@ export const maxDuration = 30;
  * (`_scoutRegistry.ts`, R19) and handed to both routing paths as a fact and to the row
  * with its provenance. The lookup is best-effort: `unavailable` files the intake exactly
  * as it was filed before the record existed.
+ *
+ * The applicant's name and email are not filed: they go to Salesforce first
+ * (`_salesforce.ts`, NPS #52 — an unverified applicant Account and its primary Contact),
+ * and the row keeps the two ids. They still reach the router in memory (the POC score
+ * reads the contact's role), but never the database. If Salesforce cannot take them the
+ * route answers 502 before any model call: an intake with nobody to contact is not one
+ * a reviewer can act on.
  */
 
 function json(body: unknown, status: number) {
@@ -55,12 +63,21 @@ export const POST = handler("route-intake", async (request: Request) => {
   const valid = scoutIntakeRequestSchema.safeParse(parsed.body);
   if (!valid.success) return json({ error: "invalid_input" }, 400);
   // `ein` is a lookup hint, not a column: the record carries the EIN ProPublica confirmed.
-  const { ein, ...intake } = valid.data;
+  // The contact fields are split off so the RPC payload below cannot carry them.
+  const { ein, contact_name_role: contactNameRole, contact_email: contactEmail, ...intake } = valid.data;
   // Normalised once, used twice: the free-text need only means something beside
   // `something_else`, so the model and the row see the same value — never a stray
   // string under a fixed need, never a `undefined` the model sees but the row drops.
   const primaryNeedOther =
     intake.primary_need === "something_else" ? (intake.primary_need_other ?? "").trim() : "";
+  const applicant = await upsertApplicant(client, {
+    orgName: intake.org_name,
+    ein,
+    contactNameRole,
+    contactEmail,
+  });
+  if (!applicant.ok) return json({ error: "salesforce_unavailable" }, 502);
+
   const lookup = await lookupScoutRegistry(intake.org_name, ein);
   const input: ScoutRoutingInput = {
     scale: intake.scale,
@@ -68,7 +85,7 @@ export const POST = handler("route-intake", async (request: Request) => {
     primary_need_other: primaryNeedOther || undefined,
     problem_description: intake.problem_description,
     current_systems: intake.current_systems,
-    contact_name_role: intake.contact_name_role,
+    contact_name_role: contactNameRole,
     timeline: intake.timeline,
     // `null` only when the lookup ran and found nothing: `ambiguous` and `unavailable`
     // leave the router as uninformed as a skipped lookup, so neither earns the
@@ -107,6 +124,8 @@ export const POST = handler("route-intake", async (request: Request) => {
   const { data, error: rpcErr } = await client.rpc("submit_scout_intake", {
     p_intake: {
       ...intake,
+      salesforce_account_id: applicant.value.accountId,
+      salesforce_contact_id: applicant.value.contactId,
       primary_need_other: primaryNeedOther,
       bucket: result.bucket,
       confidence: result.confidence,
