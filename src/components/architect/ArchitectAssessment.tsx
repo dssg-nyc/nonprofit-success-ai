@@ -361,7 +361,7 @@ export default function ArchitectAssessment({ isDemo }: Props) {
                       type="checkbox"
                       checked={answers.q14_tools.includes(opt.value)}
                       onChange={() => toggleTool(opt.value)}
-                      className="accent-[#002D72]"
+                      className="accent-dssg-blue"
                     />
                     {opt.label}
                   </label>

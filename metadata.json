@@ -1,0 +1,7 @@
+{
+  "name": "Nonprofit Success AI",
+  "description": "NYC-DSSG partner portal — track engagement from initial meeting through membership.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

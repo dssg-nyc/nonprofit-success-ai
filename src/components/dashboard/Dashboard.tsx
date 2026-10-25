@@ -7,10 +7,12 @@ import {
 import type { TablesInsert } from '../../lib/database.types';
 import { Business, BusinessType } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Building2, ChevronRight, Info, CheckCircle2, X, Layers } from 'lucide-react';
+import { Plus, Building2, ChevronRight, Info, CheckCircle2, X, Layers, Database, Bot } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { demoBusinesses } from '../../lib/demoStore';
 import '../demo/demoData'; // seeds demoBusinesses with graduated partner orgs on first import
+import { getSalesforceLeads, type SalesforceLead } from '../../lib/salesforceLead';
+import SalesforceLeadModal from '../onboarding/SalesforceLeadModal';
 
 export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -18,7 +20,16 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newBusiness, setNewBusiness] = useState({ name: '', type: 'small_business' as BusinessType, industry: '', address: '' });
+  const [recentLead, setRecentLead] = useState<SalesforceLead | null>(null);
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const leads = getSalesforceLeads();
+    if (leads.length > 0) {
+      setRecentLead(leads[0]);
+    }
+  }, []);
 
   useEffect(() => {
     if (isDemo) {
@@ -105,6 +116,52 @@ export default function Dashboard({ isDemo }: { isDemo?: boolean }) {
           Register New Account
         </button>
       </div>
+
+      {/* Salesforce & Agentforce Lead Sync Card */}
+      {recentLead && (
+        <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-900 to-blue-950 text-white shadow-lg border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
+              <Database size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white">
+                  Salesforce & Agentforce CRM Active: {recentLead.Company}
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  {recentLead.Tax_Status__c}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Lead ID: <span className="font-mono text-slate-300">{recentLead.Id}</span> · Status: {recentLead.Status} · Track: {recentLead.Agentforce_Context.recommended_dssg_track}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+            <button
+              onClick={() => setIsLeadModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <Bot size={14} />
+              <span>Inspect CRM Payload</span>
+            </button>
+            <button
+              onClick={() => navigate('/onboarding')}
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-bold transition-colors"
+            >
+              Validate Another Org
+            </button>
+          </div>
+        </div>
+      )}
+
+      <SalesforceLeadModal
+        isOpen={isLeadModalOpen}
+        onClose={() => setIsLeadModalOpen(false)}
+        lead={recentLead}
+      />
 
       {/* Stats Summary Pattern */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-16 px-4">

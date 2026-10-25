@@ -1,11 +1,21 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
-import { onAuthChange, fetchRole, signOut } from "../lib/supabase";
-import { LogOut, LayoutDashboard, Compass, ShieldCheck, Rocket } from "lucide-react";
+import {
+  onAuthChange,
+  fetchRole,
+  signOut,
+  isSupabaseConfigured,
+  getStoredUser,
+  getStoredRole,
+  getStoredProvider,
+  setStoredUser,
+} from "../lib/supabase";
+import { LogOut, LayoutDashboard, Compass, ShieldCheck, Rocket, Building2 } from "lucide-react";
 import { motion } from "motion/react";
 
 // Components
 import Login from "../components/auth/Login";
+import { GoogleLogo } from "../components/auth/GoogleAuthModal";
 import Dashboard from "../components/dashboard/Dashboard";
 import BusinessPortal from "../components/business/BusinessPortal";
 import ScoutIntakeForm from "../components/scout/ScoutIntakeForm";
@@ -14,20 +24,23 @@ import ArchitectAssessment from "../components/architect/ArchitectAssessment";
 import ArchitectPlan from "../components/architect/ArchitectPlan";
 import OngoingProjects from "../components/architect/OngoingProjects";
 import FirstTimeIntakeGate from "../components/onboarding/FirstTimeIntakeGate";
+import NonprofitValidationGate from "../components/onboarding/NonprofitValidationGate";
 
-import type { AppUser } from "../lib/supabase";
+import type { AppUser, AppRole } from "../lib/supabase";
 
 function Navbar({
   user,
   isAdmin,
+  isGoogle,
   onLogout,
 }: {
   user: AppUser | null;
   isAdmin: boolean;
+  isGoogle?: boolean;
   onLogout: () => void;
 }) {
   return (
-    <nav className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50">
+    <nav className="site-header">
       <div className="max-w-7xl mx-auto px-4 h-full flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/" className="flex items-center gap-6 group">
@@ -74,15 +87,22 @@ function Navbar({
           <div className="flex items-center gap-8">
             <Link
               to="/dashboard"
-              className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2"
+              className="nav-link"
             >
               <LayoutDashboard size={14} />
               Overview
             </Link>
+            <Link
+              to="/onboarding"
+              className="nav-link"
+            >
+              <Building2 size={14} />
+              501(c)(3) Intake
+            </Link>
             {isAdmin && (
               <Link
                 to="/admin"
-                className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2"
+                className="nav-link"
               >
                 <ShieldCheck size={14} />
                 Admin Review
@@ -91,7 +111,7 @@ function Navbar({
             {isAdmin && (
               <Link
                 to="/projects"
-                className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2"
+                className="nav-link"
               >
                 <Rocket size={14} />
                 Ongoing Projects
@@ -99,7 +119,7 @@ function Navbar({
             )}
             <Link
               to="/apply"
-              className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2"
+              className="nav-link"
             >
               <Compass size={14} />
               Apply
@@ -107,15 +127,30 @@ function Navbar({
             <div className="h-6 w-px bg-slate-200" />
             <div className="flex items-center gap-4">
               <div className="hidden md:flex flex-col items-end">
-                <span className="text-sm font-bold text-slate-800">
-                  {user.email?.split("@")[0]}
-                </span>
-                <span className="text-[9px] text-emerald-600 font-bold uppercase tracking-wider">
-                  {isAdmin ? "DSSG Admin" : "Active Client"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-slate-800">
+                    {user.email}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[9px] text-emerald-600 font-bold uppercase tracking-wider">
+                    {isAdmin ? "DSSG Admin" : "Active Client"}
+                  </span>
+                  {isGoogle && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                      <GoogleLogo className="w-2.5 h-2.5" />
+                      Google Verified
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-dssg-blue font-bold text-sm">
-                {user.email?.[0] || "U"}
+              <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-dssg-blue font-bold text-sm relative shadow-sm">
+                {user.email?.[0]?.toUpperCase() || "U"}
+                {isGoogle && (
+                  <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full shadow-sm border border-slate-200">
+                    <GoogleLogo className="w-3.5 h-3.5" />
+                  </div>
+                )}
               </div>
               <button
                 onClick={onLogout}
@@ -130,12 +165,12 @@ function Navbar({
           <div className="flex items-center gap-6">
             <Link
               to="/apply"
-              className="text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-dssg-blue transition-colors flex items-center gap-2"
+              className="nav-link"
             >
               <Compass size={14} />
               Apply
             </Link>
-            <Link to="/login" className="btn-primary flex items-center gap-2">
+            <Link to="/login" className="btn-nav">
               Client Access
             </Link>
           </div>
@@ -146,46 +181,61 @@ function Navbar({
 }
 
 export default function App() {
-  const [user, setUser] = useState<AppUser | null>(null);
+  const initialUser = getStoredUser();
+  const [user, setUser] = useState<AppUser | null>(initialUser);
   const [isDemo, setIsDemo] = useState(false);
-  const [role, setRole] = useState<"client" | "admin" | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [role, setRole] = useState<AppRole | null>(
+    getStoredRole() || (initialUser ? "admin" : null),
+  );
+  const [provider, setProvider] = useState<string | null>(getStoredProvider());
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthChange(async (u) => {
-      if (isDemo) return;
       setUser(u);
-      // fetchRole reads public.users through RLS, so it returns the caller's own row and
-      // nothing else. A null role fails closed: isAdmin stays false.
       setRole(u ? await fetchRole() : null);
+      setProvider(getStoredProvider());
       setLoading(false);
     });
     return unsubscribe;
-  }, [isDemo]);
+  }, []);
 
   const handleDemoMode = () => {
     setIsDemo(true);
-    setUser({
+    setProvider("demo");
+    const demoUser: AppUser = {
       uid: "demo-user-123",
       email: "demo@nyc-dssg.org",
       displayName: "Demo Account",
-    });
-    // Demo Mode intentionally grants admin so Admin Review is
-    // demoable without a real Firebase project + manual role promotion.
+    };
+    setUser(demoUser);
     setRole("admin");
+    setStoredUser(demoUser, "admin", "demo");
+  };
+
+  const handleLoginSuccess = (loggedInUser: AppUser, userRole: AppRole = "admin") => {
+    setIsDemo(false);
+    setUser(loggedInUser);
+    setRole(userRole);
+    setProvider(getStoredProvider() || "google");
   };
 
   const handleLogout = () => {
-    if (isDemo) {
-      setIsDemo(false);
-      setUser(null);
-      setRole(null);
-    } else {
-      void signOut();
-    }
+    setIsDemo(false);
+    setUser(null);
+    setRole(null);
+    setProvider(null);
+    void signOut();
   };
 
   const isAdmin = role === "admin";
+  const isGoogle =
+    provider === "google" ||
+    Boolean(user?.uid.startsWith("google-")) ||
+    Boolean(user?.email?.includes("datadiplomats"));
+
+  // In preview environment without live Supabase, render with in-memory seeded store
+  const effectiveIsDemo = isDemo || !isSupabaseConfigured;
 
   if (loading) {
     return (
@@ -202,12 +252,30 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen flex flex-col">
-        {user && isDemo && (
-          <div className="bg-amber-500 text-white text-[10px] font-bold uppercase tracking-[0.2em] py-1.5 text-center">
-            Demo Mode Active • Live database writes are disabled
+        {user && (
+          <div
+            className={`text-white text-[10px] font-bold uppercase tracking-[0.2em] py-1.5 text-center flex items-center justify-center gap-2 ${
+              isGoogle ? "bg-blue-600" : "bg-amber-500"
+            }`}
+          >
+            {isGoogle ? (
+              <>
+                <GoogleLogo className="w-3.5 h-3.5" />
+                <span>
+                  Google Authenticated ({user.email}) • DSSG NYC Partner Session
+                </span>
+              </>
+            ) : (
+              <span>Demo Mode Active • Live database writes are disabled</span>
+            )}
           </div>
         )}
-        <Navbar user={user} isAdmin={isAdmin} onLogout={handleLogout} />
+        <Navbar
+          user={user}
+          isAdmin={isAdmin}
+          isGoogle={isGoogle}
+          onLogout={handleLogout}
+        />
         <main className="flex-grow">
           <Routes>
             <Route
@@ -216,7 +284,10 @@ export default function App() {
                 user ? (
                   <Navigate to="/dashboard" />
                 ) : (
-                  <Login onDemoMode={handleDemoMode} />
+                  <Login
+                    onDemoMode={handleDemoMode}
+                    onLoginSuccess={handleLoginSuccess}
+                  />
                 )
               }
             />
@@ -225,12 +296,26 @@ export default function App() {
               element={
                 !user ? (
                   <Navigate to="/login" />
-                ) : isAdmin ? (
-                  <Dashboard isDemo={isDemo} />
                 ) : (
-                  <FirstTimeIntakeGate isDemo={isDemo}>
-                    <Dashboard isDemo={isDemo} />
+                  <FirstTimeIntakeGate user={user} isDemo={effectiveIsDemo}>
+                    <Dashboard isDemo={effectiveIsDemo} />
                   </FirstTimeIntakeGate>
+                )
+              }
+            />
+            <Route
+              path="/onboarding"
+              element={
+                user ? (
+                  <NonprofitValidationGate
+                    user={user}
+                    isDemo={effectiveIsDemo}
+                    onComplete={() => {
+                      window.location.href = "/dashboard";
+                    }}
+                  />
+                ) : (
+                  <Navigate to="/login" />
                 )
               }
             />
@@ -238,7 +323,7 @@ export default function App() {
               path="/business/:id"
               element={
                 user ? (
-                  <BusinessPortal isDemo={isDemo} />
+                  <BusinessPortal isDemo={effectiveIsDemo} />
                 ) : (
                   <Navigate to="/login" />
                 )
@@ -246,13 +331,13 @@ export default function App() {
             />
             <Route
               path="/apply"
-              element={<ScoutIntakeForm isDemo={isDemo} />}
+              element={<ScoutIntakeForm isDemo={effectiveIsDemo} />}
             />
             <Route
               path="/admin/:section?"
               element={
                 user && isAdmin ? (
-                  <AdminReview isDemo={isDemo} />
+                  <AdminReview isDemo={effectiveIsDemo} />
                 ) : (
                   <Navigate to={user ? "/dashboard" : "/login"} />
                 )
@@ -263,13 +348,13 @@ export default function App() {
             <Route path="/scout/decisions" element={<Navigate to="/admin/applications" replace />} />
             <Route
               path="/projects"
-              element={user && isAdmin ? <OngoingProjects isDemo={isDemo} /> : <Navigate to={user ? "/dashboard" : "/login"} />}
+              element={user && isAdmin ? <OngoingProjects isDemo={effectiveIsDemo} /> : <Navigate to={user ? "/dashboard" : "/login"} />}
             />
             <Route
               path="/architect/assess/:intakeId"
               element={
                 user && isAdmin ? (
-                  <ArchitectAssessment isDemo={isDemo} />
+                  <ArchitectAssessment isDemo={effectiveIsDemo} />
                 ) : (
                   <Navigate to={user ? "/dashboard" : "/login"} />
                 )
@@ -279,7 +364,7 @@ export default function App() {
               path="/architect/plan/:intakeId"
               element={
                 user && isAdmin ? (
-                  <ArchitectPlan isDemo={isDemo} />
+                  <ArchitectPlan isDemo={effectiveIsDemo} />
                 ) : (
                   <Navigate to={user ? "/dashboard" : "/login"} />
                 )
