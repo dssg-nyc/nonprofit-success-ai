@@ -92,9 +92,10 @@ Grants to `authenticated` — the outer gate, independent of policy:
 - **Every `public.users` row is created server-side, not by the client** (0001_core). The
   `on_auth_user_created` trigger on `auth.users` runs `handle_new_user()` —
   `security definer`, `search_path = public, pg_temp` pinned — which inserts the profile
-  with `role` hard-coded to `'client'` and `on conflict (id) do nothing`. `display_name`
-  comes from `raw_user_meta_data->>'full_name'` or `->>'name'`, so OAuth signups get a name
-  and email/password signups get NULL.
+  with `role` hard-coded to `'client'` and `on conflict (id) do nothing`. The profile holds
+  no name or email (NPS #28): those stay in `auth.users` and Salesforce, and
+  `salesforce_contact_id` is linked out of band — the immutability trigger refuses it from
+  every API role.
 
   **This is now the live role-assignment mechanism.** `users_insert_self`'s
   `WITH CHECK (role = 'client')` still exists but is dead code on the normal signup path,
@@ -137,7 +138,7 @@ Grants to `authenticated` — the outer gate, independent of policy:
 | 6 | **Timeline Bypass** — revert a `completed` engagement to an earlier `status` | none in source rules (status updates unrestricted) | `engagements_enforce_transitions` trigger: `if old.status = 'completed' and new.status <> 'completed' then raise exception` — a stricter guarantee than the Firestore original had |
 | 7 | **Resource Exhaustion** — send a 1MB string as a business `name` | none in source rules | `check (char_length(name) <= 256)` on `businesses.name`, and equivalent length `CHECK`s on **most** text columns. **Seven are unbounded** — see the gap note below |
 | 8 | **Malicious ID** — supply a very long or special-character document ID | `isValidId()` regex (`^[a-zA-Z0-9_\-]+$`, <=128 chars) | not applicable — all primary keys are server-generated `uuid` (`gen_random_uuid()`; `uuid-ossp` is not installed), so no client ever supplies an ID string |
-| 9 | **PII Leak** — list all `users` rows to scrape emails | admin-only `list` | no `SELECT ... FOR ALL` policy on `users`; `users_select_self` scopes every SELECT to `id = auth.uid()`, and RLS is `FORCE`d so even the table owner role cannot bypass it |
+| 9 | **PII Leak** — list all `users` rows to scrape emails | admin-only `list` | no `SELECT ... FOR ALL` policy on `users`; `users_select_self` scopes every SELECT to `id = auth.uid()`, and RLS is `FORCE`d so even the table owner role cannot bypass it. Since NPS #28 there is nothing to scrape: no app table holds a name or email, only `salesforce_*_id` refs; the Salesforce stand-in's tables are closed to every API role and `salesforce.get_contacts()` is admin-only |
 | 10 | **State Corruption** — same as #6, listed separately in the source doc | terminal-state check | see #6 — one trigger covers both attack framings |
 | 11 | **Timestamp Forgery** — send a client-side `updated_at` far in the past/future | validate against `request.time` | not applicable — `updated_at` is set server-side by every enforcement trigger (`new.updated_at := now()`), and no policy grants a client the ability to set it directly |
 | 12 | **Unverified Account Write** — write data with an unverified email | conditional, `isEmailVerified()` was defined but never called | not ported — porting it would add an unenforced restriction the source never actually enforced (see `0001_core.sql`'s divergence note #3) |

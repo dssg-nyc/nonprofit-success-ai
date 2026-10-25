@@ -110,13 +110,13 @@ insert into engagements (id, business_id, owner_id, stage, status, organization_
    '5c007eed-b2b0-54aa-bdd7-5df7797b2536', :bob_id,   'initial_meeting', 'completed', :org_id);
 
 insert into scout_intakes (
-  id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+  id, org_name, salesforce_account_id, salesforce_contact_id, mission, scale, primary_need,
   problem_description, current_systems, timeline, referral_source,
   bucket, confidence, rationale, poc_score, clarity_score, foothold_score,
   composite_signal, flags, hitl_tier
 ) values (
   '0d73afe2-648b-54bc-8111-033b3e08bb8c',
-  'Seeded Org', 'Dana Reyes, Director', 'dana@example.org', 'We do good things.',
+  'Seeded Org', '001DS0000000002AAA', '003DS0000000002AAA', 'We do good things.',
   '400 clients/year', 'analyze_data', 'Cannot report outcomes.', 'Spreadsheets',
   'Next quarter', 'Word of mouth',
   'Analytics & Insight', 'High', 'Clear need.', 3, 3, 3, 'Ready', '{}', 'L2'
@@ -186,8 +186,8 @@ $$;
 -- routing result, no tier, no review keys. Append jsonb with `||` to vary a field.
 create or replace function tests.intake_payload() returns jsonb
 language sql immutable as $$
-  select '{"org_name": "Payload Org", "contact_name_role": "Sam Lee, ED",
-           "contact_email": "sam@example.org", "mission": "Mission text.",
+  select '{"org_name": "Payload Org", "salesforce_account_id": "001DS0000000002AAA",
+           "salesforce_contact_id": "003DS0000000002AAA", "mission": "Mission text.",
            "scale": "100 clients/year", "primary_need": "build_tool",
            "problem_description": "We need a dashboard.", "current_systems": "Sheets",
            "timeline": "Q3", "referral_source": "Referral",
@@ -201,11 +201,11 @@ create or replace function tests.intake_values(intake_id uuid) returns void
 language plpgsql as $$
 begin
   insert into scout_intakes (
-    id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+    id, org_name, salesforce_account_id, salesforce_contact_id, mission, scale, primary_need,
     problem_description, current_systems, timeline, referral_source,
     rationale, poc_score, clarity_score, foothold_score, composite_signal, hitl_tier
   ) values (
-    intake_id, 'New Org', 'Sam Lee, ED', 'sam@example.org', 'Mission text.',
+    intake_id, 'New Org', '001DS0000000002AAA', '003DS0000000002AAA', 'Mission text.',
     '100 clients/year', 'build_tool', 'We need a dashboard.', 'Sheets', 'Q3', 'Referral',
     'Reasoning.', 2, 2, 2, 'Conditional', 'L3'
   );

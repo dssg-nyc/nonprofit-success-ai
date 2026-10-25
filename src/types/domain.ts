@@ -21,7 +21,8 @@ export interface Business {
   industry?: string;
   ownerId: string;
   certified: boolean;
-  address?: string;
+  /** The organization's Salesforce Account; its address and contacts live there (NPS #28). */
+  salesforceAccountId?: string;
   createdAt: WriteTimestamp;
 }
 
@@ -51,8 +52,8 @@ export interface Engagement {
 
 export interface UserProfile {
   id: string;
-  email: string;
-  displayName?: string;
+  /** The person's Salesforce Contact. Email and name are the session's (auth.users), not the profile's. */
+  salesforceContactId?: string;
   role: 'client' | 'admin';
   createdAt: WriteTimestamp;
 }

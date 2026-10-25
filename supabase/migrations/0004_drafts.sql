@@ -250,8 +250,8 @@ grant select on promoted_lessons to authenticated;
 --
 -- Derived here, never taken from the payload: `id` (= the intake id), the denormalized
 -- handoff (`org_name`, `scout_bucket` = the reviewer's `final_bucket`, `scout_confidence`,
--- `scout_readiness`), `organization_id` (the intake's), `created_by` (auth.uid()) and
--- `created_by_email`. The maturity fields and documents are the handler's: the rubric is
+-- `scout_readiness`), `organization_id` (the intake's) and `created_by` (auth.uid()).
+-- The maturity fields and documents are the handler's: the rubric is
 -- TypeScript (agents/architect/scoring.ts), and the column checks bound what can be stored.
 --
 -- Errors (SQLSTATE -> what the handler should return):
@@ -285,7 +285,6 @@ declare
   v_intake      scout_intakes%rowtype;
   v_draft       architect_assessments%rowtype;
   v_existing    approvals%rowtype;
-  v_email       text;
   v_approval_id uuid := gen_random_uuid();
   v_superseded  uuid[];
   v_source_type provenance_source;
@@ -405,7 +404,6 @@ begin
   end if;
 
   v_draft := jsonb_populate_record(null::architect_assessments, p_payload);
-  select email into v_email from auth.users where id = v_uid;
 
   insert into architect_assessments (
     id, scout_intake_id, organization_id,
@@ -421,7 +419,7 @@ begin
     points, composite_level, override_applied, flagged_dimensions,
     remediation_only, cross_check_flag,
     charter, ninety_day_plan,
-    created_by, created_by_email,
+    created_by,
     source_type, generated_by, model, prompt_version, run_id
   ) values (
     v_intake_id, v_intake_id, v_intake.organization_id,
@@ -438,7 +436,7 @@ begin
     coalesce(v_draft.flagged_dimensions, '{}'),
     coalesce(v_draft.remediation_only, false), v_draft.cross_check_flag,
     v_draft.charter, v_draft.ninety_day_plan,
-    v_uid, coalesce(v_email, ''),
+    v_uid,
     v_source_type, 'architect', v_model, v_prompt,
     case when v_source_type = 'ai' then p_agent_run_id end
   )
@@ -482,7 +480,6 @@ begin
     charter                    = excluded.charter,
     ninety_day_plan            = excluded.ninety_day_plan,
     created_by                 = excluded.created_by,
-    created_by_email           = excluded.created_by_email,
     -- Provenance follows the new content. A re-conduct supersedes the old draft, so a
     -- stamp from an approval of that old content must not survive on the new one.
     source_type                = excluded.source_type,

@@ -85,8 +85,16 @@ export interface ScoutIntake {
   id: string;
   // intake fields (Tally-equivalent, public write-once)
   org_name: string;
-  contact_name_role: string;
-  contact_email: string;
+  /**
+   * The applicant's contact. Not a `scout_intakes` column (NPS #28): it lives on the
+   * Salesforce Contact `salesforceContactId` names. Present on demo intakes and when a
+   * caller has read the Contact back; absent on a row straight from the database.
+   */
+  contact_name_role?: string;
+  contact_email?: string;
+  /** The applicant's Salesforce Account and primary Contact (`api/_salesforce.ts`). */
+  salesforceAccountId?: string;
+  salesforceContactId?: string;
   mission: string;
   scale: string;
   primary_need: PrimaryNeed;
@@ -111,6 +119,7 @@ export interface ScoutIntake {
   reviewAction?: ScoutReviewAction;
   finalBucket?: ScoutBucket;
   reviewedBy?: string;
+  /** UI-only: the session's email on a review made in this tab (demo, optimistic update). Not stored. */
   reviewedByEmail?: string;
   reviewedAt?: WriteTimestamp;
   reviewNotes?: string;

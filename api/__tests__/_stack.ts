@@ -103,8 +103,9 @@ export async function intake(s: Stack): Promise<{ intakeId: string; userId: stri
   const { data, error } = await client.rpc('submit_scout_intake', {
     p_intake: {
       org_name: `Integration Intake ${session.userId.slice(0, 8)}`,
-      contact_name_role: 'Sam Lee, ED',
-      contact_email: 'sam@example.test',
+      // Seeded stand-in ids (supabase/migrations/reference/salesforce/seed.sql): the row holds no contact.
+      salesforce_account_id: '001DS0000000002AAA',
+      salesforce_contact_id: '003DS0000000002AAA',
       mission: 'Food access.',
       scale: '12 sites',
       primary_need: 'analyze_data',

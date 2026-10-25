@@ -145,7 +145,6 @@ export type Database = {
           composite_level: Database["public"]["Enums"]["composite_level"];
           created_at: string;
           created_by: string;
-          created_by_email: string;
           cross_check_flag: string | null;
           dc_score: number;
           di_score: number;
@@ -199,7 +198,6 @@ export type Database = {
           composite_level: Database["public"]["Enums"]["composite_level"];
           created_at?: string;
           created_by: string;
-          created_by_email: string;
           cross_check_flag?: string | null;
           dc_score: number;
           di_score: number;
@@ -252,7 +250,6 @@ export type Database = {
           composite_level?: Database["public"]["Enums"]["composite_level"];
           created_at?: string;
           created_by?: string;
-          created_by_email?: string;
           cross_check_flag?: string | null;
           dc_score?: number;
           di_score?: number;
@@ -380,7 +377,6 @@ export type Database = {
       };
       businesses: {
         Row: {
-          address: string | null;
           certified: boolean;
           created_at: string;
           ein: string | null;
@@ -389,13 +385,13 @@ export type Database = {
           name: string;
           organization_id: string | null;
           owner_id: string;
+          salesforce_account_id: string | null;
           scout_intake_id: string | null;
           type: Database["public"]["Enums"]["business_type"];
           updated_at: string;
         };
         ComputedFields: never;
         Insert: {
-          address?: string | null;
           certified?: boolean;
           created_at?: string;
           ein?: string | null;
@@ -404,12 +400,12 @@ export type Database = {
           name: string;
           organization_id?: string | null;
           owner_id: string;
+          salesforce_account_id?: string | null;
           scout_intake_id?: string | null;
           type: Database["public"]["Enums"]["business_type"];
           updated_at?: string;
         };
         Update: {
-          address?: string | null;
           certified?: boolean;
           created_at?: string;
           ein?: string | null;
@@ -418,6 +414,7 @@ export type Database = {
           name?: string;
           organization_id?: string | null;
           owner_id?: string;
+          salesforce_account_id?: string | null;
           scout_intake_id?: string | null;
           type?: Database["public"]["Enums"]["business_type"];
           updated_at?: string;
@@ -1082,17 +1079,20 @@ export type Database = {
           created_at: string;
           id: string;
           name: string;
+          salesforce_account_id: string | null;
         };
         ComputedFields: never;
         Insert: {
           created_at?: string;
           id?: string;
           name: string;
+          salesforce_account_id?: string | null;
         };
         Update: {
           created_at?: string;
           id?: string;
           name?: string;
+          salesforce_account_id?: string | null;
         };
         Relationships: [];
       };
@@ -1102,8 +1102,6 @@ export type Database = {
           clarity_score: number;
           composite_signal: Database["public"]["Enums"]["scout_composite_signal"];
           confidence: Database["public"]["Enums"]["scout_confidence"] | null;
-          contact_email: string;
-          contact_name_role: string;
           current_systems: string;
           final_bucket: Database["public"]["Enums"]["scout_bucket"] | null;
           flags: string[];
@@ -1127,11 +1125,12 @@ export type Database = {
           review_status: Database["public"]["Enums"]["scout_review_status"];
           reviewed_at: string | null;
           reviewed_by: string | null;
-          reviewed_by_email: string | null;
           routing_model: string | null;
           routing_prompt_version: string | null;
           routing_run_id: string | null;
           routing_source: Database["public"]["Enums"]["provenance_source"];
+          salesforce_account_id: string;
+          salesforce_contact_id: string;
           scale: string;
           submitted_at: string;
           timeline: string;
@@ -1142,8 +1141,6 @@ export type Database = {
           clarity_score: number;
           composite_signal: Database["public"]["Enums"]["scout_composite_signal"];
           confidence?: Database["public"]["Enums"]["scout_confidence"] | null;
-          contact_email: string;
-          contact_name_role: string;
           current_systems: string;
           final_bucket?: Database["public"]["Enums"]["scout_bucket"] | null;
           flags?: string[];
@@ -1167,11 +1164,12 @@ export type Database = {
           review_status?: Database["public"]["Enums"]["scout_review_status"];
           reviewed_at?: string | null;
           reviewed_by?: string | null;
-          reviewed_by_email?: string | null;
           routing_model?: string | null;
           routing_prompt_version?: string | null;
           routing_run_id?: string | null;
           routing_source?: Database["public"]["Enums"]["provenance_source"];
+          salesforce_account_id: string;
+          salesforce_contact_id: string;
           scale: string;
           submitted_at?: string;
           timeline: string;
@@ -1181,8 +1179,6 @@ export type Database = {
           clarity_score?: number;
           composite_signal?: Database["public"]["Enums"]["scout_composite_signal"];
           confidence?: Database["public"]["Enums"]["scout_confidence"] | null;
-          contact_email?: string;
-          contact_name_role?: string;
           current_systems?: string;
           final_bucket?: Database["public"]["Enums"]["scout_bucket"] | null;
           flags?: string[];
@@ -1206,11 +1202,12 @@ export type Database = {
           review_status?: Database["public"]["Enums"]["scout_review_status"];
           reviewed_at?: string | null;
           reviewed_by?: string | null;
-          reviewed_by_email?: string | null;
           routing_model?: string | null;
           routing_prompt_version?: string | null;
           routing_run_id?: string | null;
           routing_source?: Database["public"]["Enums"]["provenance_source"];
+          salesforce_account_id?: string;
+          salesforce_contact_id?: string;
           scale?: string;
           submitted_at?: string;
           timeline?: string;
@@ -1337,27 +1334,24 @@ export type Database = {
       users: {
         Row: {
           created_at: string;
-          display_name: string | null;
-          email: string;
           id: string;
           role: Database["public"]["Enums"]["user_role"];
+          salesforce_contact_id: string | null;
           updated_at: string;
         };
         ComputedFields: never;
         Insert: {
           created_at?: string;
-          display_name?: string | null;
-          email: string;
           id: string;
           role?: Database["public"]["Enums"]["user_role"];
+          salesforce_contact_id?: string | null;
           updated_at?: string;
         };
         Update: {
           created_at?: string;
-          display_name?: string | null;
-          email?: string;
           id?: string;
           role?: Database["public"]["Enums"]["user_role"];
+          salesforce_contact_id?: string | null;
           updated_at?: string;
         };
         Relationships: [];

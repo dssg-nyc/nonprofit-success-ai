@@ -59,10 +59,17 @@ describe('POST /api/scout-approve (integration)', () => {
     });
     const { data: business } = await s.service
       .from('businesses')
-      .select('scout_intake_id, owner_id, organization_id, type')
+      .select('scout_intake_id, owner_id, organization_id, type, salesforce_account_id')
       .eq('id', first.businessId)
       .single();
-    expect(business).toEqual({ scout_intake_id: filed.intakeId, owner_id: staff.userId, organization_id: staff.organizationId, type: 'nonprofit' });
+    // The business inherits the intake's Salesforce Account (NPS #28), the stand-in id _stack.ts files.
+    expect(business).toEqual({
+      scout_intake_id: filed.intakeId,
+      owner_id: staff.userId,
+      organization_id: staff.organizationId,
+      type: 'nonprofit',
+      salesforce_account_id: '001DS0000000002AAA',
+    });
     const { data: engagement } = await s.service
       .from('engagements')
       .select('business_id, stage, status')

@@ -17,7 +17,9 @@ enabled = true
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+# `salesforce` is the local-only Salesforce stand-in (supabase/salesforce/, loaded by the
+# seed below); exposed so api/_salesforce.ts can call its RPCs. Tables there grant nothing.
+schemas = ["public", "graphql_public", "salesforce"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
@@ -74,8 +76,9 @@ schema_paths = []
 # seed.sql is git-ignored (team emails + a local password, shared out of band; `make
 # db-reset` writes an empty placeholder when it is absent). Staff accounts and the DSSG NYC
 # org only — partner data comes from real flows through the app, never from checked-in rows.
+# The Salesforce stand-in (tracked, fictional rows) loads first: supabase/salesforce/README.md.
 enabled = true
-sql_paths = ["./seed.sql"]
+sql_paths = ["./migrations/reference/salesforce/schema.sql", "./migrations/reference/salesforce/seed.sql", "./seed.sql"]
 
 [db.network_restrictions]
 # Enable management of network restrictions.

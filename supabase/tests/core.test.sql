@@ -23,10 +23,10 @@ values ('66666666-6666-6666-6666-666666666666', 'eve@example.org',
         '{"role": "admin", "full_name": "Eve"}'::jsonb);
 
 select results_eq(
-  $$ select role::text, display_name from users
+  $$ select role::text, salesforce_contact_id::text from users
       where id = '66666666-6666-6666-6666-666666666666' $$,
-  $$ values ('client'::text, 'Eve'::text) $$,
-  'signup metadata cannot choose the role, but does carry the name (provisioning trigger)'
+  $$ values ('client'::text, null::text) $$,
+  'signup metadata cannot choose the role, and the name stays in auth (NPS #28: no PII on the profile)'
 );
 
 -- The public intake form's anonymous sign-in (seeded above) is a token, not a member.
@@ -54,8 +54,8 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$ insert into users (id, email, role)
-     values ('55555555-5555-5555-5555-555555555555', 'x@example.org', 'admin') $$,
+  $$ insert into users (id, role)
+     values ('55555555-5555-5555-5555-555555555555', 'admin') $$,
   '42501',
   null,
   'anon cannot create a user row'
@@ -92,12 +92,12 @@ select throws_ok(
 
 select throws_ok(
   $$ insert into scout_intakes (
-       id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+       id, org_name, salesforce_account_id, salesforce_contact_id, mission, scale, primary_need,
        problem_description, current_systems, timeline, referral_source,
        rationale, poc_score, clarity_score, foothold_score, composite_signal, hitl_tier,
        review_status, review_action, final_bucket
      ) values (
-       'a979b501-97f4-5e4f-acd2-83209784d7b7', 'Sneaky Org', 'X', 'x@example.org', 'M',
+       'a979b501-97f4-5e4f-acd2-83209784d7b7', 'Sneaky Org', '001DS0000000002AAA', '003DS0000000002AAA', 'M',
        'S', 'build_tool', 'P', 'C', 'T', 'R', 'Rat', 2, 2, 2, 'Conditional', 'L3',
        'reviewed', 'approved', 'ML / Predictive'
      ) $$,
@@ -179,7 +179,6 @@ select lives_ok(
             review_action = 'approved',
             final_bucket  = 'Analytics & Insight',
             reviewed_by   = '33333333-3333-3333-3333-333333333333',
-            reviewed_by_email = 'admin@dssg.nyc',
             reviewed_at   = now(),
             -- 0001_core: review also assigns the intake to the reviewer's org (null -> org).
             organization_id = 'b07a14e0-a781-53ba-a553-3e3aa287acf1'
@@ -245,8 +244,8 @@ select throws_ok(
 select tests.login_as(:alice_id);
 
 select results_eq(
-  $$ select email from users $$,
-  $$ values ('alice@example.org'::text) $$,
+  $$ select id from users $$,
+  $$ values ('11111111-1111-1111-1111-111111111111'::uuid) $$,
   'a user sees only their own profile row (rules:97)'
 );
 
@@ -257,15 +256,19 @@ select throws_ok(
   'role is immutable — no self-elevation to admin (rules:100)'
 );
 
-select lives_ok(
-  $$ update users set display_name = 'Alice A.'
+-- The profile holds no editable PII any more (NPS #28): the name lives in Salesforce,
+-- and the Contact link is set out of band, never by the user it describes.
+select throws_ok(
+  $$ update users set salesforce_contact_id = '003DS0000000001AAA'
      where id = '11111111-1111-1111-1111-111111111111' $$,
-  'a user CAN update their own display_name (rules:101)'
+  '23514',
+  null,
+  'a user cannot link their own profile to a Salesforce Contact (NPS #28)'
 );
 
 select throws_ok(
-  $$ insert into users (id, email, role)
-     values ('55555555-5555-5555-5555-555555555555', 'mallory@example.org', 'client') $$,
+  $$ insert into users (id, role)
+     values ('55555555-5555-5555-5555-555555555555', 'client') $$,
   '42501',
   null,
   'a user cannot create a profile row for somebody else (rules:98)'
@@ -728,7 +731,7 @@ select throws_ok(
        q17a_wish_list, q17b_biggest_worry, q18_past_blockers,
        di_score, gov_score, tooling_score, dc_score, tc_score,
        points, composite_level, charter, ninety_day_plan,
-       created_by, created_by_email
+       created_by
      ) values (
        '0d73afe2-648b-54bc-8111-033b3e08bb8c', '0d73afe2-648b-54bc-8111-033b3e08bb8c',
        'Seeded Org', 'Analytics & Insight', 'Ready',
@@ -737,7 +740,7 @@ select throws_ok(
        'board', 'semi_automated', '{spreadsheets}', 'some_adhoc', 'requires_approval',
        'wish', 'worry', 'blockers', 2, 2, 2, 2, 2, 10, 'Developing',
        '{}'::jsonb, '{}'::jsonb,
-       '11111111-1111-1111-1111-111111111111', 'alice@example.org'
+       '11111111-1111-1111-1111-111111111111'
      ) $$,
   '42501',
   null,
@@ -762,7 +765,7 @@ select throws_ok(
        q17a_wish_list, q17b_biggest_worry, q18_past_blockers,
        di_score, gov_score, tooling_score, dc_score, tc_score,
        points, composite_level, charter, ninety_day_plan,
-       created_by, created_by_email
+       created_by
      ) values (
        '0d73afe2-648b-54bc-8111-033b3e08bb8c', '0d73afe2-648b-54bc-8111-033b3e08bb8c',
        'Seeded Org', 'Analytics & Insight', 'Ready',
@@ -771,7 +774,7 @@ select throws_ok(
        'board', 'semi_automated', '{spreadsheets}', 'some_adhoc', 'requires_approval',
        'wish', 'worry', 'blockers', 2, 2, 2, 2, 2, 10, 'Developing',
        '{}'::jsonb, '{}'::jsonb,
-       '33333333-3333-3333-3333-333333333333', 'admin@dssg.nyc'
+       '33333333-3333-3333-3333-333333333333'
      ) $$,
   '42501',
   null,
@@ -804,7 +807,7 @@ insert into architect_assessments (
        q17a_wish_list, q17b_biggest_worry, q18_past_blockers,
        di_score, gov_score, tooling_score, dc_score, tc_score,
        points, composite_level, charter, ninety_day_plan,
-       created_by, created_by_email
+       created_by
      ) values (
        '0d73afe2-648b-54bc-8111-033b3e08bb8c', '0d73afe2-648b-54bc-8111-033b3e08bb8c',
        'Seeded Org', 'Analytics & Insight', 'Ready',
@@ -813,7 +816,7 @@ insert into architect_assessments (
        'board', 'semi_automated', '{spreadsheets}', 'some_adhoc', 'requires_approval',
        'wish', 'worry', 'blockers', 2, 2, 2, 2, 2, 10, 'Developing',
        '{}'::jsonb, '{}'::jsonb,
-       '33333333-3333-3333-3333-333333333333', 'admin@dssg.nyc'
+       '33333333-3333-3333-3333-333333333333'
      );
 select tests.login_as(:admin_id);
 
@@ -928,12 +931,12 @@ create or replace function tests.intake_routing(intake_id uuid, src provenance_s
 returns void language plpgsql as $$
 begin
   insert into scout_intakes (
-    id, org_name, contact_name_role, contact_email, mission, scale, primary_need,
+    id, org_name, salesforce_account_id, salesforce_contact_id, mission, scale, primary_need,
     problem_description, current_systems, timeline, referral_source,
     rationale, poc_score, clarity_score, foothold_score, composite_signal, hitl_tier,
     routing_source, routing_run_id
   ) values (
-    intake_id, 'Routed Org', 'Sam Lee, ED', 'sam@example.org', 'Mission text.',
+    intake_id, 'Routed Org', '001DS0000000002AAA', '003DS0000000002AAA', 'Mission text.',
     '100 clients/year', 'build_tool', 'We need a dashboard.', 'Sheets', 'Q3', 'Referral',
     'Reasoning.', 2, 2, 2, 'Conditional', 'L3', src, run
   );

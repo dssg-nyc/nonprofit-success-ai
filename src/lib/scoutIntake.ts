@@ -9,10 +9,13 @@ import type { ScoutIntake } from '../types';
  * generic row mapper camelCases every column, so without this step `org_name`,
  * `composite_signal` and the scores read as `undefined` and the review queue renders blank
  * cards against real rows (demo fixtures are built in snake_case, which hid it).
+ *
+ * The row has no contact (NPS #28): `salesforceAccountId` / `salesforceContactId` come
+ * through camelCased, and the name and email stay in Salesforce.
  */
 export function scoutIntakeFromRow(row: Record<string, unknown>): ScoutIntake {
   const {
-    orgName, contactNameRole, contactEmail, primaryNeed, primaryNeedOther,
+    orgName, primaryNeed, primaryNeedOther,
     problemDescription, currentSystems, referralSource,
     pocScore, clarityScore, footholdScore, compositeSignal,
     ...rest
@@ -20,8 +23,6 @@ export function scoutIntakeFromRow(row: Record<string, unknown>): ScoutIntake {
   return {
     ...(rest as Omit<ScoutIntake, SnakeField>),
     org_name: orgName as string,
-    contact_name_role: contactNameRole as string,
-    contact_email: contactEmail as string,
     primary_need: primaryNeed as ScoutIntake['primary_need'],
     primary_need_other: (primaryNeedOther as string | null | undefined) ?? undefined,
     problem_description: problemDescription as string,
@@ -36,6 +37,6 @@ export function scoutIntakeFromRow(row: Record<string, unknown>): ScoutIntake {
 
 /** The `ScoutIntake` keys that stay snake_case — the form's and the scorer's shape. */
 type SnakeField =
-  | 'org_name' | 'contact_name_role' | 'contact_email' | 'primary_need' | 'primary_need_other'
+  | 'org_name' | 'primary_need' | 'primary_need_other'
   | 'problem_description' | 'current_systems' | 'referral_source'
   | 'poc_score' | 'clarity_score' | 'foothold_score' | 'composite_signal';

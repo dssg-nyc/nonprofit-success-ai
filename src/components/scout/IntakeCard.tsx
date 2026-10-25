@@ -38,7 +38,7 @@ export function Badge({ label, className }: { label: string; className: string }
  * scout.md "Open: score definitions vs code").
  */
 const READINESS: { key: 'poc_score' | 'clarity_score' | 'foothold_score'; label: string; means: string; from: (i: ScoutIntake) => string }[] = [
-  { key: 'poc_score', label: 'POC', means: 'A named contact with a role who can unblock work', from: i => `${i.contact_name_role} · ${i.timeline}` },
+  { key: 'poc_score', label: 'POC', means: 'A named contact with a role who can unblock work', from: i => (i.contact_name_role ? `${i.contact_name_role} · ${i.timeline}` : i.timeline) },
   { key: 'clarity_score', label: 'Clarity', means: 'How well-formed their own ask is', from: i => i.problem_description },
   { key: 'foothold_score', label: 'Foothold', means: 'Real systems and data to build on', from: i => i.current_systems },
 ];
@@ -148,9 +148,10 @@ export function IntakeHeader({ intake, right }: { intake: ScoutIntake; right?: R
     <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
       <div className="min-w-0">
         <h3 className="text-xl font-display font-bold text-dssg-blue leading-tight">{intake.org_name}</h3>
-        <p className="text-sm font-semibold text-slate-700 mt-1">{intake.contact_name_role}</p>
+        {/* A live row has no contact: it is the Salesforce Contact salesforceContactId names (NPS #28). */}
+        {intake.contact_name_role && <p className="text-sm font-semibold text-slate-700 mt-1">{intake.contact_name_role}</p>}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-400 mt-1">
-          <span className="flex items-center gap-1.5 text-[11px] font-medium"><Mail size={11} />{intake.contact_email}</span>
+          {intake.contact_email && <span className="flex items-center gap-1.5 text-[11px] font-medium"><Mail size={11} />{intake.contact_email}</span>}
           <span className="flex items-center gap-1.5 text-[11px] font-medium"><Clock size={11} />applied {relativeTime(intake.submittedAt?.seconds)}</span>
         </div>
       </div>

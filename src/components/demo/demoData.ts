@@ -385,7 +385,6 @@ function buildAssessment(seed: OrgSeed, intake: ScoutIntake): ArchitectAssessmen
     charter: generateCharter(genInput),
     ninetyDayPlan: generateNinetyDayPlan(genInput),
     createdBy: DEMO_USER.uid,
-    createdByEmail: DEMO_USER.email,
     createdAt: { seconds: Date.now() / 1000 - seed.ageSeconds + 7200 },
     updatedAt: { seconds: Date.now() / 1000 - seed.ageSeconds + 7200 },
   };

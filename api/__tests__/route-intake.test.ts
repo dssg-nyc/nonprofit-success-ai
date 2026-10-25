@@ -13,15 +13,21 @@ const db = vi.hoisted(() => ({
   rpcResults: {} as Record<string, Result>,
   rpcCalls: [] as Array<{ fn: string; args: Record<string, unknown> }>,
 }));
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({
-    auth: { getUser: async () => db.user },
-    rpc: async (fn: string, args: Record<string, unknown>) => {
-      db.rpcCalls.push({ fn, args });
-      return db.rpcResults[fn] ?? { data: null, error: null };
-    },
-  }),
-}));
+vi.mock('@supabase/supabase-js', () => {
+  const rpc = (schema: string) => async (fn: string, args: Record<string, unknown>) => {
+    const name = schema === 'public' ? fn : `${schema}.${fn}`;
+    db.rpcCalls.push({ fn: name, args });
+    return db.rpcResults[name] ?? { data: null, error: null };
+  };
+  return {
+    createClient: () => ({
+      auth: { getUser: async () => db.user },
+      rpc: rpc('public'),
+      // The Salesforce stand-in (`_salesforce.ts`) is reached through its own schema.
+      schema: (name: string) => ({ rpc: rpc(name) }),
+    }),
+  };
+});
 
 const agent = vi.hoisted(() => ({
   calls: [] as unknown[],
@@ -124,12 +130,16 @@ const logged = () =>
     (c) => JSON.parse(String(c[0])) as Record<string, unknown>,
   );
 const budgetCalls = () => db.rpcCalls.filter((c) => c.fn === 'check_model_budget');
+const salesforceCalls = () => db.rpcCalls.filter((c) => c.fn === 'salesforce.upsert_applicant');
+const SF_ACCOUNT = '001DS0000000002AAA';
+const SF_CONTACT = '003DS0000000002AAA';
 
 beforeEach(() => {
   agent.calls = [];
   db.rpcCalls = [];
   db.user = { data: { user: { id: 'anon-user-1' } }, error: null };
   db.rpcResults = {
+    'salesforce.upsert_applicant': { data: { account_id: SF_ACCOUNT, contact_id: SF_CONTACT }, error: null },
     check_model_budget: { data: 19, error: null },
     submit_scout_intake: filed('L2', 'ai'),
   };
@@ -297,7 +307,8 @@ describe('POST /api/route-intake', () => {
     expect(call.args.p_agent_run_id).toBe('run-1');
     expect(call.args.p_intake).toMatchObject({
       org_name: INTAKE.org_name,
-      contact_email: INTAKE.contact_email,
+      salesforce_account_id: SF_ACCOUNT,
+      salesforce_contact_id: SF_CONTACT,
       primary_need: 'ml_predictive',
       primary_need_other: '',
       bucket: 'ML / Predictive',
@@ -308,6 +319,49 @@ describe('POST /api/route-intake', () => {
     expect(call.args.p_intake).not.toHaveProperty('hitlTier');
     expect(call.args.p_intake).not.toHaveProperty('hitl_tier');
     expect(call.args.p_intake).not.toHaveProperty('review_status');
+  });
+
+  // NPS #28: the row keeps Salesforce ids only — the name and email go to Salesforce.
+  describe('the applicant contact (Salesforce)', () => {
+    beforeEach(() => {
+      agent.respond = async () => ({ result: RESULT, runId: 'run-1' });
+    });
+
+    it('upserts the applicant in Salesforce first, and files only the ids', async () => {
+      await post(JSON.stringify({ ...INTAKE, ein: '13-1624100' }));
+      expect(salesforceCalls()).toEqual([
+        {
+          fn: 'salesforce.upsert_applicant',
+          args: {
+            p_org_name: INTAKE.org_name,
+            p_ein: '131624100',
+            p_contact_name_role: INTAKE.contact_name_role,
+            p_contact_email: INTAKE.contact_email,
+          },
+        },
+      ]);
+      const filedIntake = submitCalls()[0].args.p_intake as Record<string, unknown>;
+      expect(filedIntake).not.toHaveProperty('contact_name_role');
+      expect(filedIntake).not.toHaveProperty('contact_email');
+      expect(JSON.stringify(filedIntake)).not.toContain(INTAKE.contact_email);
+    });
+
+    it('502 salesforce_unavailable when Salesforce refuses, before any model call or write, with no PII logged', async () => {
+      db.rpcResults['salesforce.upsert_applicant'] = { data: null, error: { code: 'PGRST106' } };
+      const res = await post(JSON.stringify(INTAKE));
+      expect(res.status).toBe(502);
+      expect(await res.json()).toEqual({ error: 'salesforce_unavailable' });
+      expect(agent.calls).toHaveLength(0);
+      expect(submitCalls()).toHaveLength(0);
+      expect(JSON.stringify(logged())).not.toContain(INTAKE.contact_email);
+    });
+
+    it('502 salesforce_unavailable when Salesforce answers ids of the wrong shape', async () => {
+      db.rpcResults['salesforce.upsert_applicant'] = { data: { account_id: 'nope', contact_id: SF_CONTACT }, error: null };
+      const res = await post(JSON.stringify(INTAKE));
+      expect(res.status).toBe(502);
+      expect(submitCalls()).toHaveLength(0);
+    });
   });
 
   // The tier in the response is the tier the RPC filed. The RPC derives it from the run,
@@ -386,7 +440,7 @@ describe('POST /api/route-intake', () => {
       vi.stubEnv('MODEL_CALLS_PER_HOUR', '5');
       agent.respond = async () => ({ result: RESULT, runId: 'run-1' });
       await post(JSON.stringify(INTAKE));
-      expect(db.rpcCalls[0]).toEqual({ fn: 'check_model_budget', args: { p_limit: 5 } });
+      expect(budgetCalls()[0]).toEqual({ fn: 'check_model_budget', args: { p_limit: 5 } });
     });
 
     // The public form never refuses an applicant over quota: the hour spent, the intake

@@ -120,7 +120,7 @@ async function filedRow(intakeId: string) {
   cleanup.intake(intakeId);
   const { data, error } = await s.service
     .from('scout_intakes')
-    .select('hitl_tier, routing_source, routing_run_id, routing_model, routing_prompt_version, bucket, confidence, flags, registry, registry_lookup')
+    .select('hitl_tier, routing_source, routing_run_id, routing_model, routing_prompt_version, bucket, confidence, flags, registry, registry_lookup, salesforce_account_id, salesforce_contact_id')
     .eq('id', intakeId)
     .single();
   if (error || !data) throw new Error(`filedRow: ${error?.message}`);
@@ -157,6 +157,20 @@ describe('POST /api/route-intake (integration)', () => {
     expect(row).toMatchObject({ hitl_tier: 'L3', routing_source: 'derived', routing_run_id: null });
     expect(body).toMatchObject({ registry: null, registryLookup: 'not_found' });
     expect(row).toMatchObject({ registry: null, registry_lookup: 'not_found' });
+  });
+
+  // NPS #28: the contact goes to the Salesforce stand-in, the row keeps its ids.
+  it('files the applicant in the Salesforce stand-in and keeps only the ids, idempotently', async () => {
+    const { token } = await session();
+    const first = await (await POST(jsonRequest('/api/route-intake', intake(), token))).json();
+    const second = await (await POST(jsonRequest('/api/route-intake', intake(), token))).json();
+    const [a, b] = [await filedRow(first.intakeId), await filedRow(second.intakeId)];
+    expect(a.salesforce_account_id).toMatch(/^001[a-zA-Z0-9]{15}$/);
+    expect(a.salesforce_contact_id).toMatch(/^003[a-zA-Z0-9]{15}$/);
+    expect(b).toMatchObject({
+      salesforce_account_id: a.salesforce_account_id,
+      salesforce_contact_id: a.salesforce_contact_id,
+    });
   });
 
   it('files a model result as L2 / ai only through a successful L2 run the recorder wrote', async () => {
