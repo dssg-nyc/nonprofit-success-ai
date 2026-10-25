@@ -2,6 +2,7 @@ import {createClient} from '@supabase/supabase-js';
 
 import type {Database} from './database.types';
 import {rowToDomain} from './rows';
+import {clearLoginIntent, writeLoginIntent} from './loginIntent';
 
 // Supabase client, following this repo's fail-fast env convention: a missing variable
 // fails at import with a named error.
@@ -40,6 +41,8 @@ export interface AppUser {
   uid: string;
   email: string | null;
   displayName: string | null;
+  // How the account signed in ('google', 'email', ...). Read from the Supabase session.
+  provider?: string | null;
 }
 
 export type AppRole = 'client' | 'admin';
@@ -48,7 +51,13 @@ export type AppRole = 'client' | 'admin';
 // require a token) is not a signed-in member: it has no profile row and no role, and
 // must not route the visitor into the portal. It reads as "nobody" here.
 const toAppUser = (
-  u: {id: string; email?: string | null; is_anonymous?: boolean; user_metadata?: Record<string, unknown>} | null,
+  u: {
+    id: string;
+    email?: string | null;
+    is_anonymous?: boolean;
+    user_metadata?: Record<string, unknown>;
+    app_metadata?: Record<string, unknown>;
+  } | null,
 ): AppUser | null =>
   u && !u.is_anonymous
     ? {
@@ -58,6 +67,7 @@ const toAppUser = (
           (u.user_metadata?.full_name as string | undefined) ??
           (u.user_metadata?.name as string | undefined) ??
           null,
+        provider: (u.app_metadata?.provider as string | undefined) ?? null,
       }
     : null;
 
@@ -166,7 +176,9 @@ export function onAuthChange(callback: (user: AppUser | null) => void): () => vo
  */
 export async function fetchRole(): Promise<AppRole | null> {
   if (!isSupabaseConfigured) {
-    return getStoredRole() || (getStoredUser() ? 'admin' : null);
+    // Demo-only local session. It keeps whatever role it was stored with and never
+    // defaults to admin.
+    return getStoredRole();
   }
   try {
     const {data, error} = await supabase.from('users').select('role').maybeSingle();
@@ -174,6 +186,25 @@ export async function fetchRole(): Promise<AppRole | null> {
     return data.role as AppRole;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Starts the real Google sign-in. Google's own account chooser picks the account, and the
+ * session comes back to /login (App.tsx checks the tab's intent against the profile role).
+ */
+export async function signInWithGoogle(intent: 'nonprofit' | 'diplomat'): Promise<void> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Google sign-in needs the live database. Use Demo Mode to explore the portal.');
+  }
+  writeLoginIntent(intent);
+  const {error} = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {redirectTo: `${window.location.origin}/login`},
+  });
+  if (error) {
+    clearLoginIntent();
+    throw error;
   }
 }
 

@@ -14,7 +14,8 @@ import { motion } from "motion/react";
 
 // Components
 import Login from "../components/auth/Login";
-import { GoogleLogo } from "../components/auth/GoogleAuthModal";
+import { GoogleLogo } from "../components/auth/GoogleLogo";
+import { admitSignIn, clearLoginIntent, readLoginIntent, setLoginNotice } from "../lib/loginIntent";
 import Dashboard from "../components/dashboard/Dashboard";
 import BusinessPortal from "../components/business/BusinessPortal";
 import ScoutIntakeForm from "../components/scout/ScoutIntakeForm";
@@ -33,16 +34,34 @@ export default function App() {
   const initialUser = getStoredUser();
   const [user, setUser] = useState<AppUser | null>(initialUser);
   const [isDemo, setIsDemo] = useState(false);
-  const [role, setRole] = useState<AppRole | null>(
-    getStoredRole() || (initialUser ? "admin" : null),
-  );
+  const [role, setRole] = useState<AppRole | null>(getStoredRole());
   const [provider, setProvider] = useState<string | null>(getStoredProvider());
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthChange(async (u) => {
-      setUser(u);
-      setRole(u ? await fetchRole() : null);
+      // The Google redirect lands here with a session. Check the tab the person chose
+      // against the profile role before letting the session in. The initial callback has
+      // no session, so the intent is kept until a session actually arrives.
+      if (u) {
+        const nextRole = await fetchRole();
+        const verdict = admitSignIn(readLoginIntent(), nextRole);
+        clearLoginIntent();
+        if (!verdict.allowed) {
+          setLoginNotice(verdict.notice ?? "Sign-in was refused.");
+          void signOut();
+          setUser(null);
+          setRole(null);
+          setProvider(null);
+          setLoading(false);
+          return;
+        }
+        setUser(u);
+        setRole(nextRole);
+      } else {
+        setUser(null);
+        setRole(null);
+      }
       setProvider(getStoredProvider());
       setLoading(false);
     });
@@ -78,10 +97,8 @@ export default function App() {
   };
 
   const isAdmin = role === "admin";
-  const isGoogle =
-    provider === "google" ||
-    Boolean(user?.uid.startsWith("google-")) ||
-    Boolean(user?.email?.includes("datadiplomats"));
+  // Only a session Supabase issued through Google counts as Google-verified.
+  const isGoogle = provider === "google" || user?.provider === "google";
 
   // In preview environment without live Supabase, render with in-memory seeded store
   const effectiveIsDemo = isDemo || !isSupabaseConfigured;

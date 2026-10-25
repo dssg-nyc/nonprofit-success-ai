@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import type { AppUser } from "../../lib/supabase";
-import { GoogleLogo } from "../auth/GoogleAuthModal";
+import { GoogleLogo } from "../auth/GoogleLogo";
 
 // Markup and class names mirror the website header (dssg-nyc.github.io Header.jsx);
 // the styles live in src/app/index.css under "Site header".
