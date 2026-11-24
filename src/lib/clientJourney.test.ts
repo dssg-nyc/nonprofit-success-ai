@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildClientJourney, nextClientStep, type ClientJourneyContext } from './clientJourney.js';
+import { buildClientJourney, clientStepPagePath, nextClientStep, stepIdFromSlug, type ClientJourneyContext } from './clientJourney.js';
 
 const base: ClientJourneyContext = {
   hasAccount: false,
@@ -75,5 +75,33 @@ describe('buildClientJourney', () => {
     expect(steps.map((s) => s.id)).not.toContain('membership');
     expect(steps.map((s) => s.id)).not.toContain('membership_offer' as never);
     expect(steps[steps.length - 1].id).toBe('hackathon_ready');
+  });
+});
+
+describe('step pages', () => {
+  it('reuses the pre-existing pages for the onboarding steps', () => {
+    const steps = buildClientJourney(base);
+    const pathOf = (id: string) => clientStepPagePath(steps.find((s) => s.id === id)!);
+    expect(pathOf('account_created')).toBe('/login');
+    expect(pathOf('nonprofit_validated')).toBe('/onboarding');
+    expect(pathOf('application_approved')).toBe('/apply');
+  });
+
+  it('gives every engagement step its own /journey page', () => {
+    const steps = buildClientJourney(base);
+    const pathOf = (id: string) => clientStepPagePath(steps.find((s) => s.id === id)!);
+    expect(pathOf('initial_meeting')).toBe('/journey/initial-meeting');
+    expect(pathOf('budget_check')).toBe('/journey/budget-check');
+    expect(pathOf('data_ethics_committee')).toBe('/journey/data-ethics-committee');
+    expect(pathOf('scoping')).toBe('/journey/scoping');
+    expect(pathOf('hackathon_ready')).toBe('/journey/hackathon-ready');
+  });
+
+  it('resolves step-page slugs back to engagement steps only', () => {
+    expect(stepIdFromSlug('budget-check')).toBe('budget_check');
+    expect(stepIdFromSlug('hackathon-ready')).toBe('hackathon_ready');
+    expect(stepIdFromSlug('account-created')).toBeNull();
+    expect(stepIdFromSlug('nonprofit-validated')).toBeNull();
+    expect(stepIdFromSlug('nope')).toBeNull();
   });
 });

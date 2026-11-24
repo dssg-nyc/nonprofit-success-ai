@@ -19,6 +19,7 @@ import { admitSignIn, clearLoginIntent, readLoginIntent, setLoginNotice } from "
 import Dashboard from "../components/dashboard/Dashboard";
 import BusinessPortal from "../components/business/BusinessPortal";
 import ClientJourneyPage from "../components/client/ClientJourneyPage";
+import ClientJourneyStepPage from "../components/client/ClientJourneyStepPage";
 import ScoutIntakeForm from "../components/scout/ScoutIntakeForm";
 import AdminReview from "../components/admin/AdminReview";
 import ArchitectAssessment from "../components/architect/ArchitectAssessment";
@@ -179,6 +180,16 @@ export default function App() {
               element={
                 user ? (
                   <ClientJourneyPage isDemo={effectiveIsDemo} />
+                ) : (
+                  <Navigate to="/login" />
+                )
+              }
+            />
+            <Route
+              path="/journey/:stepSlug"
+              element={
+                user ? (
+                  <ClientJourneyStepPage isDemo={effectiveIsDemo} />
                 ) : (
                   <Navigate to="/login" />
                 )

@@ -1,15 +1,15 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, CheckCircle, Circle, Loader } from 'lucide-react';
+import { CheckCircle, ChevronRight, Circle, Loader } from 'lucide-react';
 import type { ClientJourneyStepState } from '../../lib/clientJourney';
-import { nextClientStep } from '../../lib/clientJourney';
+import { clientStepPagePath } from '../../lib/clientJourney';
 
 /**
- * The client's journey map, rendered as a vertical timeline.
- * One step is current; its card spells out what the client does next and
- * what DSSG does, so "where am I and what happens now" is never a guess.
+ * The journey map (overview). Every step is a link to that step's own page —
+ * nothing expands in place here. Steps that already had a page before the
+ * journey (/login, /onboarding, /apply) link straight to it; the engagement
+ * steps link to their dedicated /journey/<step> pages.
  */
 export default function ClientJourney({ steps }: { steps: ClientJourneyStepState[] }) {
-  const next = nextClientStep(steps);
   const doneCount = steps.filter((s) => s.status === 'completed').length;
 
   return (
@@ -32,13 +32,14 @@ export default function ClientJourney({ steps }: { steps: ClientJourneyStepState
           const isCurrent = step.status === 'current';
           const isDone = step.status === 'completed';
           return (
-            <li
-              key={step.id}
-              className={`bg-white rounded-2xl border p-5 ${
-                isCurrent ? 'border-dssg-blue shadow-md shadow-blue-900/5' : 'border-slate-200'
-              } ${step.status === 'upcoming' ? 'opacity-70' : ''}`}
-            >
-              <div className="flex items-start gap-4">
+            <li key={step.id}>
+              <Link
+                to={clientStepPagePath(step)}
+                className={`flex items-start gap-4 bg-white rounded-2xl border p-5 transition-all hover:border-dssg-blue hover:shadow-md hover:shadow-blue-900/5 ${
+                  isCurrent ? 'border-dssg-blue shadow-md shadow-blue-900/5' : 'border-slate-200'
+                } ${step.status === 'upcoming' ? 'opacity-80' : ''}`}
+                aria-current={isCurrent ? 'step' : undefined}
+              >
                 <div
                   className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
                     isDone
@@ -65,40 +66,13 @@ export default function ClientJourney({ steps }: { steps: ClientJourneyStepState
                     )}
                   </div>
                   <p className="text-sm text-slate-600 leading-relaxed mt-1">{step.summary}</p>
-
-                  {isCurrent && (
-                    <div className="mt-3 grid gap-2 text-sm">
-                      <p className="bg-slate-50 rounded-xl px-4 py-3">
-                        <strong className="text-slate-800">Your next step:</strong>{' '}
-                        <span className="text-slate-600">{step.clientAction}</span>
-                      </p>
-                      <p className="bg-slate-50 rounded-xl px-4 py-3">
-                        <strong className="text-slate-800">What DSSG does:</strong>{' '}
-                        <span className="text-slate-600">{step.dssgAction}</span>
-                      </p>
-                      <p className="text-xs text-slate-400 px-1">This step is complete when: {step.exitCriteria}</p>
-                      {step.href && (
-                        <Link
-                          to={step.href}
-                          className="inline-flex items-center gap-1.5 text-sm font-bold text-dssg-blue hover:underline"
-                        >
-                          Go to this step <ArrowRight size={14} />
-                        </Link>
-                      )}
-                    </div>
-                  )}
                 </div>
-              </div>
+                <ChevronRight className="text-slate-300 shrink-0 mt-1" size={18} />
+              </Link>
             </li>
           );
         })}
       </ol>
-
-      {next && (
-        <p className="sr-only" aria-live="polite">
-          Your current step is {next.title}.
-        </p>
-      )}
     </section>
   );
 }

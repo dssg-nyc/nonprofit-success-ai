@@ -205,3 +205,27 @@ export function nextClientStep(steps: readonly ClientJourneyStepState[]): Client
   return steps.find((s) => s.status === 'current') ?? null;
 }
 
+
+/**
+ * Where a step lives as a page. Steps that already had a page before the
+ * journey existed keep it — the journey links there and does not rebuild it:
+ * account_created → /login, nonprofit_validated → /onboarding,
+ * application_approved → /apply (their `href`). The five engagement steps
+ * had no page of their own (only in-page panels inside /business/:id), so
+ * each gets a dedicated journey page: /journey/<step-slug>.
+ */
+export function clientStepPagePath(step: Pick<ClientJourneyStep, 'id' | 'href'>): string {
+  if (step.href) return step.href;
+  return `/journey/${step.id.replaceAll('_', '-')}`;
+}
+
+/**
+ * Resolve a /journey/:stepSlug back to a step, or null. Only engagement
+ * steps have journey step pages; onboarding slugs return null (those steps
+ * live on their pre-existing pages).
+ */
+export function stepIdFromSlug(slug: string): ClientJourneyStepId | null {
+  const candidate = slug.replaceAll('-', '_');
+  const step = CLIENT_JOURNEY_STEPS.find((s) => s.id === candidate && !s.href);
+  return step ? step.id : null;
+}
