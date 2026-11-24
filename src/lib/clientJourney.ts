@@ -13,10 +13,11 @@ import { deriveCurrentStage } from './lifecycle.js';
  * and a volunteer never advances a client's steps.
  *
  * Shape: three onboarding steps that happen before an Engagement exists, the
- * six Engagement stages from `lifecycle.ts` (initial_meeting →
- * hackathon_ready is the pro bono journey proper; `membership` is not a step
- * the client "completes"), and one terminal step — the membership OFFER —
- * which becomes current when hackathon_ready completes.
+ * five Engagement stages from `lifecycle.ts` that make up the pro bono
+ * journey proper. The journey ENDS at hackathon_ready: the lifecycle's
+ * `membership` stage is staff-side bookkeeping after the journey and is
+ * deliberately not a client step (removed 2026-11-24 at the client's
+ * direction — there is no membership-offer step in this portal).
  *
  * Pure: types-only imports plus the pure lifecycle derivation. No React,
  * no Supabase, no agent code, matching the `lib/` convention in lifecycle.ts.
@@ -26,8 +27,7 @@ export type ClientJourneyStepId =
   | 'account_created'
   | 'nonprofit_validated'
   | 'application_approved'
-  | EngagementStage
-  | 'membership_offer';
+  | EngagementStage;
 
 export type ClientJourneyStepStatus = 'completed' | 'current' | 'upcoming';
 
@@ -143,20 +143,11 @@ const ENGAGEMENT_STEP_COPY: Record<EngagementStage, Omit<ClientJourneyStep, 'id'
   },
   membership: {
     title: 'Membership',
-    summary: 'Continuing as a DSSG NYC member after the pro bono journey — offered, never automatic.',
-    clientAction: 'Decide whether to accept the membership offer shown at the end of your journey.',
-    dssgAction: 'We present the membership offer when you reach Hackathon Ready.',
-    exitCriteria: 'You accept or decline the offer. Declining changes nothing about your completed journey.',
+    summary: 'Staff-side stage after the pro bono journey. Not a client journey step.',
+    clientAction: 'No client action — this stage is handled by DSSG staff.',
+    dssgAction: 'DSSG staff manage membership after the journey ends at Hackathon Ready.',
+    exitCriteria: 'Handled outside the client journey.',
   },
-};
-
-const MEMBERSHIP_OFFER_STEP: ClientJourneyStep = {
-  id: 'membership_offer',
-  title: 'Your membership offer',
-  summary: 'The end of the pro bono journey: DSSG NYC proposes membership so the work can continue.',
-  clientAction: 'Review the offer and accept or decline — there is no obligation and no deadline pressure in the portal.',
-  dssgAction: 'We present the offer, answer questions, and record your decision.',
-  exitCriteria: 'You have responded to the offer.',
 };
 
 /** The full ordered map, before any client state is applied. */
@@ -165,7 +156,6 @@ export const CLIENT_JOURNEY_STEPS: readonly ClientJourneyStep[] = [
   ...(['initial_meeting', 'budget_check', 'data_ethics_committee', 'scoping', 'hackathon_ready'] as const).map(
     (stage): ClientJourneyStep => ({ id: stage, engagementStage: stage, ...ENGAGEMENT_STEP_COPY[stage] }),
   ),
-  MEMBERSHIP_OFFER_STEP,
 ];
 
 /**
@@ -173,8 +163,6 @@ export const CLIENT_JOURNEY_STEPS: readonly ClientJourneyStep[] = [
  * - Onboarding steps complete in order from the context flags.
  * - Engagement steps mirror their stage rows (completed / in_progress /
  *   pending-or-absent), via the same derivation as lifecycle.ts.
- * - The membership offer is `current` once hackathon_ready is completed, and
- *   `completed` once a membership stage row exists (the offer was acted on).
  * - Exactly one step is `current` (the first incomplete one), unless every
  *   step is completed.
  */
@@ -190,8 +178,6 @@ export function buildClientJourney(ctx: ClientJourneyContext): ClientJourneyStep
         return ctx.nonprofitValidated;
       case 'application_approved':
         return ctx.applicationApproved;
-      case 'membership_offer':
-        return byStage.has('membership');
       default:
         return step.engagementStage ? byStage.get(step.engagementStage) === 'completed' : false;
     }
@@ -219,8 +205,3 @@ export function nextClientStep(steps: readonly ClientJourneyStepState[]): Client
   return steps.find((s) => s.status === 'current') ?? null;
 }
 
-/** True when the membership offer should be presented to the client. */
-export function membershipOfferDue(steps: readonly ClientJourneyStepState[]): boolean {
-  const offer = steps.find((s) => s.id === 'membership_offer');
-  return offer?.status === 'current';
-}

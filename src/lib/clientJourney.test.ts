@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildClientJourney, membershipOfferDue, nextClientStep, type ClientJourneyContext } from './clientJourney.js';
+import { buildClientJourney, nextClientStep, type ClientJourneyContext } from './clientJourney.js';
 
 const base: ClientJourneyContext = {
   hasAccount: false,
@@ -13,12 +13,11 @@ const statusOf = (ctx: ClientJourneyContext, id: string) =>
   buildClientJourney(ctx).find((s) => s.id === id)?.status;
 
 describe('buildClientJourney', () => {
-  it('starts a brand-new client at account creation, with the offer last and upcoming', () => {
+  it('starts a brand-new client at account creation, with hackathon_ready last and upcoming', () => {
     const steps = buildClientJourney(base);
     expect(steps[0]).toMatchObject({ id: 'account_created', status: 'current' });
-    expect(steps[steps.length - 1]).toMatchObject({ id: 'membership_offer', status: 'upcoming' });
+    expect(steps[steps.length - 1]).toMatchObject({ id: 'hackathon_ready', status: 'upcoming' });
     expect(nextClientStep(steps)?.id).toBe('account_created');
-    expect(membershipOfferDue(steps)).toBe(false);
   });
 
   it('walks the onboarding steps in order', () => {
@@ -44,7 +43,7 @@ describe('buildClientJourney', () => {
     expect(statusOf(ctx, 'scoping')).toBe('upcoming');
   });
 
-  it('presents the membership offer only when hackathon_ready completes', () => {
+  it('ends at hackathon_ready: completing it completes the journey', () => {
     const ctx: ClientJourneyContext = {
       ...base,
       hasAccount: true,
@@ -58,27 +57,23 @@ describe('buildClientJourney', () => {
         { stage: 'hackathon_ready', status: 'completed' },
       ],
     };
-    expect(statusOf(ctx, 'hackathon_ready')).toBe('completed');
-    expect(statusOf(ctx, 'membership_offer')).toBe('current');
-    expect(membershipOfferDue(buildClientJourney(ctx))).toBe(true);
+    const steps = buildClientJourney(ctx);
+    expect(steps.every((s) => s.status === 'completed')).toBe(true);
+    expect(nextClientStep(steps)).toBeNull();
+    expect(steps.some((s) => (s.id as string) === 'membership_offer')).toBe(false);
   });
 
-  it('completes the journey when a membership stage row exists', () => {
+  it('has no membership step at all, even if a membership stage row exists', () => {
     const ctx: ClientJourneyContext = {
       ...base,
       hasAccount: true,
       nonprofitValidated: true,
       applicationApproved: true,
-      engagements: [
-        { stage: 'initial_meeting', status: 'completed' },
-        { stage: 'budget_check', status: 'completed' },
-        { stage: 'data_ethics_committee', status: 'completed' },
-        { stage: 'scoping', status: 'completed' },
-        { stage: 'hackathon_ready', status: 'completed' },
-        { stage: 'membership', status: 'in_progress' },
-      ],
+      engagements: [{ stage: 'membership', status: 'in_progress' }],
     };
-    expect(statusOf(ctx, 'membership_offer')).toBe('completed');
-    expect(nextClientStep(buildClientJourney(ctx))).toBeNull();
+    const steps = buildClientJourney(ctx);
+    expect(steps.map((s) => s.id)).not.toContain('membership');
+    expect(steps.map((s) => s.id)).not.toContain('membership_offer' as never);
+    expect(steps[steps.length - 1].id).toBe('hackathon_ready');
   });
 });

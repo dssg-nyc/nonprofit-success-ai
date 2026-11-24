@@ -1,6 +1,6 @@
 # Client Success Journey — plan and build notes
 
-Branch: `feature/client-success-journey` · Status: implemented (portal + journey map + membership offer); Salesforce live sync and decision persistence are follow-ups, honestly scoped in §4–§5.
+Branch: `feature/client-success-journey` · Status: implemented (portal + journey map); Salesforce live sync is a follow-up, honestly scoped in §4–§5. Updated 2026-11-24: the previously planned final "membership offer" step was **removed at the client's direction** — the journey now ends at Hackathon Ready.
 
 ## 1. The goal
 
@@ -9,7 +9,6 @@ Our first pro bono nonprofit clients can:
 1. **Create an account themselves** — Google sign-in, or any email + password.
 2. **Be saved reliably** — in Supabase today (auth, profile, organization, journey progress), and linked to **Salesforce** as the relationship system of record (see §4 for what is and is not possible yet).
 3. **See their whole journey the moment they log in** — a single mapped path from *Initial Meeting* to *Hackathon Ready*, always showing where they are, what they do next, and what DSSG does.
-4. **Receive a membership offer at the end** — presented in the portal when they reach Hackathon Ready. Offered, never automatic.
 
 ## 2. Two doors, kept apart
 
@@ -41,9 +40,8 @@ Implemented as data + pure derivation in `src/lib/clientJourney.ts` (`CLIENT_JOU
 | 6 | **Data Ethics Committee** | Describes the data, who it's about, consent / sensitivity | Committee approves, conditions, or stops the data use | Committee approval |
 | 7 | **Scoping** | Reviews assessment + draft charter / 90-day plan; confirms priorities | Architect assessment; charter & 90-day plan drafted | Charter + plan confirmed |
 | 8 | **Hackathon Ready** | Confirms project summary; available during the build | Project brief finalized; matched to a Data Diplomats team (in the volunteers' own tools) | Project marked hackathon-ready — **pro bono journey complete** |
-| 9 | **Membership offer** | Reviews and accepts or declines — no obligation | DSSG proposes membership; records the decision | Client responds |
 
-Steps 4–8 are the existing six-stage lifecycle (`src/lib/lifecycle.ts`) minus `membership`, which is reframed here as what it actually is for the client: an **offer**, not a stage to complete. `buildClientJourney` derives each step's status from facts already stored (session, `Business.certified`, engagement rows via `deriveCurrentStage`), guarantees one current step, and `membershipOfferDue()` gates the offer UI (`src/components/client/MembershipOffer.tsx`).
+Steps 4–8 are five of the existing six lifecycle stages (`src/lib/lifecycle.ts`). The sixth, `membership`, is staff-side bookkeeping after the journey and is **not** a client step — the journey ends at Hackathon Ready. `buildClientJourney` derives each step's status from facts already stored (session, `Business.certified`, engagement rows via `deriveCurrentStage`) and guarantees one current step (or none, when the journey is complete).
 
 Known pre-existing gap (unchanged by this branch, flagged in the README): converting an *approved* Scout intake into the client's Business + first Engagement is not yet automated — staff open the first engagement today. The journey handles this honestly: step 3 stays current until an engagement exists.
 
@@ -67,15 +65,13 @@ Known pre-existing gap (unchanged by this branch, flagged in the README): conver
 
 - `docs/client-success-journey.md` — this plan.
 - `src/lib/clientJourney.ts` — the journey map as data + pure status derivation (no React/Supabase imports, per `lib/` convention).
-- `src/lib/clientJourney.test.ts` — Vitest coverage: new client, onboarding order, in-progress stage, offer gating, completed journey.
+- `src/lib/clientJourney.test.ts` — Vitest coverage: new client, onboarding order, in-progress stage, journey ending at Hackathon Ready, and regression checks that no membership step exists.
 - `src/components/client/ClientJourney.tsx` — timeline UI: progress, "You are here", per-step client action / DSSG action / exit criteria.
-- `src/components/client/MembershipOffer.tsx` — the terminal offer card with accept / decline.
-- `src/components/client/ClientJourneyPage.tsx` — `/journey` page: door delineation banner, journey, offer, Salesforce link status; works in Demo Mode from the shared demo store and live from Supabase.
+- `src/components/client/ClientJourneyPage.tsx` — `/journey` page: door delineation banner, journey, Salesforce link status; works in Demo Mode from the shared demo store and live from Supabase.
 - `src/app/App.tsx` — one new route: `/journey` (login required).
 
 ## 6. Follow-ups (in priority order)
 
 1. **Salesforce integration user** (DSSG admin): provision Connected App + credentials, add `SALESFORCE_*` envs, implement the REST bodies in `api/_salesforce.ts`, backfill links by EIN.
-2. **Persist the membership decision** via `/api/engagement-transition` (the `membership` stage) instead of local state.
-3. **Automate approved-intake → engagement conversion** so step 3 completes without staff action.
-4. **Nav**: link `/journey` from SiteHeader / Dashboard for signed-in clients.
+2. **Automate approved-intake → engagement conversion** so step 3 completes without staff action.
+3. **Nav**: link `/journey` from SiteHeader / Dashboard for signed-in clients.

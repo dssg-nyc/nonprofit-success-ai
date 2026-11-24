@@ -5,16 +5,15 @@ import { supabase, rowToDomain } from '../../lib/supabase';
 import type { Business, Engagement } from '../../types';
 import { demoBusinesses, demoEngagements } from '../../lib/demoStore';
 import '../demo/demoData';
-import { buildClientJourney, membershipOfferDue, type ClientJourneyContext } from '../../lib/clientJourney';
+import { buildClientJourney, type ClientJourneyContext } from '../../lib/clientJourney';
 import ClientJourney from './ClientJourney';
-import MembershipOffer from './MembershipOffer';
 
 /**
  * /journey — the first screen a nonprofit client is pointed at after login.
  *
  * It answers, in one place: which door am I in, where am I in the journey
- * from first meeting to Hackathon Ready, what do I do next, and — at the
- * end — the membership offer. See docs/client-success-journey.md.
+ * from first meeting to Hackathon Ready, and what do I do next.
+ * The journey ends at Hackathon Ready. See docs/client-success-journey.md.
  *
  * The two doors, kept visibly separate:
  * - THIS page is the nonprofit client door ("For Nonprofits"). Clients sign
@@ -75,7 +74,6 @@ export default function ClientJourneyPage({ isDemo }: { isDemo?: boolean }) {
     salesforceLinked: Boolean(business?.salesforceAccountId),
   };
   const steps = buildClientJourney(ctx);
-  const offerDue = membershipOfferDue(steps);
 
   return (
     <div className="bg-bg-base min-h-screen">
@@ -86,7 +84,7 @@ export default function ClientJourneyPage({ isDemo }: { isDemo?: boolean }) {
           </h1>
           <p className="text-slate-500 mt-2 text-sm leading-relaxed">
             This is your client success portal: your whole pro bono journey with DSSG NYC, mapped from your first
-            meeting to Hackathon Ready — and the membership offer that follows.
+            meeting to Hackathon Ready.
           </p>
         </header>
 
@@ -125,8 +123,6 @@ export default function ClientJourneyPage({ isDemo }: { isDemo?: boolean }) {
         )}
 
         <ClientJourney steps={steps} />
-
-        {offerDue && <MembershipOffer businessName={business?.name} />}
 
         {business && (
           <p className="text-xs text-slate-400 leading-relaxed">
