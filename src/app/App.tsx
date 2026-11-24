@@ -18,6 +18,7 @@ import { GoogleLogo } from "../components/auth/GoogleLogo";
 import { admitSignIn, clearLoginIntent, readLoginIntent, setLoginNotice } from "../lib/loginIntent";
 import Dashboard from "../components/dashboard/Dashboard";
 import BusinessPortal from "../components/business/BusinessPortal";
+import ClientJourneyPage from "../components/client/ClientJourneyPage";
 import ScoutIntakeForm from "../components/scout/ScoutIntakeForm";
 import AdminReview from "../components/admin/AdminReview";
 import ArchitectAssessment from "../components/architect/ArchitectAssessment";
@@ -170,6 +171,16 @@ export default function App() {
                   <FirstTimeIntakeGate user={user} isDemo={effectiveIsDemo}>
                     <Dashboard isDemo={effectiveIsDemo} />
                   </FirstTimeIntakeGate>
+                )
+              }
+            />
+            <Route
+              path="/journey"
+              element={
+                user ? (
+                  <ClientJourneyPage isDemo={effectiveIsDemo} />
+                ) : (
+                  <Navigate to="/login" />
                 )
               }
             />
